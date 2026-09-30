@@ -7,21 +7,63 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-  :root{ --brand:#C1272D; --brand-dark:#9c1e23; }
-  body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  :root, [data-theme="claro"]{
+    --brand:#C1272D; --brand-dark:#9c1e23;
+    --bg:#f3f4f6; --surface:#ffffff; --surface2:#f9fafb;
+    --text:#111827; --muted:#6b7280; --faint:#9ca3af;
+    --border:#e5e7eb; --border-soft:#f1f1f1;
+    --row-alt:rgba(0,0,0,.028); --row-hover:rgba(193,39,45,.08);
+    --input-bg:#ffffff; --input-border:#d1d5db;
+  }
+  [data-theme="escuro"]{
+    --brand:#e5484d; --brand-dark:#c1272d;
+    --bg:#0d1526; --surface:#142038; --surface2:#0f1a30;
+    --text:#e8edf5; --muted:#9aa7bd; --faint:#66748e;
+    --border:#233353; --border-soft:#1b2946;
+    --row-alt:rgba(255,255,255,.03); --row-hover:rgba(229,72,77,.13);
+    --input-bg:#0f1a30; --input-border:#2a3c5f;
+  }
+  [data-theme="azul"]{
+    --brand:#1d4ed8; --brand-dark:#1e40af;
+    --bg:#e9eef7; --surface:#ffffff; --surface2:#f2f6fd;
+    --text:#0f1c33; --muted:#5b6b85; --faint:#8ba0bd;
+    --border:#d7e1f2; --border-soft:#e9effa;
+    --row-alt:rgba(29,78,216,.045); --row-hover:rgba(29,78,216,.1);
+    --input-bg:#ffffff; --input-border:#c3d2ea;
+  }
+  body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  #app > header{ background:var(--surface); border-color:var(--border); }
+  /* tabelas: linhas alternadas + destaque onde o mouse está */
+  tbody tr:nth-child(even){ background:var(--row-alt); }
+  tbody tr{ transition:background .12s; }
+  tbody tr:hover{ background:var(--row-hover); }
+  .rowline{ transition:background .12s; }
+  .rowline:hover{ background:var(--row-hover); }
+  /* ajustes de utilitários do Tailwind por tema */
+  [data-theme="escuro"] .bg-white{ background-color:var(--surface) !important; }
+  [data-theme="escuro"] .bg-gray-100, [data-theme="azul"] .bg-gray-100{ background-color:var(--bg) !important; }
+  [data-theme="escuro"] .bg-gray-50{ background-color:var(--surface2) !important; }
+  [data-theme="escuro"] .text-gray-900, [data-theme="escuro"] .text-gray-800{ color:var(--text) !important; }
+  [data-theme="escuro"] .text-gray-700{ color:#cfd8e6 !important; }
+  [data-theme="escuro"] .text-gray-600, [data-theme="escuro"] .text-gray-500{ color:var(--muted) !important; }
+  [data-theme="escuro"] .text-gray-400{ color:var(--faint) !important; }
+  [data-theme="escuro"] .border-gray-200{ border-color:var(--border) !important; }
+  [data-theme="escuro"] .hover\:bg-white:hover{ background-color:var(--surface2) !important; }
+  [data-theme="escuro"] select.inp option{ background-color:var(--surface); }
   .brand{ color:var(--brand); }
   .bg-brand{ background:var(--brand); }
   .bg-brand-dark{ background:var(--brand-dark); }
   .border-brand{ border-color:var(--brand); }
   .tabbtn.active{ color:var(--brand); }
   .tabbtn.active .tabdot{ opacity:1; }
-  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:0.9rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .inp{ width:100%; border:1px solid #d1d5db; border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:#fff; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:0.9rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .inp{ width:100%; border:1px solid var(--input-border); border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:var(--input-bg); color:var(--text); }
+  .inp::placeholder{ color:var(--faint); }
   .inp:focus{ outline:2px solid var(--brand); border-color:var(--brand); }
-  label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:#4b5563; margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
+  label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
   .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; }
   .btn-brand:active{ background:var(--brand-dark); }
-  .btn-ghost{ border:1px solid #d1d5db; border-radius:0.7rem; padding:0.6rem 0.9rem; font-weight:600; font-size:.85rem; }
+  .btn-ghost{ border:1px solid var(--input-border); border-radius:0.7rem; padding:0.6rem 0.9rem; font-weight:600; font-size:.85rem; color:var(--text); background:transparent; }
   .badge{ font-size:.68rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; }
   #toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:5.5rem; z-index:90; max-width:92vw; }
   .urg-vencido{ background:#7f1d1d; color:#fff; }
@@ -30,7 +72,7 @@
   .urg-90{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }
   details > summary{ cursor:pointer; list-style:none; }
   details > summary::-webkit-details-marker{ display:none; }
-  .rowline{ border-bottom:1px solid #f1f1f1; }
+  .rowline{ border-bottom:1px solid var(--border-soft); }
   .rowline:last-child{ border-bottom:none; }
   @media (min-width:768px){ #toast{ bottom:2rem; } }
 </style>
@@ -63,6 +105,11 @@
     <div class="w-full px-4 md:px-8 py-3 flex items-center justify-between">
       <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
       <div class="flex items-center gap-2">
+        <select id="selTema" class="inp !w-auto !py-1.5 !px-2 !text-xs" onchange="aplicarTema(this.value)" title="Tema do sistema">
+          <option value="claro">☀️ Claro</option>
+          <option value="escuro">🌙 Escuro</option>
+          <option value="azul">💧 Azul</option>
+        </select>
         <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
         <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
       </div>
@@ -436,6 +483,22 @@ function esc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;
 function hojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtData(iso){ if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; }
 function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigits:2}); }
+
+/* ================= TEMAS ================= */
+function corMarca(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#C1272D'; }
+function corMarcaEscura(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand-dark').trim() || '#9c1e23'; }
+function aplicarTema(t){
+  if(!['claro','escuro','azul'].includes(t)) t='claro';
+  document.documentElement.setAttribute('data-theme', t);
+  try{ localStorage.setItem('nl_tema', t); }catch(e){}
+  const s=document.getElementById('selTema'); if(s) s.value=t;
+  if(typeof Chart!=='undefined'){
+    const escuro = t==='escuro';
+    Chart.defaults.color = escuro ? '#9aa7bd' : '#666';
+    Chart.defaults.borderColor = escuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+    Object.values(CH).forEach(ch=>{ try{ ch.data.datasets[0].backgroundColor=corMarca(); ch.data.datasets[0].hoverBackgroundColor=corMarcaEscura(); ch.update(); }catch(e){} });
+  }
+}
 
 function toast(msg, tipo){
   const el = document.getElementById('toast');
@@ -1101,7 +1164,7 @@ function desenharBarras(id, entries, horizontal, ehMes){
     type:'bar',
     data:{ labels: entries.map(e=> ehMes ? rotuloMes(e[0]) : e[0]),
            datasets:[{ data: entries.map(e=>e[1]),
-             backgroundColor:'#C1272D', hoverBackgroundColor:'#9c1e23', borderRadius:4 }]},
+             backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:4 }]},
     options:{ indexAxis: horizontal?'y':'x', responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false} },
       scales: horizontal
@@ -1191,6 +1254,7 @@ async function lancarConsumo(){
 
 /* ================= INIT ================= */
 (function init(){
+  try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ aplicarTema('claro'); }
   sessao = lerSessao();
   if(sessao && sessao.id){ entrarApp(); }
   // senão, fica na tela de login
