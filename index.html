@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>NEW LIFE • Estoque</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   :root{ --brand:#C1272D; --brand-dark:#9c1e23; }
   body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -76,6 +77,7 @@
       <button data-aba="movs"        onclick="mostrarAba('movs')"        class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📋 Movimentos</button>
       <button data-aba="rastreio"    onclick="mostrarAba('rastreio')"    class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔍 Rastreio de lote</button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
+      <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -229,9 +231,92 @@
         </div>
       </section>
 
+      <!-- ===== CONSUMO ===== -->
+      <section id="aba-consumo" class="hidden">
+        <div class="card p-4 mb-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="font-bold text-lg">📊 Consumo por cliente</div>
+            <button class="btn-ghost !py-1.5 text-xs" onclick="document.getElementById('formConsumo').classList.toggle('hidden')">➕ Lançar consumo</button>
+          </div>
+          <div id="formConsumo" class="hidden border rounded-xl p-3 mb-3 bg-gray-50">
+            <div class="text-xs font-bold text-gray-500 uppercase mb-2">Novo lançamento</div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+              <div class="col-span-2">
+                <label class="lbl">Cliente</label>
+                <select id="lcCliente" class="inp text-sm"></select>
+              </div>
+              <div class="col-span-2">
+                <label class="lbl">Produto</label>
+                <input id="lcProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…">
+              </div>
+              <div>
+                <label class="lbl">Mês</label>
+                <input id="lcMes" type="month" class="inp text-sm">
+              </div>
+              <div>
+                <label class="lbl">Qtd</label>
+                <input id="lcQtd" type="number" min="1" class="inp text-sm" placeholder="0">
+              </div>
+              <div>
+                <label class="lbl">Local</label>
+                <select id="lcLocal" class="inp text-sm"><option value="">—</option><option>Fortaleza</option><option>Piauí</option></select>
+              </div>
+              <div class="col-span-2 md:col-span-4">
+                <label class="lbl">Observação (opcional)</label>
+                <input id="lcObs" class="inp text-sm" placeholder="">
+              </div>
+              <div class="col-span-2 md:col-span-1 flex items-end">
+                <button class="btn-brand !py-2 text-sm" onclick="lancarConsumo()">Salvar</button>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div><label class="lbl">De</label><input id="cDe" type="month" class="inp text-sm" onchange="carregarConsumo()"></div>
+            <div><label class="lbl">Até</label><input id="cAte" type="month" class="inp text-sm" onchange="carregarConsumo()"></div>
+            <div><label class="lbl">Cliente</label><select id="cCliente" class="inp text-sm" onchange="carregarConsumo()"><option value="">Todos</option></select></div>
+            <div><label class="lbl">Linha</label><select id="cLinha" class="inp text-sm" onchange="carregarConsumo()"><option value="">Todas</option></select></div>
+            <div><label class="lbl">Tipo</label><select id="cTipo" class="inp text-sm" onchange="carregarConsumo()"><option value="">Todos</option><option value="cliente">clientes</option><option value="interno">interno</option><option value="perda">perdas</option></select></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="card p-4"><div class="text-2xl font-black brand" id="ckpiTotal">–</div><div class="text-xs text-gray-500 font-semibold">Unidades consumidas</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="ckpiClientes">–</div><div class="text-xs text-gray-500 font-semibold">Clientes</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="ckpiProdutos">–</div><div class="text-xs text-gray-500 font-semibold">Produtos</div></div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+          <div class="card p-4">
+            <div class="font-bold mb-2">👥 Por cliente <span class="text-xs font-normal text-gray-400">(top 10)</span></div>
+            <div class="relative h-72"><canvas id="chCliente"></canvas></div>
+          </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">🧪 Por produto <span class="text-xs font-normal text-gray-400">(top 10)</span></div>
+            <div class="relative h-72"><canvas id="chProduto"></canvas></div>
+          </div>
+        </div>
+        <div class="card p-4 mb-4">
+          <div class="font-bold mb-2">📅 Por mês</div>
+          <div class="relative h-56"><canvas id="chMes"></canvas></div>
+        </div>
+
+        <div class="card p-4">
+          <div class="font-bold mb-2">🧾 Histórico</div>
+          <div class="overflow-x-auto -mx-4 px-4">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                <th class="py-2 pr-2">Mês</th><th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th><th class="py-2 text-right">Qtd</th>
+              </tr></thead>
+              <tbody id="tbodyConsumo"><tr><td colspan="5" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+            </table>
+          </div>
+          <div id="consumoMais" class="text-xs text-gray-400 mt-2"></div>
+        </div>
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
-        <div class="grid md:grid-cols-3 gap-4">
+        <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div class="card p-4">
             <div class="font-bold mb-2">🧪 Produtos</div>
             <div id="cadProdutos" class="text-sm mb-3">Carregando…</div>
@@ -265,6 +350,20 @@
               <button class="btn-brand !py-2 text-sm" onclick="criarTransportadora()">Cadastrar transportadora</button>
             </div>
           </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">👥 Clientes</div>
+            <div id="cadClientes" class="text-sm mb-3 max-h-64 overflow-y-auto">Carregando…</div>
+            <div class="border-t pt-3 grid gap-2">
+              <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo cliente</div>
+              <input id="cliNome" class="inp text-sm" placeholder="Nome do cliente">
+              <select id="cliTipo" class="inp text-sm">
+                <option value="cliente">cliente</option>
+                <option value="interno">interno (NEW LIFE)</option>
+                <option value="perda">perda (vencidos etc.)</option>
+              </select>
+              <button class="btn-brand !py-2 text-sm" onclick="criarCliente()">Cadastrar cliente</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -289,12 +388,13 @@
 
   <!-- NAV INFERIOR (mobile) -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="grid grid-cols-7 text-[10px] font-semibold text-gray-500">
+    <div class="grid grid-cols-8 text-[10px] font-semibold text-gray-500">
       <button data-aba="inicio" onclick="mostrarAba('inicio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏠</span>Início<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="lancar" onclick="mostrarAba('lancar')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">➕</span>Lançar<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="movs" onclick="mostrarAba('movs')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Movim.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="rastreio" onclick="mostrarAba('rastreio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔍</span>Lotes<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -316,6 +416,7 @@ const TIPOS = {
   emprestimo_saida:    { label:'🤝 Empréstimo — saída',      sinal:-1 },
   emprestimo_devolucao:{ label:'↩️ Empréstimo — devolução',  sinal:+1 },
 };
+const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const SAIDAS = ['saida_consumo','perda','descarte_vencimento','emprestimo_saida'];
 
 let sessao = null;
@@ -394,13 +495,14 @@ function entrarApp(){
   carregarProdutosCache().then(()=>{
     preencherDatalistProdutos();
     carregarClientesDatalist();
+    carregarClientesCache();
   });
   mostrarAba('inicio');
 }
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -411,6 +513,7 @@ function mostrarAba(aba){
   if(aba==='inicio') carregarDashboard();
   if(aba==='movs') carregarMovs();
   if(aba==='emprestimos') carregarEmprestimos();
+  if(aba==='consumo') carregarConsumo();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
@@ -861,10 +964,11 @@ function linhaCadastro(item, tabela, detalhe){
 }
 async function carregarCadastros(){
   try{
-    const [prods, forns, trans] = await Promise.all([
+    const [prods, forns, trans, clis] = await Promise.all([
       apiGET('produtos?select=id,nome,linha,unidade,ativo&order=nome.asc'),
       apiGET('fornecedores?select=id,nome,contato,ativo&order=nome.asc'),
       apiGET('transportadoras?select=id,nome,contato,ativo&order=nome.asc'),
+      apiGET('clientes?select=id,nome,tipo,ativo&order=nome.asc'),
     ]);
     document.getElementById('cadProdutos').innerHTML =
       prods.map(p=>linhaCadastro(p,'produtos',`· ${esc(p.linha)} · ${esc(p.unidade)}`)).join('') || '<span class="text-gray-400">Nenhum.</span>';
@@ -872,6 +976,8 @@ async function carregarCadastros(){
       forns.map(f=>linhaCadastro(f,'fornecedores',f.contato?`· ${esc(f.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
     document.getElementById('cadTransportadoras').innerHTML =
       trans.map(t=>linhaCadastro(t,'transportadoras',t.contato?`· ${esc(t.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
+    document.getElementById('cadClientes').innerHTML =
+      clis.map(c=>linhaCadastro(c,'clientes',`· ${esc(c.tipo)}`)).join('') || '<span class="text-gray-400">Nenhum.</span>';
   }catch(e){ toast('Erro ao carregar cadastros: '+e.message,'erro'); }
 }
 async function toggleCadastro(tabela, id, novoAtivo){
@@ -902,6 +1008,142 @@ async function criarTransportadora(){
     toast('Transportadora cadastrada. ✓','ok');
     document.getElementById('transNome').value=''; document.getElementById('transContato').value='';
     carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= CLIENTES + CONSUMO ================= */
+let CLIENTES = [];
+let CONSUMO_CACHE = null;
+let CH = {};
+
+async function carregarClientesCache(){
+  try{
+    CLIENTES = await apiGET('clientes?select=id,nome,tipo,ativo&order=nome.asc');
+    const ativos = CLIENTES.filter(c=>c.ativo);
+    const opts = ativos.map(c=>`<option value="${c.id}">${esc(c.nome)}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
+    const selC = document.getElementById('cCliente');
+    if(selC) selC.innerHTML = '<option value="">Todos</option>' + opts;
+    const selL = document.getElementById('lcCliente');
+    if(selL) selL.innerHTML = opts || '<option value="">— cadastre um cliente —</option>';
+    const selLinha = document.getElementById('cLinha');
+    if(selLinha && selLinha.options.length<=1)
+      selLinha.innerHTML = '<option value="">Todas</option>' + LINHAS.map(l=>`<option>${l}</option>`).join('');
+  }catch(e){ /* opcional */ }
+}
+
+async function criarCliente(){
+  const nome=document.getElementById('cliNome').value.trim();
+  const tipo=document.getElementById('cliTipo').value;
+  if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
+  try{
+    await apiPOST('clientes',{nome,tipo,ativo:true});
+    toast('Cliente cadastrado. ✓','ok');
+    document.getElementById('cliNome').value='';
+    await carregarClientesCache();
+    carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+function rotuloMes(ym){ const [a,m]=ym.split('-'); return MESES_PT[+m-1]+'/'+a.slice(2); }
+function topEntries(obj,n){ return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n); }
+
+function desenharBarras(id, entries, horizontal, ehMes){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(CH[id]){ CH[id].destroy(); CH[id]=null; }
+  if(typeof Chart==='undefined'){
+    el.parentElement.innerHTML='<div class="text-sm text-gray-400 py-8 text-center">Gráfico indisponível (sem conexão).</div>';
+    return;
+  }
+  CH[id] = new Chart(el, {
+    type:'bar',
+    data:{ labels: entries.map(e=> ehMes ? rotuloMes(e[0]) : e[0]),
+           datasets:[{ data: entries.map(e=>e[1]),
+             backgroundColor:'#C1272D', hoverBackgroundColor:'#9c1e23', borderRadius:4 }]},
+    options:{ indexAxis: horizontal?'y':'x', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales: horizontal
+        ? { x:{ beginAtZero:true, ticks:{ precision:0 } }, y:{ ticks:{ autoSkip:false } } }
+        : { y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+  });
+}
+
+async function carregarConsumo(){
+  try{
+    if(!document.getElementById('cDe').value){
+      document.getElementById('cDe').value = '2026-01';
+      document.getElementById('cAte').value = new Date().toISOString().slice(0,7);
+    }
+    if(!document.getElementById('lcMes').value)
+      document.getElementById('lcMes').value = new Date().toISOString().slice(0,7);
+    if(!CONSUMO_CACHE){
+      CONSUMO_CACHE = [];
+      let off = 0;
+      for(;;){
+        const pg = await apiGET(`consumo?select=*,clientes(id,nome,tipo),produtos(id,nome,linha)&order=ano.desc,mes.desc&limit=1000&offset=${off}`);
+        CONSUMO_CACHE.push(...pg);
+        if(pg.length<1000) break;
+        off += 1000;
+      }
+    }
+    const [aDe,mDe] = document.getElementById('cDe').value.split('-').map(Number);
+    const [aAte,mAte] = document.getElementById('cAte').value.split('-').map(Number);
+    const fCli = document.getElementById('cCliente').value;
+    const fLinha = document.getElementById('cLinha').value;
+    const fTipo = document.getElementById('cTipo').value;
+    const kDe = aDe*12+mDe, kAte = aAte*12+mAte;
+    const rows = CONSUMO_CACHE.filter(r=>{
+      if(!r.clientes || !r.produtos) return false;
+      const k = r.ano*12 + r.mes;
+      if(k<kDe || k>kAte) return false;
+      if(fCli && r.cliente_id!==fCli) return false;
+      if(fLinha && r.produtos.linha!==fLinha) return false;
+      if(fTipo && r.clientes.tipo!==fTipo) return false;
+      return true;
+    });
+    document.getElementById('ckpiTotal').textContent = rows.reduce((s,r)=>s+r.quantidade,0).toLocaleString('pt-BR');
+    document.getElementById('ckpiClientes').textContent = new Set(rows.map(r=>r.cliente_id)).size;
+    document.getElementById('ckpiProdutos').textContent = new Set(rows.map(r=>r.produto_id)).size;
+    const porCli={}, porProd={}, porMes={};
+    rows.forEach(r=>{
+      porCli[r.clientes.nome]=(porCli[r.clientes.nome]||0)+r.quantidade;
+      porProd[r.produtos.nome]=(porProd[r.produtos.nome]||0)+r.quantidade;
+      const mk=`${r.ano}-${String(r.mes).padStart(2,'0')}`;
+      porMes[mk]=(porMes[mk]||0)+r.quantidade;
+    });
+    desenharBarras('chCliente', topEntries(porCli,10), true, false);
+    desenharBarras('chProduto', topEntries(porProd,10), true, false);
+    desenharBarras('chMes', Object.entries(porMes).sort((a,b)=>a[0]<b[0]?-1:1), false, true);
+    const hist = rows.slice(0,150);
+    document.getElementById('tbodyConsumo').innerHTML = hist.map(r=>
+      `<tr class="rowline"><td class="py-2 pr-2 whitespace-nowrap">${String(r.mes).padStart(2,'0')}/${r.ano}</td><td class="py-2 pr-2">${esc(r.clientes.nome)}</td><td class="py-2 pr-2">${esc(r.produtos.nome)}</td><td class="py-2 pr-2 text-gray-500">${esc(r.produtos.linha)}</td><td class="py-2 text-right font-bold">${r.quantidade.toLocaleString('pt-BR')}</td></tr>`
+    ).join('') || '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum registro no período.</td></tr>';
+    document.getElementById('consumoMais').textContent =
+      rows.length>150 ? `Mostrando 150 de ${rows.length.toLocaleString('pt-BR')} registros.` : `${rows.length} registros.`;
+  }catch(e){ toast('Erro ao carregar consumo: '+e.message,'erro'); }
+}
+
+async function lancarConsumo(){
+  const cliente_id=document.getElementById('lcCliente').value;
+  const prod=resolverProduto(document.getElementById('lcProduto').value);
+  const mesV=document.getElementById('lcMes').value;
+  const qtd=parseInt(document.getElementById('lcQtd').value,10);
+  const local=document.getElementById('lcLocal').value||null;
+  const obs=document.getElementById('lcObs').value.trim()||null;
+  if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(!prod){ toast('Produto não encontrado — escolha um da lista.','erro'); return; }
+  if(!mesV){ toast('Informe o mês.','erro'); return; }
+  if(!qtd||qtd<=0){ toast('Informe a quantidade.','erro'); return; }
+  const [ano,mes]=mesV.split('-').map(Number);
+  try{
+    await apiPOST('consumo',{cliente_id, produto_id:prod.id, ano, mes, quantidade:qtd,
+      local, origem:'lancamento', observacao:obs, usuario_id:sessao.id});
+    toast('Consumo lançado. ✓','ok');
+    document.getElementById('lcQtd').value='';
+    document.getElementById('lcObs').value='';
+    document.getElementById('lcProduto').value='';
+    CONSUMO_CACHE=null;
+    carregarConsumo();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
