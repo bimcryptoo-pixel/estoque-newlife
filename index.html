@@ -319,7 +319,8 @@
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div class="card p-4">
             <div class="font-bold mb-2">🧪 Produtos</div>
-            <div id="cadProdutos" class="text-sm mb-3">Carregando…</div>
+            <input class="inp text-sm mb-2" placeholder="🔎 Buscar produto…" oninput="buscarCad('produtos',this.value)">
+            <div id="cadProdutos" class="text-sm mb-3 max-h-64 overflow-y-auto"><span class="text-gray-400 text-xs">Digite para localizar um cadastro.</span></div>
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo produto</div>
               <input id="pNome" class="inp text-sm" placeholder="Nome do produto">
@@ -332,7 +333,8 @@
           </div>
           <div class="card p-4">
             <div class="font-bold mb-2">🏭 Fornecedores</div>
-            <div id="cadFornecedores" class="text-sm mb-3">Carregando…</div>
+            <input class="inp text-sm mb-2" placeholder="🔎 Buscar fornecedor…" oninput="buscarCad('fornecedores',this.value)">
+            <div id="cadFornecedores" class="text-sm mb-3 max-h-64 overflow-y-auto"><span class="text-gray-400 text-xs">Digite para localizar um cadastro.</span></div>
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo fornecedor</div>
               <input id="fornNome" class="inp text-sm" placeholder="Nome">
@@ -342,7 +344,8 @@
           </div>
           <div class="card p-4">
             <div class="font-bold mb-2">🚚 Transportadoras</div>
-            <div id="cadTransportadoras" class="text-sm mb-3">Carregando…</div>
+            <input class="inp text-sm mb-2" placeholder="🔎 Buscar transportadora…" oninput="buscarCad('transportadoras',this.value)">
+            <div id="cadTransportadoras" class="text-sm mb-3 max-h-64 overflow-y-auto"><span class="text-gray-400 text-xs">Digite para localizar um cadastro.</span></div>
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Nova transportadora</div>
               <input id="transNome" class="inp text-sm" placeholder="Nome">
@@ -352,7 +355,8 @@
           </div>
           <div class="card p-4">
             <div class="font-bold mb-2">👥 Clientes</div>
-            <div id="cadClientes" class="text-sm mb-3 max-h-64 overflow-y-auto">Carregando…</div>
+            <input class="inp text-sm mb-2" placeholder="🔎 Buscar cliente…" oninput="buscarCad('clientes',this.value)">
+            <div id="cadClientes" class="text-sm mb-3 max-h-64 overflow-y-auto"><span class="text-gray-400 text-xs">Digite para localizar um cadastro.</span></div>
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo cliente</div>
               <input id="cliNome" class="inp text-sm" placeholder="Nome do cliente">
@@ -435,7 +439,7 @@ function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigi
 
 function toast(msg, tipo){
   const el = document.getElementById('toast');
-  const cor = tipo==='erro' ? 'bg-red-700' : (tipo==='ok' ? 'bg-green-700' : 'bg-gray-800');
+  const cor = tipo==='erro' ? 'bg-red-700' : (tipo==='ok' ? 'bg-green-700' : (tipo==='alerta' ? 'bg-amber-600' : 'bg-gray-800'));
   el.className = `${cor} text-white text-sm font-semibold rounded-xl px-4 py-3 shadow-lg`;
   el.textContent = msg;
   clearTimeout(el._t);
@@ -945,15 +949,17 @@ async function criarProduto(){
         linha=document.getElementById('pLinha').value,
         unidade=document.getElementById('pUnidade').value.trim()||'un';
   if(!nome){ toast('Informe o nome do produto.','erro'); return; }
+  if(duplicado('produtos', nome, 'Produto')) return;
   try{
     await apiPOST('produtos',{nome,linha,unidade,ativo:true});
     toast('Produto cadastrado. ✓','ok');
     document.getElementById('pNome').value='';
     await carregarProdutosCache(); preencherDatalistProdutos(); carregarCadastros();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Produto já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
 
 /* ================= CADASTROS (todos os perfis: produtos, fornecedores, transportadoras) ================= */
+let CAD = { produtos:[], fornecedores:[], transportadoras:[] };
 function linhaCadastro(item, tabela, detalhe){
   return `<div class="flex items-center justify-between py-1.5 rowline">
     <div class="min-w-0"><b>${esc(item.nome)}</b> <span class="text-xs text-gray-500">${detalhe}</span>
@@ -970,15 +976,48 @@ async function carregarCadastros(){
       apiGET('transportadoras?select=id,nome,contato,ativo&order=nome.asc'),
       apiGET('clientes?select=id,nome,tipo,ativo&order=nome.asc'),
     ]);
-    document.getElementById('cadProdutos').innerHTML =
-      prods.map(p=>linhaCadastro(p,'produtos',`· ${esc(p.linha)} · ${esc(p.unidade)}`)).join('') || '<span class="text-gray-400">Nenhum.</span>';
-    document.getElementById('cadFornecedores').innerHTML =
-      forns.map(f=>linhaCadastro(f,'fornecedores',f.contato?`· ${esc(f.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
-    document.getElementById('cadTransportadoras').innerHTML =
-      trans.map(t=>linhaCadastro(t,'transportadoras',t.contato?`· ${esc(t.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
-    document.getElementById('cadClientes').innerHTML =
-      clis.map(c=>linhaCadastro(c,'clientes',`· ${esc(c.tipo)}`)).join('') || '<span class="text-gray-400">Nenhum.</span>';
+    CAD.produtos = prods; CAD.fornecedores = forns; CAD.transportadoras = trans; CLIENTES = clis;
+    ['produtos','fornecedores','transportadoras','clientes'].forEach(t=>renderBuscaCad(t));
   }catch(e){ toast('Erro ao carregar cadastros: '+e.message,'erro'); }
+}
+function fonteCad(tipo){
+  return tipo==='clientes' ? CLIENTES : (CAD[tipo]||[]);
+}
+function detalheCad(tipo, item){
+  if(tipo==='produtos') return `· ${esc(item.linha)} · ${esc(item.unidade)}`;
+  if(tipo==='clientes') return `· ${esc(item.tipo)}`;
+  return item.contato ? `· ${esc(item.contato)}` : '';
+}
+function buscarCad(tipo, termo){
+  CAD['_busca_'+tipo] = termo;
+  renderBuscaCad(tipo);
+}
+function renderBuscaCad(tipo){
+  const box = document.getElementById(
+    tipo==='produtos'?'cadProdutos':tipo==='fornecedores'?'cadFornecedores':tipo==='transportadoras'?'cadTransportadoras':'cadClientes');
+  if(!box) return;
+  const termo = normNome(CAD['_busca_'+tipo]||'');
+  if(!termo){
+    box.innerHTML = '<span class="text-gray-400 text-xs">Digite para localizar um cadastro.</span>';
+    return;
+  }
+  const achados = fonteCad(tipo)
+    .filter(x=>normNome(x.nome).includes(termo))
+    .slice(0,30);
+  box.innerHTML = achados.length
+    ? achados.map(x=>linhaCadastro(x, tipo, detalheCad(tipo,x))).join('')
+    : '<span class="text-gray-400 text-xs">Nenhum cadastro encontrado.</span>';
+}
+/* normaliza para comparação: maiúsculas, sem espaços extras */
+function normNome(s){ return String(s||'').toUpperCase().trim().replace(/\s+/g,' '); }
+/* verifica duplicado antes de cadastrar; retorna true se já existe (e avisa) */
+function duplicado(tipo, nome, rotulo){
+  const achou = fonteCad(tipo).find(x=>normNome(x.nome)===normNome(nome));
+  if(achou){
+    toast(`⚠️ ${rotulo} já cadastrado${achou.ativo?'':' (inativo — busque e reative)'}.`,'alerta');
+    return true;
+  }
+  return false;
 }
 async function toggleCadastro(tabela, id, novoAtivo){
   try{
@@ -992,23 +1031,25 @@ async function criarFornecedor(){
   const nome=document.getElementById('fornNome').value.trim();
   const contato=document.getElementById('fornContato').value.trim()||null;
   if(!nome){ toast('Informe o nome do fornecedor.','erro'); return; }
+  if(duplicado('fornecedores', nome, 'Fornecedor')) return;
   try{
     await apiPOST('fornecedores',{nome,contato,ativo:true});
     toast('Fornecedor cadastrado. ✓','ok');
     document.getElementById('fornNome').value=''; document.getElementById('fornContato').value='';
     carregarCadastros();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Fornecedor já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
 async function criarTransportadora(){
   const nome=document.getElementById('transNome').value.trim();
   const contato=document.getElementById('transContato').value.trim()||null;
   if(!nome){ toast('Informe o nome da transportadora.','erro'); return; }
+  if(duplicado('transportadoras', nome, 'Transportadora')) return;
   try{
     await apiPOST('transportadoras',{nome,contato,ativo:true});
     toast('Transportadora cadastrada. ✓','ok');
     document.getElementById('transNome').value=''; document.getElementById('transContato').value='';
     carregarCadastros();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Transportadora já cadastrada.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
 
 /* ================= CLIENTES + CONSUMO ================= */
@@ -1035,13 +1076,14 @@ async function criarCliente(){
   const nome=document.getElementById('cliNome').value.trim();
   const tipo=document.getElementById('cliTipo').value;
   if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
+  if(duplicado('clientes', nome, 'Cliente')) return;
   try{
     await apiPOST('clientes',{nome,tipo,ativo:true});
     toast('Cliente cadastrado. ✓','ok');
     document.getElementById('cliNome').value='';
     await carregarClientesCache();
     carregarCadastros();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Cliente já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
 
 function rotuloMes(ym){ const [a,m]=ym.split('-'); return MESES_PT[+m-1]+'/'+a.slice(2); }
