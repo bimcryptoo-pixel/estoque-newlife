@@ -239,7 +239,7 @@
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo produto</div>
               <input id="pNome" class="inp text-sm" placeholder="Nome do produto">
               <select id="pLinha" class="inp text-sm">
-                <option>Coagulação</option><option>Gasometria</option><option>Beckman</option><option>Vyttra</option>
+                <option>Coagulação</option><option>Gasometria</option><option>Hematologia</option><option>Bioquímica</option>
               </select>
               <input id="pUnidade" class="inp text-sm" placeholder="Unidade (padrão: un)" value="un">
               <button class="btn-brand !py-2 text-sm" onclick="criarProduto()">Cadastrar produto</button>
@@ -306,7 +306,7 @@
 const SUPA_URL = 'https://srenhrjrprufixoiqvlz.supabase.co';
 const SUPA_KEY = 'sb_publishable_e08JBryAm6Pxx3Pp4aVLag_V1yO4dYM';
 const HJSON = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
-const LINHAS = ['Coagulação','Gasometria','Beckman','Vyttra'];
+const LINHAS = ['Coagulação','Gasometria','Hematologia','Bioquímica'];
 const LOCAIS = ['Fortaleza','Piauí'];
 const TIPOS = {
   entrada_compra:      { label:'📥 Entrada — compra',        sinal:+1 },
