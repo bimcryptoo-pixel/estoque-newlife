@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NEW LIFE • Estoque</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{ --brand:#C1272D; --brand-dark:#9c1e23; }
+  body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .brand{ color:var(--brand); }
+  .bg-brand{ background:var(--brand); }
+  .bg-brand-dark{ background:var(--brand-dark); }
+  .border-brand{ border-color:var(--brand); }
+  .tabbtn.active{ color:var(--brand); }
+  .tabbtn.active .tabdot{ opacity:1; }
+  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:0.9rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .inp{ width:100%; border:1px solid #d1d5db; border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:#fff; }
+  .inp:focus{ outline:2px solid var(--brand); border-color:var(--brand); }
+  label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:#4b5563; margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
+  .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; }
+  .btn-brand:active{ background:var(--brand-dark); }
+  .btn-ghost{ border:1px solid #d1d5db; border-radius:0.7rem; padding:0.6rem 0.9rem; font-weight:600; font-size:.85rem; }
+  .badge{ font-size:.68rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; }
+  #toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:5.5rem; z-index:90; max-width:92vw; }
+  .urg-vencido{ background:#7f1d1d; color:#fff; }
+  .urg-30{ background:#fecaca; color:#7f1d1d; border:1px solid #fca5a5; }
+  .urg-60{ background:#ffedd5; color:#9a3412; border:1px solid #fdba74; }
+  .urg-90{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }
+  details > summary{ cursor:pointer; list-style:none; }
+  details > summary::-webkit-details-marker{ display:none; }
+  .rowline{ border-bottom:1px solid #f1f1f1; }
+  .rowline:last-child{ border-bottom:none; }
+  @media (min-width:768px){ #toast{ bottom:2rem; } }
+</style>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen">
+
+<!-- ============ TOAST ============ -->
+<div id="toast" class="hidden"></div>
+
+<!-- ============ LOGIN ============ -->
+<div id="telaLogin" class="min-h-screen flex items-center justify-center p-6 bg-gray-100">
+  <div class="card w-full max-w-sm p-6">
+    <div class="text-center mb-5">
+      <div class="text-2xl font-black tracking-tight">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
+      <div class="text-xs text-gray-500 mt-1">Sistema de controle de estoque do laboratório</div>
+    </div>
+    <label class="lbl" for="loginUser">Usuário</label>
+    <input id="loginUser" class="inp mb-3" autocomplete="username" placeholder="seu login">
+    <label class="lbl" for="loginPass">Senha</label>
+    <input id="loginPass" type="password" class="inp mb-4" autocomplete="current-password" placeholder="••••••">
+    <button class="btn-brand" onclick="fazerLogin()">Entrar</button>
+    <div id="loginErro" class="hidden text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2 mt-3"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <!-- TOPO -->
+  <header class="bg-white border-b sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
+      <div class="flex items-center gap-2">
+        <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
+        <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-5xl mx-auto md:flex md:gap-4 px-0 md:px-4">
+    <!-- MENU LATERAL (desktop) -->
+    <nav class="hidden md:flex flex-col gap-1 w-52 shrink-0 py-6 sticky top-16 self-start">
+      <button data-aba="inicio"      onclick="mostrarAba('inicio')"      class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🏠 Início</button>
+      <button data-aba="lancar"      onclick="mostrarAba('lancar')"      class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">➕ Lançar</button>
+      <button data-aba="movs"        onclick="mostrarAba('movs')"        class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📋 Movimentos</button>
+      <button data-aba="rastreio"    onclick="mostrarAba('rastreio')"    class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔍 Rastreio de lote</button>
+      <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
+      <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
+      <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
+    </nav>
+
+    <!-- CONTEÚDO -->
+    <main class="flex-1 px-4 md:px-0 py-4 pb-24 md:pb-10 w-full min-w-0">
+
+      <!-- ===== INÍCIO / DASHBOARD ===== -->
+      <section id="aba-inicio">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div class="card p-4"><div class="text-2xl font-black" id="kpiProdutos">–</div><div class="text-xs text-gray-500 font-semibold">Produtos ativos</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="kpiLotes">–</div><div class="text-xs text-gray-500 font-semibold">Lotes com saldo</div></div>
+          <div class="card p-4"><div class="text-2xl font-black brand" id="kpiVencendo">–</div><div class="text-xs text-gray-500 font-semibold">Vencendo em 90 dias</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="kpiEmprestimos">–</div><div class="text-xs text-gray-500 font-semibold">Empréstimos em aberto</div></div>
+        </div>
+        <div class="card p-4 mb-4">
+          <div class="font-bold mb-2">⚠️ Lotes vencendo</div>
+          <div id="listaVencendo" class="text-sm text-gray-500">Carregando…</div>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-2 gap-2">
+            <div class="font-bold">Estoque atual</div>
+            <input id="buscaEstoque" class="inp !w-48 !py-1.5 text-sm" placeholder="🔎 Buscar produto…" oninput="filtrarEstoque()">
+          </div>
+          <div class="overflow-x-auto -mx-4 px-4">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                <th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th><th class="py-2 pr-2">Lote</th><th class="py-2 pr-2">Validade</th><th class="py-2 text-right">Qtd</th>
+              </tr></thead>
+              <tbody id="tbodyEstoque"><tr><td colspan="5" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== LANÇAR ===== -->
+      <section id="aba-lancar" class="hidden">
+        <div class="card p-4 md:p-6 max-w-2xl">
+          <div class="font-bold text-lg mb-4">➕ Nova movimentação</div>
+          <div class="grid gap-3">
+            <div>
+              <label class="lbl">Tipo de movimento</label>
+              <select id="fTipo" class="inp" onchange="aoTrocarTipo()">
+                <option value="entrada_compra">📥 Entrada — compra</option>
+                <option value="saida_consumo">📤 Saída — consumo por cliente</option>
+                <option value="perda">⚠️ Perda / quebra</option>
+                <option value="descarte_vencimento">🗑️ Descarte por vencimento</option>
+                <option value="emprestimo_saida">🤝 Empréstimo — saída</option>
+                <option value="emprestimo_devolucao">↩️ Empréstimo — devolução</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">Produto</label>
+              <input id="fProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="aoEscolherProduto()">
+              <datalist id="dlProdutos"></datalist>
+            </div>
+            <div>
+              <label class="lbl">Lote</label>
+              <select id="fLote" class="inp" onchange="aoTrocarLote()"></select>
+            </div>
+            <div id="boxNovoLote" class="hidden grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg border">
+              <div><label class="lbl">Número do novo lote</label><input id="fNovoLoteNum" class="inp" placeholder="Ex.: ABC123"></div>
+              <div><label class="lbl">Validade</label><input id="fNovoLoteVal" type="date" class="inp"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="lbl">Quantidade</label><input id="fQtd" type="number" min="0" step="any" class="inp" placeholder="0"></div>
+              <div><label class="lbl">Data</label><input id="fData" type="date" class="inp"></div>
+            </div>
+            <div id="boxCliente">
+              <label class="lbl">Cliente <span id="cliObrig" class="text-red-600"></span></label>
+              <input id="fCliente" class="inp" list="dlClientes" placeholder="Ex.: NEW LIFE (interno)" autocomplete="off">
+              <datalist id="dlClientes"></datalist>
+            </div>
+            <div id="boxResponsavel" class="hidden">
+              <label class="lbl">Responsável pelo empréstimo</label>
+              <input id="fResponsavel" class="inp" placeholder="Quem está levando/devolvendo">
+            </div>
+            <div id="boxFornTransp" class="hidden grid grid-cols-2 gap-3">
+              <div><label class="lbl">Fornecedor (opcional)</label><select id="fFornecedor" class="inp"><option value="">— nenhum —</option></select></div>
+              <div><label class="lbl">Transportadora (opcional)</label><select id="fTransportadora" class="inp"><option value="">— nenhuma —</option></select></div>
+            </div>
+            <div>
+              <label class="lbl">Observação</label>
+              <textarea id="fObs" class="inp" rows="2" placeholder="Opcional"></textarea>
+            </div>
+            <div id="boxAnexo" class="hidden">
+              <label class="lbl">📎 Foto do recibo / NF</label>
+              <input id="fAnexo" type="file" accept="image/*" class="inp">
+              <div class="text-xs text-gray-500 mt-1">A imagem é comprimida antes do envio.</div>
+            </div>
+            <button class="btn-brand mt-1" id="btnSalvar" onclick="salvarMovimentacao()">Salvar movimentação</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MOVIMENTOS ===== -->
+      <section id="aba-movs" class="hidden">
+        <div class="card p-4 mb-3">
+          <div class="font-bold mb-2">📋 Movimentações</div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <select id="fltTipo" class="inp text-sm" onchange="carregarMovs()">
+              <option value="">Todos os tipos</option>
+              <option value="entrada_compra">📥 Entrada — compra</option>
+              <option value="saida_consumo">📤 Saída — consumo</option>
+              <option value="perda">⚠️ Perda</option>
+              <option value="descarte_vencimento">🗑️ Descarte vencimento</option>
+              <option value="emprestimo_saida">🤝 Empréstimo saída</option>
+              <option value="emprestimo_devolucao">↩️ Empréstimo devolução</option>
+            </select>
+            <input id="fltProduto" class="inp text-sm" placeholder="🔎 Produto…" oninput="carregarMovsDeb()">
+            <input id="fltDe" type="date" class="inp text-sm" onchange="carregarMovs()">
+            <input id="fltAte" type="date" class="inp text-sm" onchange="carregarMovs()">
+          </div>
+        </div>
+        <div id="listaMovs" class="card divide-y text-sm"><div class="p-4 text-gray-400">Carregando…</div></div>
+      </section>
+
+      <!-- ===== RASTREIO ===== -->
+      <section id="aba-rastreio" class="hidden">
+        <div class="card p-4 mb-3 max-w-2xl">
+          <div class="font-bold mb-2">🔍 Rastreio de lote</div>
+          <div class="grid gap-3">
+            <div><label class="lbl">Produto</label><input id="rProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="rastreioCarregarLotes()"></div>
+            <div><label class="lbl">Lote</label><select id="rLote" class="inp"></select></div>
+            <button class="btn-brand" onclick="rastreioBuscar()">Ver timeline</button>
+          </div>
+        </div>
+        <div id="rastreioResult" class="max-w-2xl"></div>
+      </section>
+
+      <!-- ===== EMPRÉSTIMOS ===== -->
+      <section id="aba-emprestimos" class="hidden">
+        <div class="card p-4">
+          <div class="font-bold mb-2">🤝 Empréstimos em aberto</div>
+          <div id="listaEmprestimos" class="text-sm text-gray-500">Carregando…</div>
+        </div>
+      </section>
+
+      <!-- ===== CADASTROS (todos os perfis) ===== -->
+      <section id="aba-cadastros" class="hidden">
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="card p-4">
+            <div class="font-bold mb-2">🧪 Produtos</div>
+            <div id="cadProdutos" class="text-sm mb-3">Carregando…</div>
+            <div class="border-t pt-3 grid gap-2">
+              <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo produto</div>
+              <input id="pNome" class="inp text-sm" placeholder="Nome do produto">
+              <select id="pLinha" class="inp text-sm">
+                <option>Coagulação</option><option>Gasometria</option><option>Beckman</option><option>Vyttra</option>
+              </select>
+              <input id="pUnidade" class="inp text-sm" placeholder="Unidade (padrão: un)" value="un">
+              <button class="btn-brand !py-2 text-sm" onclick="criarProduto()">Cadastrar produto</button>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">🏭 Fornecedores</div>
+            <div id="cadFornecedores" class="text-sm mb-3">Carregando…</div>
+            <div class="border-t pt-3 grid gap-2">
+              <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo fornecedor</div>
+              <input id="fornNome" class="inp text-sm" placeholder="Nome">
+              <input id="fornContato" class="inp text-sm" placeholder="Contato (tel/e-mail)">
+              <button class="btn-brand !py-2 text-sm" onclick="criarFornecedor()">Cadastrar fornecedor</button>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">🚚 Transportadoras</div>
+            <div id="cadTransportadoras" class="text-sm mb-3">Carregando…</div>
+            <div class="border-t pt-3 grid gap-2">
+              <div class="text-xs font-bold text-gray-500 uppercase">＋ Nova transportadora</div>
+              <input id="transNome" class="inp text-sm" placeholder="Nome">
+              <input id="transContato" class="inp text-sm" placeholder="Contato (tel/e-mail)">
+              <button class="btn-brand !py-2 text-sm" onclick="criarTransportadora()">Cadastrar transportadora</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ADMIN ===== -->
+      <section id="aba-admin" class="hidden">
+        <div class="card p-4 max-w-2xl">
+          <div class="font-bold mb-2">👥 Usuários</div>
+          <div id="listaUsuarios" class="text-sm mb-3">Carregando…</div>
+          <div class="border-t pt-3 grid gap-2">
+            <div class="text-xs font-bold text-gray-500 uppercase">Novo usuário</div>
+            <input id="uNome" class="inp text-sm" placeholder="Nome">
+            <input id="uLogin" class="inp text-sm" placeholder="Login">
+            <input id="uSenha" class="inp text-sm" placeholder="Senha">
+            <select id="uPerfil" class="inp text-sm"><option value="operador">operador (equipe)</option><option value="admin">admin</option></select>
+            <button class="btn-brand !py-2 text-sm" onclick="criarUsuario()">Criar usuário</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- NAV INFERIOR (mobile) -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
+    <div class="grid grid-cols-7 text-[10px] font-semibold text-gray-500">
+      <button data-aba="inicio" onclick="mostrarAba('inicio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏠</span>Início<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="lancar" onclick="mostrarAba('lancar')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">➕</span>Lançar<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="movs" onclick="mostrarAba('movs')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Movim.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="rastreio" onclick="mostrarAba('rastreio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔍</span>Lotes<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+    </div>
+  </nav>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const SUPA_URL = 'https://srenhrjrprufixoiqvlz.supabase.co';
+const SUPA_KEY = 'sb_publishable_e08JBryAm6Pxx3Pp4aVLag_V1yO4dYM';
+const HJSON = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
+const LINHAS = ['Coagulação','Gasometria','Beckman','Vyttra'];
+const TIPOS = {
+  entrada_compra:      { label:'📥 Entrada — compra',        sinal:+1 },
+  saida_consumo:       { label:'📤 Saída — consumo',         sinal:-1 },
+  perda:               { label:'⚠️ Perda / quebra',          sinal:-1 },
+  descarte_vencimento: { label:'🗑️ Descarte por vencimento', sinal:-1 },
+  emprestimo_saida:    { label:'🤝 Empréstimo — saída',      sinal:-1 },
+  emprestimo_devolucao:{ label:'↩️ Empréstimo — devolução',  sinal:+1 },
+};
+const SAIDAS = ['saida_consumo','perda','descarte_vencimento','emprestimo_saida'];
+
+let sessao = null;
+let cacheProdutos = [];   // [{id,nome,linha,unidade}]
+let cacheLotesProd = [];  // lotes do produto selecionado no form
+let cacheEstoque = [];
+let prefillDev = null;    // {saidaId, produtoId, loteId, produtoNome, loteNum}
+let cacheUsuarios = [];
+let movDeb = null;
+
+/* ================= HELPERS ================= */
+function esc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtData(iso){ if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; }
+function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigits:2}); }
+
+function toast(msg, tipo){
+  const el = document.getElementById('toast');
+  const cor = tipo==='erro' ? 'bg-red-700' : (tipo==='ok' ? 'bg-green-700' : 'bg-gray-800');
+  el.className = `${cor} text-white text-sm font-semibold rounded-xl px-4 py-3 shadow-lg`;
+  el.textContent = msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.className='hidden'; }, 3800);
+}
+
+async function apiGET(path){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: HJSON });
+  if(!r.ok){ const t = await r.text(); throw new Error(`GET ${path} → ${r.status}: ${t.slice(0,200)}`); }
+  return r.json();
+}
+async function apiPOST(table, body){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+    method:'POST', headers:{...HJSON, 'Prefer':'return=representation'}, body: JSON.stringify(body)
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error(`POST ${table} → ${r.status}: ${t.slice(0,300)}`); }
+  const j = await r.json();
+  return Array.isArray(j) ? j[0] : j;
+}
+async function apiPATCH(table, params, body){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {
+    method:'PATCH', headers:{...HJSON, 'Prefer':'return=representation'}, body: JSON.stringify(body)
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error(`PATCH ${table} → ${r.status}: ${t.slice(0,300)}`); }
+  return r.json();
+}
+
+/* ================= SESSÃO / LOGIN ================= */
+function salvarSessao(){ localStorage.setItem('nl_estoque_sessao', JSON.stringify(sessao)); }
+function lerSessao(){ try{ return JSON.parse(localStorage.getItem('nl_estoque_sessao')); }catch(e){ return null; } }
+
+async function fazerLogin(){
+  const login = document.getElementById('loginUser').value.trim();
+  const senha = document.getElementById('loginPass').value;
+  const box = document.getElementById('loginErro');
+  box.classList.add('hidden');
+  if(!login || !senha){ box.textContent='Informe usuário e senha.'; box.classList.remove('hidden'); return; }
+  try{
+    const rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil`);
+    if(!rows.length || rows[0].senha !== senha){ box.textContent='Usuário ou senha inválidos.'; box.classList.remove('hidden'); return; }
+    sessao = { id: rows[0].id, nome: rows[0].nome, perfil: rows[0].perfil };
+    salvarSessao();
+    entrarApp();
+  }catch(e){ box.textContent='Falha de conexão: '+e.message; box.classList.remove('hidden'); }
+}
+function fazerLogout(){ sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload(); }
+
+function entrarApp(){
+  document.getElementById('telaLogin').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
+  const ehAdmin = sessao.perfil==='admin';
+  document.getElementById('navAdminDesk').style.display = ehAdmin ? '' : 'none';
+  document.getElementById('navAdminMob').style.display = ehAdmin ? '' : 'none';
+  // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
+  document.getElementById('fData').value = hojeISO();
+  carregarProdutosCache().then(()=>{
+    preencherDatalistProdutos();
+    carregarClientesDatalist();
+  });
+  mostrarAba('inicio');
+}
+document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
+
+/* ================= NAVEGAÇÃO ================= */
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','cadastros','admin'];
+function mostrarAba(aba){
+  if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
+  ABAS.forEach(a=>{
+    document.getElementById('aba-'+a).classList.toggle('hidden', a!==aba);
+  });
+  document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.aba===aba));
+  window.scrollTo({top:0});
+  if(aba==='inicio') carregarDashboard();
+  if(aba==='movs') carregarMovs();
+  if(aba==='emprestimos') carregarEmprestimos();
+  if(aba==='cadastros') carregarCadastros();
+  if(aba==='admin') carregarAdmin();
+  if(aba==='lancar' && prefillDev) aplicarPrefillDev();
+}
+
+/* ================= DASHBOARD ================= */
+async function carregarDashboard(){
+  try{
+    const [prods, lotesSaldo, vencendo, saidasEmp, devolucoes, estoque] = await Promise.all([
+      apiGET('produtos?ativo=eq.true&select=id'),
+      apiGET('lotes?quantidade_atual=gt.0&select=id'),
+      apiGET('lotes_vencendo_90d?select=*'),
+      apiGET('movimentacoes?tipo=eq.emprestimo_saida&select=id'),
+      apiGET('movimentacoes?tipo=eq.emprestimo_devolucao&select=observacao'),
+      apiGET('estoque_atual?select=*&order=linha.asc,produto.asc'),
+    ]);
+    document.getElementById('kpiProdutos').textContent = prods.length;
+    document.getElementById('kpiLotes').textContent = lotesSaldo.length;
+    document.getElementById('kpiVencendo').textContent = vencendo.length;
+    document.getElementById('kpiEmprestimos').textContent = contarEmprestimosAbertos(saidasEmp, devolucoes);
+    renderVencendo(vencendo);
+    cacheEstoque = estoque;
+    renderEstoque('');
+  }catch(e){ toast('Erro ao carregar dashboard: '+e.message,'erro'); }
+}
+
+function renderVencendo(lista){
+  const box = document.getElementById('listaVencendo');
+  if(!lista.length){ box.innerHTML = '<span class="text-green-700 font-semibold">✓ Nenhum lote vencendo nos próximos 90 dias.</span>'; return; }
+  box.innerHTML = lista.map(v=>{
+    const d = Number(v.dias_para_vencer);
+    let cls, rot;
+    if(d < 0){ cls='urg-vencido'; rot=`VENCIDO há ${Math.abs(d)}d`; }
+    else if(d <= 30){ cls='urg-30'; rot=`vence em ${d}d`; }
+    else if(d <= 60){ cls='urg-60'; rot=`vence em ${d}d`; }
+    else { cls='urg-90'; rot=`vence em ${d}d`; }
+    return `<div class="flex items-center justify-between gap-2 py-1.5 rowline">
+      <div class="min-w-0"><div class="font-semibold truncate">${esc(v.produto)}</div>
+      <div class="text-xs text-gray-500">${esc(v.linha)} • lote ${esc(v.lote)} • ${fmtQtd(v.quantidade)} un</div></div>
+      <span class="badge ${cls} shrink-0">${rot}</span></div>`;
+  }).join('');
+}
+
+function renderEstoque(filtro){
+  const tb = document.getElementById('tbodyEstoque');
+  const f = (filtro||'').toLowerCase();
+  const rows = cacheEstoque.filter(r => !f || r.produto.toLowerCase().includes(f));
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum item.</td></tr>'; return; }
+  tb.innerHTML = rows.slice(0,300).map(r=>`<tr class="rowline">
+    <td class="py-2 pr-2 font-medium">${esc(r.produto)}</td>
+    <td class="py-2 pr-2 text-gray-500 text-xs">${esc(r.linha)}</td>
+    <td class="py-2 pr-2">${esc(r.lote)}</td>
+    <td class="py-2 pr-2">${fmtData(r.validade)}</td>
+    <td class="py-2 text-right font-bold">${fmtQtd(r.quantidade)}</td></tr>`).join('')
+    + (rows.length>300 ? `<tr><td colspan="5" class="py-2 text-xs text-gray-400">Mostrando 300 de ${rows.length}…</td></tr>` : '');
+}
+function filtrarEstoque(){ renderEstoque(document.getElementById('buscaEstoque').value); }
+
+function contarEmprestimosAbertos(saidas, devolucoes){
+  const refs = new Set();
+  (devolucoes||[]).forEach(d=>{
+    const m = String(d.observacao||'').match(/\[devolucao de ([0-9a-f-]{36})\]/i);
+    if(m) refs.add(m[1].toLowerCase());
+  });
+  return saidas.filter(s=>!refs.has(String(s.id).toLowerCase())).length;
+}
+
+/* ================= FORM: NOVA MOVIMENTAÇÃO ================= */
+async function carregarProdutosCache(){
+  cacheProdutos = await apiGET('produtos?ativo=eq.true&select=id,nome,linha,unidade&order=nome.asc');
+}
+function preencherDatalistProdutos(){
+  document.getElementById('dlProdutos').innerHTML =
+    cacheProdutos.map(p=>`<option value="${esc(p.nome)}">`).join('');
+}
+async function carregarClientesDatalist(){
+  try{
+    const rows = await apiGET('movimentacoes?select=cliente&limit=1000');
+    const set = new Set(['NEW LIFE (interno)']);
+    rows.forEach(r=>{ if(r.cliente) set.add(r.cliente); });
+    document.getElementById('dlClientes').innerHTML = [...set].sort().map(c=>`<option value="${esc(c)}">`).join('');
+  }catch(e){ /* datalist opcional */ }
+}
+
+function resolverProduto(nomeDigitado){
+  const n = (nomeDigitado||'').trim().toLowerCase();
+  return cacheProdutos.find(p=>p.nome.toLowerCase()===n) || null;
+}
+
+async function aoEscolherProduto(){
+  const p = resolverProduto(document.getElementById('fProduto').value);
+  cacheLotesProd = p ? await apiGET(`lotes?produto_id=eq.${p.id}&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`) : [];
+  montarSelectLote();
+}
+function montarSelectLote(){
+  const sel = document.getElementById('fLote');
+  const tipo = document.getElementById('fTipo').value;
+  let html = '';
+  if(tipo==='entrada_compra'){
+    html += `<option value="__novo">＋ Novo lote…</option>`;
+  }
+  if(!cacheLotesProd.length && tipo!=='entrada_compra'){
+    html += `<option value="">— nenhum lote cadastrado —</option>`;
+  }
+  html += cacheLotesProd.map(l=>
+    `<option value="${l.id}">${esc(l.numero_lote)} · val ${fmtData(l.validade)} · saldo ${fmtQtd(l.quantidade_atual)}</option>`
+  ).join('');
+  sel.innerHTML = html;
+  aoTrocarLote();
+}
+function aoTrocarTipo(){
+  const tipo = document.getElementById('fTipo').value;
+  document.getElementById('boxResponsavel').classList.toggle('hidden', !(tipo==='emprestimo_saida'||tipo==='emprestimo_devolucao'));
+  document.getElementById('boxAnexo').classList.toggle('hidden', !(tipo==='emprestimo_saida'||tipo==='entrada_compra'));
+  const ehEntrada = tipo==='entrada_compra';
+  document.getElementById('boxFornTransp').classList.toggle('hidden', !ehEntrada);
+  if(ehEntrada) carregarFornTranspSelects();
+  document.getElementById('cliObrig').textContent = tipo==='saida_consumo' ? '*' : '';
+  montarSelectLote();
+}
+async function carregarFornTranspSelects(){
+  try{
+    const [forns, trans] = await Promise.all([
+      apiGET('fornecedores?ativo=eq.true&select=id,nome&order=nome.asc'),
+      apiGET('transportadoras?ativo=eq.true&select=id,nome&order=nome.asc'),
+    ]);
+    document.getElementById('fFornecedor').innerHTML = '<option value="">— nenhum —</option>' + forns.map(f=>`<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+    document.getElementById('fTransportadora').innerHTML = '<option value="">— nenhuma —</option>' + trans.map(t=>`<option value="${t.id}">${esc(t.nome)}</option>`).join('');
+  }catch(e){ /* selects opcionais */ }
+}
+function aoTrocarLote(){
+  const v = document.getElementById('fLote').value;
+  document.getElementById('boxNovoLote').classList.toggle('hidden', v!=='__novo');
+}
+
+function aplicarPrefillDev(){
+  if(!prefillDev) return;
+  document.getElementById('fTipo').value = 'emprestimo_devolucao';
+  aoTrocarTipo();
+  document.getElementById('fProduto').value = prefillDev.produtoNome;
+  aoEscolherProduto().then(()=>{
+    document.getElementById('fLote').value = prefillDev.loteId;
+    aoTrocarLote();
+    document.getElementById('fObs').value = `[devolucao de ${prefillDev.saidaId}] `;
+    toast('Formulário pré-preenchido com a devolução. Confira e salve.','ok');
+    prefillDev = null;
+  });
+}
+
+async function comprimirImagem(file){
+  const bmp = await createImageBitmap(file);
+  const max = 1280;
+  let w = bmp.width, h = bmp.height;
+  const r = Math.min(1, max/Math.max(w,h));
+  w = Math.round(w*r); h = Math.round(h*r);
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(bmp,0,0,w,h);
+  return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('falha ao comprimir')),'image/jpeg',0.8));
+}
+async function uploadRecibo(file){
+  const blob = await comprimirImagem(file);
+  const nome = Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9.\-_]/g,'_')+'.jpg';
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+    method:'POST',
+    headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/jpeg' },
+    body: blob
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error('Upload do recibo falhou ('+r.status+'): '+t.slice(0,150)); }
+  return `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+}
+
+async function salvarMovimentacao(){
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try{
+    const tipo = document.getElementById('fTipo').value;
+    const produto = resolverProduto(document.getElementById('fProduto').value);
+    if(!produto) throw new Error('Selecione um produto da lista (ou cadastre em Admin).');
+    const qtd = Number(document.getElementById('fQtd').value);
+    if(!(qtd>0)) throw new Error('Informe uma quantidade maior que zero.');
+    const data = document.getElementById('fData').value || hojeISO();
+    const cliente = document.getElementById('fCliente').value.trim();
+    const responsavel = document.getElementById('fResponsavel').value.trim();
+    const obs = document.getElementById('fObs').value.trim();
+    if(tipo==='saida_consumo' && !cliente) throw new Error('Cliente é obrigatório na saída por consumo.');
+    if((tipo==='emprestimo_saida'||tipo==='emprestimo_devolucao') && !responsavel)
+      throw new Error('Responsável é obrigatório no empréstimo.');
+
+    // --- lote ---
+    let loteId = document.getElementById('fLote').value;
+    let loteObj = null;
+    if(loteId==='__novo'){
+      if(tipo!=='entrada_compra') throw new Error('Novo lote só é permitido em entrada de compra.');
+      const num = document.getElementById('fNovoLoteNum').value.trim();
+      const val = document.getElementById('fNovoLoteVal').value || null;
+      if(!num) throw new Error('Informe o número do novo lote.');
+      const criado = await apiPOST('lotes',{produto_id:produto.id, numero_lote:num, validade:val, quantidade_atual:0});
+      loteId = criado.id; loteObj = criado;
+    } else {
+      if(!loteId) throw new Error('Selecione um lote.');
+      loteObj = cacheLotesProd.find(l=>l.id===loteId);
+      if(!loteObj){ const r=await apiGET(`lotes?id=eq.${loteId}&select=id,numero_lote,validade,quantidade_atual`); loteObj=r[0]; }
+      if(!loteObj) throw new Error('Lote não encontrado.');
+    }
+
+    // --- validações de saldo / validade ---
+    const ehSaida = SAIDAS.includes(tipo);
+    const saldoAtual = Number(loteObj.quantidade_atual||0);
+    if(ehSaida && qtd > saldoAtual)
+      throw new Error(`Saldo insuficiente no lote ${loteObj.numero_lote}: tem ${fmtQtd(saldoAtual)}, tentou dar baixa em ${fmtQtd(qtd)}.`);
+    if(tipo==='descarte_vencimento' && loteObj.validade && loteObj.validade > hojeISO()){
+      if(!confirm(`O lote ${loteObj.numero_lote} vence em ${fmtData(loteObj.validade)} (ainda não venceu). Confirmar o descarte mesmo assim?`))
+        throw new Error('Descarte cancelado pelo usuário.');
+    }
+
+    // --- anexo ---
+    let anexoUrl = null;
+    const fileInput = document.getElementById('fAnexo');
+    if((tipo==='emprestimo_saida'||tipo==='entrada_compra') && fileInput.files.length){
+      toast('Enviando foto do recibo…');
+      anexoUrl = await uploadRecibo(fileInput.files[0]);
+    }
+
+    // --- grava movimentação ---
+    const movBody = {
+      tipo, produto_id:produto.id, lote_id:loteId, quantidade:qtd, data,
+      cliente: cliente||null, responsavel: responsavel||null,
+      observacao: obs||null, anexo_url: anexoUrl, usuario_id: sessao.id,
+      fornecedor_id: null, transportadora_id: null
+    };
+    if(tipo==='entrada_compra'){
+      movBody.fornecedor_id = document.getElementById('fFornecedor').value || null;
+      movBody.transportadora_id = document.getElementById('fTransportadora').value || null;
+    }
+    await apiPOST('movimentacoes', movBody);
+
+    // --- atualiza saldo do lote ---
+    const novoSaldo = saldoAtual + (TIPOS[tipo].sinal * qtd);
+    await apiPATCH('lotes', `id=eq.${loteId}`, { quantidade_atual: novoSaldo });
+
+    toast('Movimentação salva. ✓','ok');
+    // limpa form
+    document.getElementById('fQtd').value='';
+    document.getElementById('fCliente').value='';
+    document.getElementById('fResponsavel').value='';
+    document.getElementById('fObs').value='';
+    fileInput.value='';
+    document.getElementById('fNovoLoteNum').value='';
+    document.getElementById('fNovoLoteVal').value='';
+    document.getElementById('fFornecedor').value='';
+    document.getElementById('fTransportadora').value='';
+    await aoEscolherProduto();
+  }catch(e){
+    if(e.message!=='Descarte cancelado pelo usuário.') toast(e.message,'erro');
+  }finally{
+    btn.disabled=false; btn.textContent='Salvar movimentação';
+  }
+}
+
+/* ================= MOVIMENTAÇÕES (lista) ================= */
+function carregarMovsDeb(){ clearTimeout(movDeb); movDeb=setTimeout(carregarMovs, 400); }
+async function carregarMovs(){
+  const box = document.getElementById('listaMovs');
+  try{
+    const tipo = document.getElementById('fltTipo').value;
+    const prod = document.getElementById('fltProduto').value.trim().toLowerCase();
+    const de = document.getElementById('fltDe').value, ate = document.getElementById('fltAte').value;
+    let q = `movimentacoes?select=*,produtos(nome),lotes(numero_lote),usuarios(nome),fornecedores(nome),transportadoras(nome)&order=data.desc&order=created_at.desc&limit=200`;
+    if(tipo) q += `&tipo=eq.${tipo}`;
+    if(de) q += `&data=gte.${de}`;
+    if(ate) q += `&data=lte.${ate}`;
+    let rows = await apiGET(q);
+    if(prod) rows = rows.filter(r=>(r.produtos?.nome||'').toLowerCase().includes(prod));
+    if(!rows.length){ box.innerHTML='<div class="p-4 text-gray-400">Nenhuma movimentação no período.</div>'; return; }
+    box.innerHTML = rows.map((r,i)=>{
+      const t = TIPOS[r.tipo]||{label:r.tipo, sinal:0};
+      const cor = t.sinal>0 ? 'text-green-700' : 'text-red-700';
+      const sinalTxt = t.sinal>0 ? '+' : '−';
+      return `<details class="rowline px-4 py-2.5">
+        <summary class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-semibold truncate">${esc(r.produtos?.nome||'?')} <span class="text-gray-400 font-normal">· lote ${esc(r.lotes?.numero_lote||'?')}</span></div>
+            <div class="text-xs text-gray-500">${t.label} · ${fmtData(r.data)}${r.cliente?` · ${esc(r.cliente)}`:''}</div>
+          </div>
+          <div class="font-black ${cor} shrink-0">${sinalTxt}${fmtQtd(r.quantidade)}</div>
+        </summary>
+        <div class="pt-2 pb-1 text-xs text-gray-600 grid gap-1">
+          ${r.responsavel?`<div><b>Responsável:</b> ${esc(r.responsavel)}</div>`:''}
+          ${r.fornecedores?`<div><b>Fornecedor:</b> ${esc(r.fornecedores.nome)}</div>`:''}
+          ${r.transportadoras?`<div><b>Transportadora:</b> ${esc(r.transportadoras.nome)}</div>`:''}
+          ${r.observacao?`<div><b>Obs.:</b> ${esc(r.observacao)}</div>`:''}
+          ${r.anexo_url?`<div><b>📎 Anexo:</b> <a class="brand font-bold underline" href="${esc(r.anexo_url)}" target="_blank" rel="noopener">ver recibo</a></div>`:''}
+          <div class="text-gray-400">Lançado por ${esc(r.usuarios?.nome||'?')} em ${fmtData(String(r.created_at).slice(0,10))}</div>
+        </div>
+      </details>`;
+    }).join('');
+  }catch(e){ box.innerHTML='<div class="p-4 text-red-600">Erro: '+esc(e.message)+'</div>'; }
+}
+
+/* ================= RASTREIO DE LOTE ================= */
+async function rastreioCarregarLotes(){
+  const p = resolverProduto(document.getElementById('rProduto').value);
+  const sel = document.getElementById('rLote');
+  if(!p){ sel.innerHTML='<option value="">— escolha um produto —</option>'; return; }
+  const lotes = await apiGET(`lotes?produto_id=eq.${p.id}&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
+  sel.innerHTML = lotes.map(l=>`<option value="${l.id}">${esc(l.numero_lote)} · val ${fmtData(l.validade)} · saldo ${fmtQtd(l.quantidade_atual)}</option>`).join('')
+    || '<option value="">— nenhum lote —</option>';
+}
+async function rastreioBuscar(){
+  const box = document.getElementById('rastreioResult');
+  const loteId = document.getElementById('rLote').value;
+  const pNome = document.getElementById('rProduto').value;
+  if(!loteId){ toast('Escolha produto e lote.','erro'); return; }
+  box.innerHTML = '<div class="card p-4 text-gray-400 text-sm">Carregando…</div>';
+  try{
+    const [lote] = await apiGET(`lotes?id=eq.${loteId}&select=numero_lote,validade,quantidade_atual`);
+    const movs = await apiGET(`movimentacoes?lote_id=eq.${loteId}&select=*,usuarios(nome)&order=data.asc&order=created_at.asc`);
+    let saldo = 0;
+    const linhas = movs.map(m=>{
+      const t = TIPOS[m.tipo]||{label:m.tipo,sinal:0};
+      saldo += t.sinal * Number(m.quantidade);
+      const cor = t.sinal>0 ? 'text-green-700' : 'text-red-700';
+      return `<div class="flex gap-3 py-2 rowline">
+        <div class="text-xs text-gray-400 w-20 shrink-0 pt-0.5">${fmtData(m.data)}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold">${t.label} <span class="${cor} font-black">${t.sinal>0?'+':'−'}${fmtQtd(m.quantidade)}</span></div>
+          <div class="text-xs text-gray-500">${m.cliente?esc(m.cliente)+' · ':''}${m.responsavel?esc(m.responsavel)+' · ':''}${m.observacao?esc(m.observacao)+' · ':''}por ${esc(m.usuarios?.nome||'?')}
+          ${m.anexo_url?` · <a class="brand font-bold underline" href="${esc(m.anexo_url)}" target="_blank" rel="noopener">📎 recibo</a>`:''}</div>
+        </div>
+        <div class="text-xs text-gray-400 shrink-0 pt-0.5">saldo {saldo}</div>
+      </div>`.replace('{saldo}', fmtQtd(saldo));
+    }).join('');
+    box.innerHTML = `<div class="card p-4">
+      <div class="font-bold mb-1">📦 ${esc(pNome)} — lote ${esc(lote.numero_lote)}</div>
+      <div class="text-xs text-gray-500 mb-3">Validade: ${fmtData(lote.validade)} · Saldo atual: <b>${fmtQtd(lote.quantidade_atual)}</b> · ${movs.length} movimentação(ões)</div>
+      ${linhas || '<div class="text-sm text-gray-400">Nenhuma movimentação registrada.</div>'}
+    </div>`;
+  }catch(e){ box.innerHTML='<div class="card p-4 text-red-600 text-sm">Erro: '+esc(e.message)+'</div>'; }
+}
+
+/* ================= EMPRÉSTIMOS ================= */
+function extrairRefsDevolucao(devolucoes){
+  const refs = new Set();
+  (devolucoes||[]).forEach(d=>{
+    const m = String(d.observacao||'').match(/\[devolucao de ([0-9a-f-]{36})\]/i);
+    if(m) refs.add(m[1].toLowerCase());
+  });
+  return refs;
+}
+async function carregarEmprestimos(){
+  const box = document.getElementById('listaEmprestimos');
+  box.innerHTML = 'Carregando…';
+  try{
+    const [saidas, devs] = await Promise.all([
+      apiGET('movimentacoes?tipo=eq.emprestimo_saida&select=*,produtos(nome),lotes(numero_lote)&order=data.desc'),
+      apiGET('movimentacoes?tipo=eq.emprestimo_devolucao&select=observacao'),
+    ]);
+    const refs = extrairRefsDevolucao(devs);
+    const abertos = saidas.filter(s=>!refs.has(String(s.id).toLowerCase()));
+    if(!abertos.length){ box.innerHTML='<span class="text-green-700 font-semibold">✓ Nenhum empréstimo em aberto.</span>'; return; }
+    box.innerHTML = abertos.map(s=>`
+      <div class="py-3 rowline flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-semibold">${esc(s.produtos?.nome||'?')} <span class="text-gray-400 font-normal">· lote ${esc(s.lotes?.numero_lote||'?')}</span></div>
+          <div class="text-xs text-gray-500">${fmtQtd(s.quantidade)} un · ${fmtData(s.data)} · responsável: <b>${esc(s.responsavel||'—')}</b></div>
+          ${s.observacao?`<div class="text-xs text-gray-500">Obs.: ${esc(s.observacao)}</div>`:''}
+          ${s.anexo_url?`<div class="text-xs"><a class="brand font-bold underline" href="${esc(s.anexo_url)}" target="_blank" rel="noopener">📎 ver recibo</a></div>`:''}
+        </div>
+        <button class="btn-ghost shrink-0 !border-brand brand" onclick="iniciarDevolucao('${s.id}')">↩️ Registrar devolução</button>
+      </div>`).join('');
+  }catch(e){ box.innerHTML='<span class="text-red-600">Erro: '+esc(e.message)+'</span>'; }
+}
+async function iniciarDevolucao(saidaId){
+  try{
+    const [s] = await apiGET(`movimentacoes?id=eq.${saidaId}&select=id,produto_id,lote_id,produtos(nome),lotes(numero_lote)`);
+    if(!s){ toast('Empréstimo não encontrado.','erro'); return; }
+    prefillDev = { saidaId: s.id, produtoId: s.produto_id, loteId: s.lote_id,
+                   produtoNome: s.produtos?.nome||'', loteNum: s.lotes?.numero_lote||'' };
+    mostrarAba('lancar');
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= ADMIN (só gestão de usuários; restrito ao admin) ================= */
+async function carregarAdmin(){
+  try{
+    const users = await apiGET('usuarios?select=id,nome,login,perfil,ativo&order=nome.asc');
+    document.getElementById('listaUsuarios').innerHTML = (cacheUsuarios = users).map(u=>`
+      <div class="flex items-center justify-between py-1.5 rowline">
+        <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
+          <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
+          ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}</div>
+        ${u.ativo&&u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}
+      </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
+  }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
+}
+async function criarUsuario(){
+  const nome=document.getElementById('uNome').value.trim(),
+        login=document.getElementById('uLogin').value.trim(),
+        senha=document.getElementById('uSenha').value,
+        perfil=document.getElementById('uPerfil').value;
+  if(!nome||!login||!senha){ toast('Preencha nome, login e senha.','erro'); return; }
+  try{
+    await apiPOST('usuarios',{nome,login,senha,perfil,ativo:true});
+    toast('Usuário criado. ✓','ok');
+    document.getElementById('uNome').value=document.getElementById('uLogin').value=document.getElementById('uSenha').value='';
+    carregarAdmin();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function desativarUsuario(id){
+  const u = cacheUsuarios.find(x=>x.id===id);
+  const nome = u ? u.nome : 'este usuário';
+  if(!confirm(`Desativar o usuário ${nome}?`)) return;
+  try{ await apiPATCH('usuarios',`id=eq.${id}`,{ativo:false}); toast('Usuário desativado.','ok'); carregarAdmin(); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function criarProduto(){
+  const nome=document.getElementById('pNome').value.trim(),
+        linha=document.getElementById('pLinha').value,
+        unidade=document.getElementById('pUnidade').value.trim()||'un';
+  if(!nome){ toast('Informe o nome do produto.','erro'); return; }
+  try{
+    await apiPOST('produtos',{nome,linha,unidade,ativo:true});
+    toast('Produto cadastrado. ✓','ok');
+    document.getElementById('pNome').value='';
+    await carregarProdutosCache(); preencherDatalistProdutos(); carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= CADASTROS (todos os perfis: produtos, fornecedores, transportadoras) ================= */
+function linhaCadastro(item, tabela, detalhe){
+  return `<div class="flex items-center justify-between py-1.5 rowline">
+    <div class="min-w-0"><b>${esc(item.nome)}</b> <span class="text-xs text-gray-500">${detalhe}</span>
+    ${item.ativo?'':' <span class="badge bg-gray-200 text-gray-500">inativo</span>'}</div>
+    <button class="text-xs font-bold underline shrink-0 ${item.ativo?'text-red-600':'text-green-700'}"
+      onclick="toggleCadastro('${tabela}','${item.id}',${!item.ativo})">${item.ativo?'desativar':'reativar'}</button>
+  </div>`;
+}
+async function carregarCadastros(){
+  try{
+    const [prods, forns, trans] = await Promise.all([
+      apiGET('produtos?select=id,nome,linha,unidade,ativo&order=nome.asc'),
+      apiGET('fornecedores?select=id,nome,contato,ativo&order=nome.asc'),
+      apiGET('transportadoras?select=id,nome,contato,ativo&order=nome.asc'),
+    ]);
+    document.getElementById('cadProdutos').innerHTML =
+      prods.map(p=>linhaCadastro(p,'produtos',`· ${esc(p.linha)} · ${esc(p.unidade)}`)).join('') || '<span class="text-gray-400">Nenhum.</span>';
+    document.getElementById('cadFornecedores').innerHTML =
+      forns.map(f=>linhaCadastro(f,'fornecedores',f.contato?`· ${esc(f.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
+    document.getElementById('cadTransportadoras').innerHTML =
+      trans.map(t=>linhaCadastro(t,'transportadoras',t.contato?`· ${esc(t.contato)}`:'')).join('') || '<span class="text-gray-400">Nenhum.</span>';
+  }catch(e){ toast('Erro ao carregar cadastros: '+e.message,'erro'); }
+}
+async function toggleCadastro(tabela, id, novoAtivo){
+  try{
+    await apiPATCH(tabela, `id=eq.${id}`, {ativo:novoAtivo});
+    toast(novoAtivo?'Reativado. ✓':'Desativado.','ok');
+    carregarCadastros();
+    if(tabela==='produtos'){ await carregarProdutosCache(); preencherDatalistProdutos(); }
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function criarFornecedor(){
+  const nome=document.getElementById('fornNome').value.trim();
+  const contato=document.getElementById('fornContato').value.trim()||null;
+  if(!nome){ toast('Informe o nome do fornecedor.','erro'); return; }
+  try{
+    await apiPOST('fornecedores',{nome,contato,ativo:true});
+    toast('Fornecedor cadastrado. ✓','ok');
+    document.getElementById('fornNome').value=''; document.getElementById('fornContato').value='';
+    carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function criarTransportadora(){
+  const nome=document.getElementById('transNome').value.trim();
+  const contato=document.getElementById('transContato').value.trim()||null;
+  if(!nome){ toast('Informe o nome da transportadora.','erro'); return; }
+  try{
+    await apiPOST('transportadoras',{nome,contato,ativo:true});
+    toast('Transportadora cadastrada. ✓','ok');
+    document.getElementById('transNome').value=''; document.getElementById('transContato').value='';
+    carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= INIT ================= */
+(function init(){
+  sessao = lerSessao();
+  if(sessao && sessao.id){ entrarApp(); }
+  // senão, fica na tela de login
+})();
+</script>
+</body>
+</html>
