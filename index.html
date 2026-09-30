@@ -153,6 +153,10 @@
                 <option value="Fortaleza">📍 Fortaleza</option>
                 <option value="Piauí">📍 Piauí</option>
               </select>
+              <select id="filtroLinha" class="inp !w-auto !py-1.5 text-sm" onchange="renderEstoque()">
+                <option value="">🧪 Todas as linhas</option>
+                <option>Coagulação</option><option>Gasometria</option><option>Hematologia</option><option>Bioquímica</option>
+              </select>
               <input id="buscaEstoque" class="inp !w-40 !py-1.5 text-sm" placeholder="🔎 Buscar produto…" oninput="renderEstoque()">
             </div>
           </div>
@@ -628,7 +632,8 @@ function renderEstoque(){
   const tb = document.getElementById('tbodyEstoque');
   const f = (document.getElementById('buscaEstoque').value||'').toLowerCase();
   const loc = document.getElementById('filtroLocal').value;
-  const rows = cacheEstoque.filter(r => (!f || r.produto.toLowerCase().includes(f)) && (!loc || r.local===loc));
+  const lin = document.getElementById('filtroLinha').value;
+  const rows = cacheEstoque.filter(r => (!f || r.produto.toLowerCase().includes(f)) && (!loc || r.local===loc) && (!lin || r.linha===lin));
   const totFor = cacheEstoque.filter(r=>r.local==='Fortaleza').reduce((s,r)=>s+Number(r.quantidade||0),0);
   const totPi = cacheEstoque.filter(r=>r.local==='Piauí').reduce((s,r)=>s+Number(r.quantidade||0),0);
   document.getElementById('totaisLocal').innerHTML =
