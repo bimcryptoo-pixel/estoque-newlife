@@ -59,7 +59,7 @@
 <div id="app" class="hidden">
   <!-- TOPO -->
   <header class="bg-white border-b sticky top-0 z-40">
-    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="max-w-[1400px] mx-auto px-4 py-3 flex items-center justify-between">
       <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
       <div class="flex items-center gap-2">
         <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
@@ -68,7 +68,7 @@
     </div>
   </header>
 
-  <div class="max-w-5xl mx-auto md:flex md:gap-4 px-0 md:px-4">
+  <div class="max-w-[1400px] mx-auto md:flex md:gap-6 px-0 md:px-6">
     <!-- MENU LATERAL (desktop) -->
     <nav class="hidden md:flex flex-col gap-1 w-52 shrink-0 py-6 sticky top-16 self-start">
       <button data-aba="inicio"      onclick="mostrarAba('inicio')"      class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🏠 Início</button>
@@ -121,7 +121,7 @@
 
       <!-- ===== LANÇAR ===== -->
       <section id="aba-lancar" class="hidden">
-        <div class="card p-4 md:p-6 max-w-2xl">
+        <div class="card p-4 md:p-6 max-w-3xl">
           <div class="font-bold text-lg mb-4">➕ Nova movimentação</div>
           <div class="grid gap-3">
             <div>
@@ -210,7 +210,7 @@
 
       <!-- ===== RASTREIO ===== -->
       <section id="aba-rastreio" class="hidden">
-        <div class="card p-4 mb-3 max-w-2xl">
+        <div class="card p-4 mb-3 max-w-3xl">
           <div class="font-bold mb-2">🔍 Rastreio de lote</div>
           <div class="grid gap-3">
             <div><label class="lbl">Produto</label><input id="rProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="rastreioCarregarLotes()"></div>
@@ -218,7 +218,7 @@
             <button class="btn-brand" onclick="rastreioBuscar()">Ver timeline</button>
           </div>
         </div>
-        <div id="rastreioResult" class="max-w-2xl"></div>
+        <div id="rastreioResult" class="max-w-3xl"></div>
       </section>
 
       <!-- ===== EMPRÉSTIMOS ===== -->
@@ -270,7 +270,7 @@
 
       <!-- ===== ADMIN ===== -->
       <section id="aba-admin" class="hidden">
-        <div class="card p-4 max-w-2xl">
+        <div class="card p-4 max-w-3xl">
           <div class="font-bold mb-2">👥 Usuários</div>
           <div id="listaUsuarios" class="text-sm mb-3">Carregando…</div>
           <div class="border-t pt-3 grid gap-2">
