@@ -125,6 +125,7 @@
       <button data-aba="rastreio"    onclick="mostrarAba('rastreio')"    class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔍 Rastreio de lote</button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
+      <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -365,6 +366,190 @@
         </div>
       </section>
 
+      <!-- ===== PEDIDOS AO ESTOQUE ===== -->
+      <section id="aba-pedidos" class="hidden">
+
+        <!-- LISTA -->
+        <div id="pedListaWrap">
+          <div class="card p-4 mb-4">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <div class="font-bold text-lg">📦 Pedidos ao estoque</div>
+                <div class="text-xs text-gray-500">Requisição antes da nota fiscal — pedidos de clientes e consumo interno.</div>
+              </div>
+              <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="abrirFormPedido()">➕ Novo pedido</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+              <div><label class="lbl">Status</label><select id="pStatus" class="inp text-sm" onchange="carregarPedidos()">
+                <option value="">Todos</option><option value="rascunho">📝 Rascunho</option><option value="solicitado">📨 Solicitado</option><option value="aprovado">✅ Aprovado</option><option value="em_separacao">📦 Em separação</option><option value="pronto">✔️ Pronto</option><option value="faturado">🧾 Faturado</option><option value="concluido">🏁 Concluído</option><option value="cancelado">❌ Cancelado</option>
+              </select></div>
+              <div><label class="lbl">Tipo</label><select id="pTipo" class="inp text-sm" onchange="carregarPedidos()">
+                <option value="">Todos</option><option value="cliente">🧍 Cliente</option><option value="interno">🏢 Interno</option>
+              </select></div>
+              <div><label class="lbl">De</label><input id="pDe" type="date" class="inp text-sm" onchange="carregarPedidos()"></div>
+              <div><label class="lbl">Até</label><input id="pAte" type="date" class="inp text-sm" onchange="carregarPedidos()"></div>
+              <div><label class="lbl">Local</label><select id="pLocal" class="inp text-sm" onchange="carregarPedidos()">
+                <option value="">Todos</option><option>Fortaleza</option><option>Piauí</option>
+              </select></div>
+              <div><label class="lbl">Buscar</label><input id="pBusca" class="inp text-sm" placeholder="Nº, cliente, solicitante…" oninput="pedidosBuscaDeb()"></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="card p-4"><div class="text-2xl font-black brand" id="pkTotal">–</div><div class="text-xs text-gray-500 font-semibold">Pedidos no filtro</div></div>
+            <div class="card p-4"><div class="text-2xl font-black text-amber-600" id="pkAguard">–</div><div class="text-xs text-gray-500 font-semibold">Aguard. aprovação</div></div>
+            <div class="card p-4"><div class="text-2xl font-black text-blue-600" id="pkAndam">–</div><div class="text-xs text-gray-500 font-semibold">Em andamento</div></div>
+            <div class="card p-4"><div class="text-2xl font-black text-green-700" id="pkConc">–</div><div class="text-xs text-gray-500 font-semibold">Faturados/concluídos</div></div>
+          </div>
+
+          <div class="card p-4">
+            <div class="overflow-x-auto -mx-4 px-4">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-2 pr-2">Número</th><th class="py-2 pr-2">Emissão</th><th class="py-2 pr-2">Tipo</th><th class="py-2 pr-2">Cliente / Setor</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2 text-right">Valor</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
+                </tr></thead>
+                <tbody id="tbodyPedidos"><tr><td colspan="8" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+              </table>
+            </div>
+            <div id="pedMais" class="text-xs text-gray-400 mt-2"></div>
+          </div>
+        </div>
+
+        <!-- FORMULÁRIO -->
+        <div id="pedFormWrap" class="hidden">
+          <div class="card p-4 md:p-6 max-w-6xl">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div class="font-bold text-lg">📦 Novo pedido ao estoque</div>
+              <button class="btn-ghost !py-1.5 text-xs" onclick="fecharFormPedido()">← Voltar à lista</button>
+            </div>
+
+            <div class="text-xs font-bold text-gray-500 uppercase mb-2">Dados do pedido</div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div>
+                <label class="lbl">Tipo de pedido *</label>
+                <select id="npTipo" class="inp text-sm" onchange="aoTrocarTipoPedido()">
+                  <option value="cliente">🧍 Pedido de cliente</option>
+                  <option value="interno">🏢 Consumo interno</option>
+                </select>
+              </div>
+              <div id="npCliWrap" class="col-span-2">
+                <label class="lbl">Cliente *</label>
+                <select id="npCliente" class="inp text-sm"></select>
+              </div>
+              <div id="npSetorWrap" class="col-span-2 hidden">
+                <label class="lbl">Setor de destino *</label>
+                <input id="npSetor" class="inp text-sm" placeholder="Ex.: Laboratório, Almoxarifado…">
+              </div>
+              <div>
+                <label class="lbl">Solicitante *</label>
+                <input id="npSolicitante" class="inp text-sm" placeholder="Quem está pedindo">
+              </div>
+              <div>
+                <label class="lbl">Responsável / aprovador</label>
+                <input id="npResponsavel" class="inp text-sm" placeholder="Quem aprova">
+              </div>
+              <div>
+                <label class="lbl">Estoque de origem *</label>
+                <select id="npLocal" class="inp text-sm" onchange="aoTrocarLocalPedido()">
+                  <option value="Fortaleza">📍 Fortaleza (matriz)</option>
+                  <option value="Piauí">📍 Piauí (filial)</option>
+                </select>
+              </div>
+              <div>
+                <label class="lbl">Previsão de entrega</label>
+                <input id="npDataPrev" type="date" class="inp text-sm">
+              </div>
+              <div>
+                <label class="lbl">Prioridade</label>
+                <select id="npPrioridade" class="inp text-sm">
+                  <option value="baixa">Baixa</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">🔥 Urgente</option>
+                </select>
+              </div>
+              <div id="npEndWrap" class="col-span-2">
+                <label class="lbl">Endereço de entrega</label>
+                <input id="npEndereco" class="inp text-sm" placeholder="Rua, número, cidade…">
+              </div>
+              <div id="npTranspWrap">
+                <label class="lbl">Transportadora</label>
+                <input id="npTransportadora" class="inp text-sm" placeholder="Como será enviado">
+              </div>
+              <div id="npCondWrap">
+                <label class="lbl">Condição de pagamento</label>
+                <input id="npCondPag" class="inp text-sm" placeholder="Ex.: 30 dias, à vista…">
+              </div>
+              <div class="col-span-2 md:col-span-4">
+                <label class="lbl">Observações</label>
+                <textarea id="npObs" class="inp text-sm" rows="2" placeholder="Informações complementares do pedido…"></textarea>
+              </div>
+            </div>
+
+            <div class="text-xs font-bold text-gray-500 uppercase mb-2">Itens do pedido</div>
+            <div class="border rounded-xl p-3 mb-3 bg-gray-50">
+              <div class="grid grid-cols-2 md:grid-cols-12 gap-2">
+                <div class="col-span-2 md:col-span-4">
+                  <label class="lbl">Produto *</label>
+                  <input id="npProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="aoEscolherProdutoPedido()">
+                </div>
+                <div class="md:col-span-2">
+                  <label class="lbl">Qtd *</label>
+                  <input id="npQtd" type="number" min="0" step="any" class="inp text-sm" placeholder="0">
+                </div>
+                <div class="md:col-span-2">
+                  <label class="lbl">Lote (opcional)</label>
+                  <select id="npLote" class="inp text-sm"><option value="">— sem lote —</option></select>
+                </div>
+                <div class="md:col-span-2">
+                  <label class="lbl">Valor unit. (R$)</label>
+                  <input id="npValor" type="number" min="0" step="0.01" class="inp text-sm" placeholder="0,00">
+                </div>
+                <div class="md:col-span-2 flex items-end">
+                  <button class="btn-brand !py-2 text-sm" onclick="adicionarItemPedido()">＋ Adicionar</button>
+                </div>
+                <div class="col-span-2 md:col-span-12">
+                  <div id="pedEstoqueInfo" class="text-xs text-gray-500"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto -mx-4 px-4 mb-3">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-2 pr-2">#</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Lote</th><th class="py-2 pr-2 text-right">Qtd</th><th class="py-2 pr-2 text-right">Valor unit.</th><th class="py-2 pr-2 text-right">Subtotal</th><th class="py-2"></th>
+                </tr></thead>
+                <tbody id="tbodyPedItens"><tr><td colspan="7" class="py-4 text-gray-400 text-center">Nenhum item adicionado.</td></tr></tbody>
+                <tfoot><tr class="font-bold border-t">
+                  <td colspan="3" class="py-2 pr-2 text-right text-gray-500">TOTAL</td>
+                  <td class="py-2 pr-2 text-right" id="pedTotQtd">0</td>
+                  <td></td>
+                  <td class="py-2 pr-2 text-right brand" id="pedTotVal">R$ 0,00</td><td></td>
+                </tr></tfoot>
+              </table>
+            </div>
+
+            <div class="flex gap-2 flex-wrap">
+              <button class="btn-ghost flex-1 !py-3" onclick="salvarPedido('rascunho')">💾 Salvar rascunho</button>
+              <button class="btn-brand flex-1 !py-3" onclick="salvarPedido('solicitado')">📨 Salvar e solicitar</button>
+            </div>
+            <div class="text-xs text-gray-400 mt-3">💡 O pedido é uma requisição: a baixa no estoque continua sendo feita em <b>Lançar</b> após a saída física.</div>
+          </div>
+        </div>
+
+        <!-- DETALHE -->
+        <div id="pedDetalheWrap" class="hidden">
+          <div class="card p-4 md:p-6 max-w-6xl">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <button class="btn-ghost !py-1.5 text-xs" onclick="voltarListaPedidos()">← Voltar à lista</button>
+              <button class="btn-ghost !py-1.5 text-xs" onclick="imprimirPedido()">🖨️ Imprimir</button>
+            </div>
+            <div id="pedDetalhe"></div>
+          </div>
+        </div>
+
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -443,13 +628,14 @@
 
   <!-- NAV INFERIOR (mobile) -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="grid grid-cols-8 text-[10px] font-semibold text-gray-500">
+    <div class="grid grid-cols-9 text-[10px] font-semibold text-gray-500">
       <button data-aba="inicio" onclick="mostrarAba('inicio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏠</span>Início<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="lancar" onclick="mostrarAba('lancar')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">➕</span>Lançar<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="movs" onclick="mostrarAba('movs')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Movim.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="rastreio" onclick="mostrarAba('rastreio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔍</span>Lotes<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -573,7 +759,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','pedidos','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -585,6 +771,7 @@ function mostrarAba(aba){
   if(aba==='movs') carregarMovs();
   if(aba==='emprestimos') carregarEmprestimos();
   if(aba==='consumo') carregarConsumo();
+  if(aba==='pedidos') carregarPedidos();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
@@ -1255,6 +1442,425 @@ async function lancarConsumo(){
     CONSUMO_CACHE=null;
     carregarConsumo();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= PEDIDOS AO ESTOQUE ================= */
+const PED_STATUS = {
+  rascunho:    { t:'📝 Rascunho',     c:'background:#f3f4f6;color:#374151;' },
+  solicitado:  { t:'📨 Solicitado',   c:'background:#fef3c7;color:#92400e;' },
+  aprovado:    { t:'✅ Aprovado',      c:'background:#dbeafe;color:#1e40af;' },
+  em_separacao:{ t:'📦 Em separação',  c:'background:#ede9fe;color:#5b21b6;' },
+  pronto:      { t:'✔️ Pronto',        c:'background:#ccfbf1;color:#0f766e;' },
+  faturado:    { t:'🧾 Faturado',      c:'background:#e0e7ff;color:#3730a3;' },
+  concluido:   { t:'🏁 Concluído',     c:'background:#dcfce7;color:#166534;' },
+  cancelado:   { t:'❌ Cancelado',     c:'background:#fee2e2;color:#991b1b;' },
+};
+const PED_PRIOR = {
+  baixa:  { t:'Baixa',      c:'background:#f3f4f6;color:#374151;' },
+  normal: { t:'Normal',     c:'background:#dbeafe;color:#1e40af;' },
+  alta:   { t:'Alta',       c:'background:#fef3c7;color:#92400e;' },
+  urgente:{ t:'🔥 Urgente',  c:'background:#fee2e2;color:#991b1b;' },
+};
+const PED_TIPO = { cliente:'🧍 Cliente', interno:'🏢 Consumo interno' };
+const PED_PROX = {
+  rascunho:    [['solicitado','📨 Solicitar aprovação']],
+  solicitado:  [['aprovado','✅ Aprovar'],['rascunho','↩️ Voltar p/ rascunho']],
+  aprovado:    [['em_separacao','📦 Iniciar separação']],
+  em_separacao:[['pronto','✔️ Marcar como pronto']],
+  pronto:      [['faturado','🧾 Faturar']],
+  faturado:    [['concluido','🏁 Concluir']],
+};
+const PED_CANCELAVEL = ['rascunho','solicitado','aprovado'];
+let PED_CACHE = null;
+let PED_ITENS = [];
+let PED_LOTES = [];
+let PED_DETALHE_ATUAL = null;
+let pedBuscaT = null;
+
+function badgePedStatus(s){ const b=PED_STATUS[s]||PED_STATUS.rascunho; return `<span class="badge" style="${b.c}">${b.t}</span>`; }
+function badgePedPrior(p){ const b=PED_PRIOR[p]||PED_PRIOR.normal; return `<span class="badge" style="${b.c}">${b.t}</span>`; }
+function fmtReais(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function pedidosBuscaDeb(){ clearTimeout(pedBuscaT); pedBuscaT=setTimeout(carregarPedidos, 400); }
+
+async function apiDELETE(table, params){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:HJSON });
+  if(!r.ok){ const t = await r.text(); throw new Error(`DELETE ${table} → ${r.status}: ${t.slice(0,300)}`); }
+}
+
+async function carregarPedidos(){
+  try{
+    if(!PED_CACHE){
+      PED_CACHE = await apiGET('pedidos?select=*,clientes(id,nome)&order=data_emissao.desc,created_at.desc&limit=500');
+      const itens = await apiGET('pedidos_itens?select=pedido_id,quantidade,valor_unitario&limit=5000');
+      const agg = {};
+      itens.forEach(it=>{
+        const a = agg[it.pedido_id] || (agg[it.pedido_id] = { n:0, qtd:0, val:0, temVal:false });
+        a.n++; a.qtd += Number(it.quantidade)||0;
+        if(it.valor_unitario!==null && it.valor_unitario!==undefined){ a.val += (Number(it.quantidade)||0)*Number(it.valor_unitario); a.temVal = true; }
+      });
+      PED_CACHE.forEach(p=>{ p._agg = agg[p.id] || { n:0, qtd:0, val:0, temVal:false }; });
+    }
+    const fSt = document.getElementById('pStatus').value;
+    const fTp = document.getElementById('pTipo').value;
+    const fDe = document.getElementById('pDe').value;
+    const fAt = document.getElementById('pAte').value;
+    const fLo = document.getElementById('pLocal').value;
+    const fBu = (document.getElementById('pBusca').value||'').toLowerCase();
+    const rows = PED_CACHE.filter(p=>{
+      if(fSt && p.status!==fSt) return false;
+      if(fTp && p.tipo!==fTp) return false;
+      if(fDe && p.data_emissao < fDe) return false;
+      if(fAt && p.data_emissao > fAt) return false;
+      if(fLo && p.local_origem!==fLo) return false;
+      if(fBu){
+        const alvo = `${p.numero} ${(p.clientes&&p.clientes.nome)||''} ${p.solicitante||''} ${p.setor_destino||''}`.toLowerCase();
+        if(!alvo.includes(fBu)) return false;
+      }
+      return true;
+    });
+    document.getElementById('pkTotal').textContent = rows.length;
+    document.getElementById('pkAguard').textContent = rows.filter(p=>p.status==='solicitado').length;
+    document.getElementById('pkAndam').textContent = rows.filter(p=>['aprovado','em_separacao','pronto'].includes(p.status)).length;
+    document.getElementById('pkConc').textContent = rows.filter(p=>['faturado','concluido'].includes(p.status)).length;
+    const vis = rows.slice(0,150);
+    document.getElementById('tbodyPedidos').innerHTML = vis.map(p=>{
+      const destino = p.tipo==='cliente' ? esc((p.clientes&&p.clientes.nome)||'—') : esc(p.setor_destino||'—');
+      return `<tr class="rowline cursor-pointer" onclick="verPedido('${p.id}')">
+        <td class="py-2 pr-2 font-bold whitespace-nowrap">${esc(p.numero)}</td>
+        <td class="py-2 pr-2 whitespace-nowrap">${fmtData(p.data_emissao)}</td>
+        <td class="py-2 pr-2 whitespace-nowrap">${PED_TIPO[p.tipo]||p.tipo}</td>
+        <td class="py-2 pr-2">${destino}</td>
+        <td class="py-2 pr-2 text-right">${p._agg.n}</td>
+        <td class="py-2 pr-2 text-right">${p._agg.temVal?fmtReais(p._agg.val):'<span class="text-gray-400">—</span>'}</td>
+        <td class="py-2 pr-2">${badgePedStatus(p.status)}</td>
+        <td class="py-2 text-right text-gray-400">›</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="8" class="py-4 text-gray-400 text-center">Nenhum pedido encontrado.</td></tr>';
+    document.getElementById('pedMais').textContent =
+      rows.length>150 ? `Mostrando 150 de ${rows.length} pedidos.` : `${rows.length} pedido(s).`;
+  }catch(e){ toast('Erro ao carregar pedidos: '+e.message,'erro'); }
+}
+
+/* ---------- formulário ---------- */
+function abrirFormPedido(){
+  PED_ITENS = []; PED_LOTES = [];
+  document.getElementById('pedListaWrap').classList.add('hidden');
+  document.getElementById('pedDetalheWrap').classList.add('hidden');
+  document.getElementById('pedFormWrap').classList.remove('hidden');
+  const cliAtivos = (CLIENTES||[]).filter(c=>c.ativo && c.tipo==='cliente');
+  document.getElementById('npCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+    || '<option value="">— cadastre um cliente —</option>';
+  document.getElementById('npSolicitante').value = (sessao&&sessao.nome)||'';
+  document.getElementById('npResponsavel').value = '';
+  document.getElementById('npSetor').value = '';
+  document.getElementById('npEndereco').value = '';
+  document.getElementById('npTransportadora').value = '';
+  document.getElementById('npCondPag').value = '';
+  document.getElementById('npObs').value = '';
+  document.getElementById('npDataPrev').value = '';
+  document.getElementById('npPrioridade').value = 'normal';
+  document.getElementById('npTipo').value = 'cliente';
+  aoTrocarTipoPedido();
+  renderItensPedido();
+  window.scrollTo({top:0});
+}
+function fecharFormPedido(){
+  document.getElementById('pedFormWrap').classList.add('hidden');
+  document.getElementById('pedListaWrap').classList.remove('hidden');
+  window.scrollTo({top:0});
+}
+function voltarListaPedidos(){
+  document.getElementById('pedDetalheWrap').classList.add('hidden');
+  document.getElementById('pedFormWrap').classList.add('hidden');
+  document.getElementById('pedListaWrap').classList.remove('hidden');
+  carregarPedidos();
+  window.scrollTo({top:0});
+}
+function aoTrocarTipoPedido(){
+  const t = document.getElementById('npTipo').value;
+  const ehCli = t==='cliente';
+  document.getElementById('npCliWrap').classList.toggle('hidden', !ehCli);
+  document.getElementById('npSetorWrap').classList.toggle('hidden', ehCli);
+  document.getElementById('npEndWrap').classList.toggle('hidden', !ehCli);
+  document.getElementById('npCondWrap').classList.toggle('hidden', !ehCli);
+}
+function aoTrocarLocalPedido(){ aoEscolherProdutoPedido(); }
+
+async function aoEscolherProdutoPedido(){
+  const p = resolverProduto(document.getElementById('npProduto').value);
+  const local = document.getElementById('npLocal').value;
+  const info = document.getElementById('pedEstoqueInfo');
+  const sel = document.getElementById('npLote');
+  PED_LOTES = [];
+  if(!p){ info.textContent=''; sel.innerHTML='<option value="">— sem lote —</option>'; return; }
+  try{
+    PED_LOTES = await apiGET(`lotes?produto_id=eq.${p.id}&local=eq.${encodeURIComponent(local)}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
+    const tot = PED_LOTES.reduce((s,l)=>s+Number(l.quantidade_atual),0);
+    info.innerHTML = `📦 Estoque em <b>${esc(local)}</b>: <b>${fmtQtd(tot)} ${esc(p.unidade||'un')}</b>` +
+      (tot<=0 ? ' <span class="text-red-600 font-bold">— sem saldo!</span>' : '');
+    sel.innerHTML = '<option value="">— sem lote —</option>' + PED_LOTES.map(l=>
+      `<option value="${l.id}">${esc(l.numero_lote)} — ${fmtQtd(l.quantidade_atual)} ${esc(p.unidade||'un')} (val. ${fmtData(l.validade)})</option>`).join('');
+  }catch(e){ info.textContent='Não foi possível consultar o estoque.'; }
+}
+
+function adicionarItemPedido(){
+  const p = resolverProduto(document.getElementById('npProduto').value);
+  const qtd = parseFloat(String(document.getElementById('npQtd').value).replace(',','.'));
+  const loteId = document.getElementById('npLote').value || null;
+  const valor = document.getElementById('npValor').value;
+  if(!p){ toast('Escolha um produto da lista.','erro'); return; }
+  if(!qtd || qtd<=0){ toast('Informe a quantidade.','erro'); return; }
+  const lote = loteId ? PED_LOTES.find(l=>l.id===loteId) : null;
+  PED_ITENS.push({
+    produto_id:p.id, produto_nome:p.nome, unidade:p.unidade||'un',
+    lote_id:loteId, lote_num:lote?lote.numero_lote:null, lote_val:lote?lote.validade:null,
+    quantidade:qtd, valor_unitario: valor===''||valor===null ? null : parseFloat(String(valor).replace(',','.'))
+  });
+  document.getElementById('npProduto').value='';
+  document.getElementById('npQtd').value='';
+  document.getElementById('npValor').value='';
+  document.getElementById('npLote').value='';
+  document.getElementById('pedEstoqueInfo').textContent='';
+  renderItensPedido();
+}
+function removerItemPedido(i){ PED_ITENS.splice(i,1); renderItensPedido(); }
+function renderItensPedido(){
+  const tb = document.getElementById('tbodyPedItens');
+  let tq=0, tv=0, temV=false;
+  tb.innerHTML = PED_ITENS.map((it,i)=>{
+    tq += it.quantidade;
+    const sub = it.valor_unitario!==null ? it.quantidade*it.valor_unitario : null;
+    if(sub!==null){ tv+=sub; temV=true; }
+    return `<tr class="rowline">
+      <td class="py-2 pr-2 text-gray-500">${i+1}</td>
+      <td class="py-2 pr-2 font-semibold">${esc(it.produto_nome)}</td>
+      <td class="py-2 pr-2 text-gray-500">${it.lote_num?esc(it.lote_num):'<span class="text-gray-400">—</span>'}</td>
+      <td class="py-2 pr-2 text-right">${fmtQtd(it.quantidade)} ${esc(it.unidade)}</td>
+      <td class="py-2 pr-2 text-right">${it.valor_unitario!==null?fmtReais(it.valor_unitario):'<span class="text-gray-400">—</span>'}</td>
+      <td class="py-2 pr-2 text-right font-bold">${sub!==null?fmtReais(sub):'<span class="text-gray-400">—</span>'}</td>
+      <td class="py-2 text-right"><button class="text-red-600 font-bold" onclick="removerItemPedido(${i})">✕</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="py-4 text-gray-400 text-center">Nenhum item adicionado.</td></tr>';
+  document.getElementById('pedTotQtd').textContent = fmtQtd(tq);
+  document.getElementById('pedTotVal').textContent = temV ? fmtReais(tv) : 'R$ 0,00';
+}
+
+async function salvarPedido(statusInicial){
+  const tipo = document.getElementById('npTipo').value;
+  const cliente_id = tipo==='cliente' ? (document.getElementById('npCliente').value||null) : null;
+  const setor_destino = tipo==='interno' ? document.getElementById('npSetor').value.trim()||null : null;
+  const solicitante = document.getElementById('npSolicitante').value.trim();
+  const responsavel = document.getElementById('npResponsavel').value.trim()||null;
+  const local_origem = document.getElementById('npLocal').value;
+  const endereco_entrega = tipo==='cliente' ? (document.getElementById('npEndereco').value.trim()||null) : null;
+  const transportadora = document.getElementById('npTransportadora').value.trim()||null;
+  const data_prevista = document.getElementById('npDataPrev').value||null;
+  const prioridade = document.getElementById('npPrioridade').value;
+  const condicao_pagamento = tipo==='cliente' ? (document.getElementById('npCondPag').value.trim()||null) : null;
+  const observacoes = document.getElementById('npObs').value.trim()||null;
+  if(tipo==='cliente' && !cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(tipo==='interno' && !setor_destino){ toast('Informe o setor de destino.','erro'); return; }
+  if(!solicitante){ toast('Informe o solicitante.','erro'); return; }
+  if(!PED_ITENS.length){ toast('Adicione ao menos um item.','erro'); return; }
+  try{
+    const ano = Number(hojeISO().slice(0,4));
+    const numero = await apiPOST('rpc/proximo_numero_pedido', { p_ano: ano });
+    const ped = await apiPOST('pedidos', {
+      numero, data_emissao: hojeISO(), tipo, cliente_id, setor_destino,
+      solicitante, responsavel, local_origem, endereco_entrega, transportadora,
+      data_prevista, prioridade, status: statusInicial, condicao_pagamento,
+      observacoes, usuario_id: sessao.id
+    });
+    for(const it of PED_ITENS){
+      await apiPOST('pedidos_itens', {
+        pedido_id: ped.id, produto_id: it.produto_id, lote_id: it.lote_id,
+        quantidade: it.quantidade, valor_unitario: it.valor_unitario
+      });
+    }
+    toast(`Pedido ${numero} ${statusInicial==='solicitado'?'solicitado':'salvo como rascunho'}. ✓`,'ok');
+    PED_CACHE = null;
+    fecharFormPedido();
+    carregarPedidos();
+  }catch(e){ toast('Erro ao salvar pedido: '+e.message,'erro'); }
+}
+
+/* ---------- detalhe ---------- */
+async function verPedido(id){
+  try{
+    const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
+    if(!rows.length){ toast('Pedido não encontrado.','erro'); return; }
+    const p = rows[0];
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,linha),lotes(id,numero_lote,validade)&order=created_at.asc`);
+    PED_DETALHE_ATUAL = { pedido:p, itens };
+    const st = PED_STATUS[p.status]||PED_STATUS.rascunho;
+    const prox = PED_PROX[p.status]||[];
+    let tq=0, tv=0, temV=false;
+    const linhas = itens.map((it,i)=>{
+      const q = Number(it.quantidade)||0; tq+=q;
+      const vu = it.valor_unitario!==null&&it.valor_unitario!==undefined?Number(it.valor_unitario):null;
+      const sub = vu!==null ? q*vu : null;
+      if(sub!==null){ tv+=sub; temV=true; }
+      return `<tr class="rowline">
+        <td class="py-2 pr-2 text-gray-500">${i+1}</td>
+        <td class="py-2 pr-2 font-semibold">${esc(it.produtos?it.produtos.nome:'—')}<div class="text-xs text-gray-500 font-normal">${esc(it.produtos?it.produtos.linha||'':'')}</div></td>
+        <td class="py-2 pr-2">${it.lotes?esc(it.lotes.numero_lote)+' <span class="text-xs text-gray-500">(val. '+fmtData(it.lotes.validade)+')</span>':'<span class="text-gray-400">—</span>'}</td>
+        <td class="py-2 pr-2 text-right">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>
+        <td class="py-2 pr-2 text-right">${vu!==null?fmtReais(vu):'<span class="text-gray-400">—</span>'}</td>
+        <td class="py-2 pr-2 text-right font-bold">${sub!==null?fmtReais(sub):'<span class="text-gray-400">—</span>'}</td>
+      </tr>`;
+    }).join('');
+    const destino = p.tipo==='cliente'
+      ? `<div><label class="lbl">Cliente</label><div class="font-semibold">${esc(p.clientes?p.clientes.nome:'—')}</div></div>
+         <div><label class="lbl">Endereço de entrega</label><div>${esc(p.endereco_entrega||'—')}</div></div>
+         <div><label class="lbl">Condição de pagamento</label><div>${esc(p.condicao_pagamento||'—')}</div></div>`
+      : `<div class="col-span-2"><label class="lbl">Setor de destino</label><div class="font-semibold">${esc(p.setor_destino||'—')}</div></div>`;
+    const acoes = [
+      ...prox.map(([nv,rot])=>`<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="mudarStatusPedido('${p.id}','${nv}')">${rot}</button>`),
+      ...(PED_CANCELAVEL.includes(p.status)?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-red-700 !border-red-300" onclick="cancelarPedido('${p.id}')">❌ Cancelar pedido</button>`]:[]),
+      ...(p.status==='rascunho'?[`<button class="btn-ghost !py-2 !px-4 text-sm" onclick="excluirPedido('${p.id}')">🗑️ Excluir rascunho</button>`]:[]),
+    ].join('');
+    document.getElementById('pedDetalhe').innerHTML = `
+      <div class="flex items-start justify-between flex-wrap gap-2 mb-4">
+        <div>
+          <div class="text-2xl font-black">${esc(p.numero)}</div>
+          <div class="text-sm text-gray-500">${PED_TIPO[p.tipo]||p.tipo} • emitido em ${fmtData(p.data_emissao)}</div>
+        </div>
+        <div class="flex gap-2 items-center flex-wrap">${badgePedStatus(p.status)} ${badgePedPrior(p.prioridade)}</div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
+        <div><label class="lbl">Solicitante</label><div class="font-semibold">${esc(p.solicitante||'—')}</div></div>
+        <div><label class="lbl">Responsável</label><div>${esc(p.responsavel||'—')}</div></div>
+        <div><label class="lbl">Estoque de origem</label><div>📍 ${esc(p.local_origem||'—')}</div></div>
+        <div><label class="lbl">Previsão de entrega</label><div>${fmtData(p.data_prevista)}</div></div>
+        ${destino}
+        <div><label class="lbl">Transportadora</label><div>${esc(p.transportadora||'—')}</div></div>
+      </div>
+      ${p.observacoes?`<div class="text-sm mb-4"><label class="lbl">Observações</label><div class="bg-gray-50 border rounded-xl p-3">${esc(p.observacoes)}</div></div>`:''}
+      <div class="font-bold mb-2">🧾 Itens (${itens.length})</div>
+      <div class="overflow-x-auto -mx-4 px-4 mb-3">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-xs text-gray-500 uppercase">
+            <th class="py-2 pr-2">#</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Lote</th><th class="py-2 pr-2 text-right">Qtd</th><th class="py-2 pr-2 text-right">Valor unit.</th><th class="py-2 pr-2 text-right">Subtotal</th>
+          </tr></thead>
+          <tbody>${linhas||'<tr><td colspan="6" class="py-4 text-gray-400 text-center">Sem itens.</td></tr>'}</tbody>
+          <tfoot><tr class="font-bold border-t">
+            <td colspan="3" class="py-2 pr-2 text-right text-gray-500">TOTAL</td>
+            <td class="py-2 pr-2 text-right">${fmtQtd(tq)}</td><td></td>
+            <td class="py-2 pr-2 text-right brand">${temV?fmtReais(tv):'—'}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      ${acoes?`<div class="flex gap-2 flex-wrap mt-2">${acoes}</div>`:''}
+      <div class="text-xs text-gray-400 mt-4">💡 A baixa no estoque é feita em <b>Lançar</b> após a saída física da mercadoria.</div>`;
+    document.getElementById('pedListaWrap').classList.add('hidden');
+    document.getElementById('pedFormWrap').classList.add('hidden');
+    document.getElementById('pedDetalheWrap').classList.remove('hidden');
+    window.scrollTo({top:0});
+  }catch(e){ toast('Erro ao abrir pedido: '+e.message,'erro'); }
+}
+
+async function mudarStatusPedido(id, novo){
+  const permitidos = [...(PED_PROX[(PED_DETALHE_ATUAL&&PED_DETALHE_ATUAL.pedido.status)]||[]).map(x=>x[0])];
+  if(!permitidos.includes(novo)){ toast('Transição de status inválida.','erro'); return; }
+  try{
+    await apiPATCH('pedidos', `id=eq.${id}`, { status:novo, updated_at:new Date().toISOString() });
+    toast(`Pedido ${PED_STATUS[novo].t}. ✓`,'ok');
+    PED_CACHE = null;
+    await verPedido(id);
+    PED_CACHE = null;
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+function cancelarPedido(id){
+  if(!confirm('Cancelar este pedido?')) return;
+  mudarStatusPedidoDireto(id, 'cancelado');
+}
+async function mudarStatusPedidoDireto(id, novo){
+  try{
+    await apiPATCH('pedidos', `id=eq.${id}`, { status:novo, updated_at:new Date().toISOString() });
+    toast('Pedido cancelado.','ok');
+    PED_CACHE = null;
+    voltarListaPedidos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function excluirPedido(id){
+  if(!confirm('Excluir este rascunho e todos os seus itens?')) return;
+  try{
+    await apiDELETE('pedidos_itens', `pedido_id=eq.${id}`);
+    await apiDELETE('pedidos', `id=eq.${id}`);
+    toast('Rascunho excluído.','ok');
+    PED_CACHE = null;
+    voltarListaPedidos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- impressão ---------- */
+function imprimirPedido(){
+  const d = PED_DETALHE_ATUAL;
+  if(!d){ toast('Abra um pedido para imprimir.','erro'); return; }
+  const p = d.pedido, itens = d.itens;
+  const st = PED_STATUS[p.status]||PED_STATUS.rascunho;
+  let tq=0, tv=0, temV=false;
+  const linhas = itens.map((it,i)=>{
+    const q = Number(it.quantidade)||0; tq+=q;
+    const vu = it.valor_unitario!==null&&it.valor_unitario!==undefined?Number(it.valor_unitario):null;
+    const sub = vu!==null?q*vu:null;
+    if(sub!==null){ tv+=sub; temV=true; }
+    return `<tr><td>${i+1}</td><td>${esc(it.produtos?it.produtos.nome:'—')}</td>`+
+      `<td>${it.lotes?esc(it.lotes.numero_lote):'—'}${it.lotes&&it.lotes.validade?' ('+fmtData(it.lotes.validade)+')':''}</td>`+
+      `<td style="text-align:right">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>`+
+      `<td style="text-align:right">${vu!==null?fmtReais(vu):'—'}</td>`+
+      `<td style="text-align:right"><b>${sub!==null?fmtReais(sub):'—'}</b></td></tr>`;
+  }).join('');
+  const destinoHtml = p.tipo==='cliente'
+    ? `<div><span class="rl">Cliente:</span> <b>${esc(p.clientes?p.clientes.nome:'—')}</b></div>
+       <div><span class="rl">Endereço de entrega:</span> ${esc(p.endereco_entrega||'—')}</div>
+       <div><span class="rl">Condição de pagamento:</span> ${esc(p.condicao_pagamento||'—')}</div>`
+    : `<div><span class="rl">Setor de destino:</span> <b>${esc(p.setor_destino||'—')}</b></div>`;
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido ${esc(p.numero)}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:13px;margin:0;padding:24px;}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C1272D;padding-bottom:12px;margin-bottom:16px;}
+    .marca{font-size:22px;font-weight:900;} .marca span{color:#C1272D;}
+    .num{font-size:18px;font-weight:800;text-align:right;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:14px;}
+    .rl{color:#666;font-size:11px;text-transform:uppercase;font-weight:700;}
+    table{width:100%;border-collapse:collapse;margin:10px 0 16px;}
+    th{background:#f3f4f6;text-align:left;font-size:11px;text-transform:uppercase;padding:8px;border:1px solid #ddd;}
+    td{padding:8px;border:1px solid #ddd;vertical-align:top;}
+    tfoot td{font-weight:800;background:#fafafa;}
+    .obs{background:#fafafa;border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:16px;}
+    .ass{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:48px;}
+    .ass div{border-top:1px solid #111;padding-top:6px;text-align:center;font-size:12px;color:#555;}
+    .foot{margin-top:24px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:8px;}
+    @media print{ body{padding:0;} }
+  </style></head><body>
+  <div class="top">
+    <div><div class="marca">NEW LIFE <span>•</span> Estoque</div><div style="font-size:12px;color:#666">Pedido ao estoque — requisição interna (antes da nota fiscal)</div></div>
+    <div class="num">${esc(p.numero)}<div style="font-size:12px;font-weight:400;color:#666">${st.t} • ${esc((PED_PRIOR[p.prioridade]||{}).t||'')}</div></div>
+  </div>
+  <div class="grid">
+    <div><span class="rl">Tipo:</span> ${PED_TIPO[p.tipo]||p.tipo}</div>
+    <div><span class="rl">Emissão:</span> ${fmtData(p.data_emissao)}</div>
+    <div><span class="rl">Solicitante:</span> ${esc(p.solicitante||'—')}</div>
+    <div><span class="rl">Responsável:</span> ${esc(p.responsavel||'—')}</div>
+    ${destinoHtml}
+    <div><span class="rl">Estoque de origem:</span> ${esc(p.local_origem||'—')}</div>
+    <div><span class="rl">Previsão de entrega:</span> ${fmtData(p.data_prevista)}</div>
+    <div><span class="rl">Transportadora:</span> ${esc(p.transportadora||'—')}</div>
+  </div>
+  <table><thead><tr><th>#</th><th>Produto</th><th>Lote</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+  <tbody>${linhas}</tbody>
+  <tfoot><tr><td colspan="3" style="text-align:right">TOTAL</td><td style="text-align:right">${fmtQtd(tq)}</td><td></td><td style="text-align:right">${temV?fmtReais(tv):'—'}</td></tr></tfoot></table>
+  ${p.observacoes?`<div class="obs"><span class="rl">Observações:</span><br>${esc(p.observacoes)}</div>`:''}
+  <div class="ass"><div>Solicitante<br><br></div><div>Responsável<br><br></div><div>Recebido por / data<br><br></div></div>
+  <div class="foot">Documento de requisição interna — a baixa no estoque é registrada em Lançar após a saída física da mercadoria.</div>
+  </body></html>`;
+  let f = document.getElementById('printFramePed');
+  if(!f){ f = document.createElement('iframe'); f.id='printFramePed'; f.style.display='none'; document.body.appendChild(f); }
+  const doc = f.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  f.contentWindow.focus();
+  setTimeout(()=>f.contentWindow.print(), 400);
 }
 
 /* ================= INIT ================= */
