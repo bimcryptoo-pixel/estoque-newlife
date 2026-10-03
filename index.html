@@ -1162,9 +1162,47 @@ function parseNFeXML(text){
 function normNFe(s){
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 }
+function nfeTokens(s){
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(t => t.length > 2);
+}
 function sugerirProdutoNFe(xProd){
   const n = normNFe(xProd);
   return cacheProdutos.find(p => normNFe(p.nome) === n) || null;
+}
+// candidatos "parecidos" quando não há match exato (03/10/2026): por sobreposição
+// de palavras significativas — ajuda o usuário a achar o cadastro certo
+function sugerirCandidatosNFe(xProd, max){
+  const toks = nfeTokens(xProd);
+  if(!toks.length) return [];
+  const setT = new Set(toks);
+  const scored = [];
+  for(const p of cacheProdutos){
+    const pt = nfeTokens(p.nome);
+    if(!pt.length) continue;
+    let inter = 0;
+    const setP = new Set(pt);
+    setT.forEach(t => { if(setP.has(t)) inter++; });
+    if(inter > 0) scored.push({ p, inter });
+  }
+  scored.sort((a, b) => b.inter - a.inter);
+  return scored.slice(0, max || 2).map(s => s.p);
+}
+// selo "já cadastrado" x "produto novo" por linha (03/10/2026)
+function nfeBadgeHtml(i){
+  const sel = document.querySelector(`.nfe-prod[data-i="${i}"]`);
+  if(!sel) return '';
+  if(sel.value === '__novo')
+    return '<span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">🆕 Produto novo — será criado no cadastro</span>';
+  const p = (typeof cacheProdutos !== 'undefined' ? cacheProdutos : []).find(x => String(x.id) === String(sel.value));
+  return '<span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">✅ Já cadastrado' + (p ? ': ' + esc(p.nome) : '') + '</span>';
+}
+function nfeAtualizarBadge(i){
+  const el = document.querySelector(`.nfe-badge[data-i="${i}"]`);
+  if(el) el.innerHTML = nfeBadgeHtml(i);
+}
+function nfeEscolherCand(i, id){
+  const sel = document.querySelector(`.nfe-prod[data-i="${i}"]`);
+  if(sel){ sel.value = id; nfeTrocarProduto(i); }
 }
 
 async function analisarNFe(){
@@ -1206,6 +1244,7 @@ function nfeTrocarProduto(i){
   const sel = document.querySelector(`.nfe-prod[data-i="${i}"]`);
   const lin = document.querySelector(`.nfe-linha[data-i="${i}"]`);
   if(lin) lin.classList.toggle('hidden', sel.value !== '__novo');
+  nfeAtualizarBadge(i);
 }
 
 function renderConfNFe(){
@@ -1216,9 +1255,15 @@ function renderConfNFe(){
   const linhas = ['Coagulação', 'Gasometria', 'Beckman', 'Vyttra'];
   const rows = nfe.itens.map((it, i) => {
     const sug = sugerirProdutoNFe(it.xProd);
+    const cands = sug ? [] : sugerirCandidatosNFe(it.xProd);
+    const semRastro = !it.nLote && !it.dVal;
     const opts = cacheProdutos.map(p => `<option value="${p.id}"${sug && sug.id === p.id ? ' selected' : ''}>${esc(p.nome)}</option>`).join('');
     return `<tr class="rowline" data-nfe-item="${i}">
-      <td class="py-2 pr-2 text-xs align-top"><b>${esc(it.xProd)}</b><div class="text-gray-500">NCM ${esc(it.NCM || '—')} · CFOP ${esc(it.CFOP || '—')}</div></td>
+      <td class="py-2 pr-2 text-xs align-top"><b>${esc(it.xProd)}</b><div class="text-gray-500">NCM ${esc(it.NCM || '—')} · CFOP ${esc(it.CFOP || '—')}</div>
+        <div class="nfe-badge" data-i="${i}"></div>
+        ${cands.length ? `<div class="text-xs text-amber-600 mt-0.5">Parecidos no cadastro: ${cands.map(c => `<button type="button" class="underline font-semibold" onclick="nfeEscolherCand(${i},'${c.id}')">${esc(c.nome)}</button>`).join(' · ')}</div>` : ''}
+        ${semRastro ? `<div class="text-xs text-amber-600 mt-0.5 font-semibold">⚠️ NF sem lote/validade — preencha o lote</div>` : ''}
+      </td>
       <td class="py-2 pr-2 align-top">
         <select class="inp nfe-prod" data-i="${i}" onchange="nfeTrocarProduto(${i})">
           <option value="__novo"${sug ? '' : ' selected'}>＋ Criar novo produto</option>${opts}
@@ -1242,6 +1287,8 @@ function renderConfNFe(){
       <div><b>Local:</b> 📍 ${esc(local)}${nfe.vNF ? ` · <b>Valor da NF:</b> R$ ${Number(nfe.vNF).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}</div>
     </div>
     <div class="text-xs text-gray-500 mb-1">Confira cada item antes de confirmar. O produto pode ser ligado a um cadastro existente ou criado novo.</div>
+    ${(() => { const nJa = nfe.itens.filter(it => sugerirProdutoNFe(it.xProd)).length;
+      return `<div class="text-xs mb-2">📦 <b>${nfe.itens.length}</b> ${nfe.itens.length === 1 ? 'item' : 'itens'}: <b class="text-emerald-600">${nJa} já cadastrado${nJa === 1 ? '' : 's'}</b> · <b class="text-amber-600">${nfe.itens.length - nJa} novo${nfe.itens.length - nJa === 1 ? '' : 's'}</b></div>`; })()}
     <div class="overflow-x-auto"><table class="w-full">
       <thead><tr class="text-left text-xs text-gray-500">
         <th class="py-1 pr-2">Produto na NF</th><th class="py-1 pr-2">Produto no sistema</th>
@@ -1255,6 +1302,7 @@ function renderConfNFe(){
       <button class="px-4 py-2 rounded-lg border font-semibold text-gray-600" onclick="document.getElementById('nfeConf').classList.add('hidden'); nfeAtual = null;">Cancelar</button>
     </div>`;
   box.classList.remove('hidden');
+  nfe.itens.forEach((_, i) => nfeAtualizarBadge(i));
 }
 
 async function nfeResolverFornecedor(nome, cnpj){
