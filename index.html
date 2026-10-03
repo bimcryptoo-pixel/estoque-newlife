@@ -283,6 +283,10 @@
           <div id="nfeConf" class="hidden mt-4"></div>
           <div class="mt-6">
             <div class="font-bold mb-2">🧾 NFs importadas <span class="text-xs font-normal text-gray-500">(com opção de estorno)</span></div>
+            <div class="flex gap-2 mb-2 flex-wrap">
+              <input id="filtroNfeNum" class="inp flex-1 min-w-[140px]" placeholder="🔎 nº da NF..." oninput="filtrarNfeImportadas()">
+              <select id="filtroNfeForn" class="inp" onchange="filtrarNfeImportadas()"><option value="">Todos os fornecedores</option></select>
+            </div>
             <div id="listaNfe" class="text-sm"><span class="text-gray-400 text-xs">Nenhuma NF importada ainda.</span></div>
           </div>
         </div>
@@ -1461,13 +1465,9 @@ async function confirmarImportacaoNFe(){
   }
 }
 
-async function carregarNfeImportadas(){
-  const box = document.getElementById('listaNfe');
-  if(!box) return;
-  try{
-    const rows = await apiGET('nfe_importacoes?select=*,fornecedores(nome)&order=data_importacao.desc&limit=50');
-    if(!rows.length){ box.innerHTML = '<span class="text-gray-400 text-xs">Nenhuma NF importada ainda.</span>'; return; }
-    box.innerHTML = rows.map(r => `
+let nfeCache = [];
+function nfeLinhaHtml(r){
+  return `
       <div class="rowline px-3 py-2.5 flex items-center justify-between gap-2 flex-wrap">
         <div class="min-w-0">
           <div class="font-bold">NF-e ${esc(r.numero || '?')} <span class="text-xs font-normal text-gray-500">série ${esc(r.serie || '—')}</span></div>
@@ -1475,10 +1475,40 @@ async function carregarNfeImportadas(){
           <div class="text-[11px] text-gray-400 font-mono truncate">chave ${esc(r.chave)}</div>
         </div>
         <button class="text-xs font-bold text-red-600 underline shrink-0" onclick="estornarNFe('${esc(r.chave)}')">↩ Estornar</button>
-      </div>`).join('');
+      </div>`;
+}
+async function carregarNfeImportadas(){
+  const box = document.getElementById('listaNfe');
+  if(!box) return;
+  try{
+    nfeCache = await apiGET('nfe_importacoes?select=*,fornecedores(nome)&order=data_importacao.desc&limit=200');
+    const sel = document.getElementById('filtroNfeForn');
+    if(sel){
+      const nomes = [...new Set(nfeCache.map(r => r.fornecedores?.nome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const atual = sel.value;
+      sel.innerHTML = '<option value="">Todos os fornecedores</option>' + nomes.map(n => `<option${n === atual ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    }
+    filtrarNfeImportadas();
   }catch(e){
     box.innerHTML = '<span class="text-gray-400 text-xs">Aplique a migração 06 no banco para ver as NFs importadas.</span>';
   }
+}
+function filtrarNfeImportadas(){
+  const box = document.getElementById('listaNfe');
+  if(!box) return;
+  const num = (document.getElementById('filtroNfeNum')?.value || '').trim().toLowerCase();
+  const forn = document.getElementById('filtroNfeForn')?.value || '';
+  const rows = nfeCache.filter(r =>
+    (!num || String(r.numero || '').toLowerCase().includes(num)) &&
+    (!forn || (r.fornecedores?.nome || '') === forn)
+  );
+  if(!rows.length){
+    box.innerHTML = nfeCache.length
+      ? '<span class="text-gray-400 text-xs">Nenhuma NF encontrada com esses filtros.</span>'
+      : '<span class="text-gray-400 text-xs">Nenhuma NF importada ainda.</span>';
+    return;
+  }
+  box.innerHTML = rows.map(nfeLinhaHtml).join('');
 }
 
 async function estornarNFe(chave){
