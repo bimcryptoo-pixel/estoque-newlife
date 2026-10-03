@@ -1529,19 +1529,18 @@ async function estornarNFe(chave){
       if(!lrs.length){ problemas.push(`Lote ${lid}: não encontrado.`); continue; }
       const lote = lrs[0];
       const todas = await apiGET(`movimentacoes?lote_id=eq.${lid}&select=id,nfe_chave,quantidade,tipo`);
-      const manuais = todas.filter(m => !m.nfe_chave);
-      if(manuais.length){
-        problemas.push(`Lote ${lote.numero_lote}: tem ${manuais.length} movimentação(ões) fora da importação (ex.: saída).`);
-        continue;
-      }
+      // (03/10/2026) não bloqueia mais por "movimentação fora da importação": lotes que já
+      // existiam (ex.: saldo inicial da migração) apenas têm o saldo reduzido. O bloqueio real
+      // é quando o saldo atual não cobre o que a NF importou (parte já consumida).
       const qtdImp = todas.filter(m => m.nfe_chave === chave).reduce((s, m) => s + Number(m.quantidade || 0), 0);
       const saldo = Number(lote.quantidade_atual || 0);
       if(saldo + 1e-9 < qtdImp){
-        problemas.push(`Lote ${lote.numero_lote}: saldo atual (${fmtQtd(saldo)}) menor que o importado (${fmtQtd(qtdImp)}).`);
+        problemas.push(`Lote ${lote.numero_lote}: saldo atual (${fmtQtd(saldo)}) menor que o importado (${fmtQtd(qtdImp)}) — parte já foi consumida.`);
         continue;
       }
-      const outrasNfe = todas.filter(m => m.nfe_chave && m.nfe_chave !== chave);
-      plano.push({ lote, qtdImp, saldo, apagarLote: Math.abs(saldo - qtdImp) < 1e-9 && outrasNfe.length === 0 });
+      const outrasNfe = [...new Set(todas.filter(m => m.nfe_chave && m.nfe_chave !== chave).map(m => m.nfe_chave))];
+      const soDestaNfe = todas.length > 0 && todas.every(m => m.nfe_chave === chave);
+      plano.push({ lote, qtdImp, saldo, outrasNfe, apagarLote: soDestaNfe });
     }
     if(problemas.length){
       alert('⛔ Estorno BLOQUEADO — nada foi apagado:\n\n' + problemas.join('\n'));
@@ -1553,7 +1552,7 @@ async function estornarNFe(chave){
     for(const m of movs) await apiDELETE('movimentacoes', `id=eq.${m.id}`);
     for(const p of plano){
       if(p.apagarLote) await apiDELETE('lotes', `id=eq.${p.lote.id}`);
-      else await apiPATCH('lotes', `id=eq.${p.lote.id}`, { quantidade_atual: p.saldo - p.qtdImp, nfe_chave: null });
+      else await apiPATCH('lotes', `id=eq.${p.lote.id}`, { quantidade_atual: p.saldo - p.qtdImp, nfe_chave: p.outrasNfe.length ? p.outrasNfe[0] : null });
     }
     await apiDELETE('nfe_importacoes', `chave=eq.${chave}`);
     toast(`NF-e ${imp.numero || ''} estornada. ✓`, 'ok');
