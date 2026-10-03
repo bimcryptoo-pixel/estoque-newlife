@@ -238,6 +238,33 @@
             <button class="btn-brand mt-1" id="btnSalvar" onclick="salvarMovimentacao()">Salvar movimentação</button>
           </div>
         </div>
+
+        <div class="card p-4 md:p-6 max-w-6xl mt-4">
+          <div class="font-bold text-lg mb-1">📄 Importar NF-e (XML)</div>
+          <p class="text-xs text-gray-500 mb-4">Anexe o XML da nota fiscal: o sistema lê fornecedor, produtos, lotes e validades e lança a entrada no estoque. Dá para <b>estornar</b> depois, se precisar.</p>
+          <div class="grid gap-3 md:grid-cols-3">
+            <div>
+              <label class="lbl">Arquivo XML da NF-e</label>
+              <input id="nfeFile" type="file" accept=".xml,text/xml,application/xml" class="inp">
+            </div>
+            <div>
+              <label class="lbl">Local do estoque</label>
+              <select id="nfeLocal" class="inp">
+                <option value="Fortaleza">📍 Fortaleza (matriz)</option>
+                <option value="Piauí">📍 Piauí (filial)</option>
+              </select>
+            </div>
+            <div class="flex items-end">
+              <button class="btn-brand w-full" id="btnNfeAnalisar" onclick="analisarNFe()">🔍 Analisar XML</button>
+            </div>
+          </div>
+          <div id="nfeAvisoMigracao" class="hidden mt-3 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-xs text-yellow-800"></div>
+          <div id="nfeConf" class="hidden mt-4"></div>
+          <div class="mt-6">
+            <div class="font-bold mb-2">🧾 NFs importadas <span class="text-xs font-normal text-gray-500">(com opção de estorno)</span></div>
+            <div id="listaNfe" class="text-sm"><span class="text-gray-400 text-xs">Nenhuma NF importada ainda.</span></div>
+          </div>
+        </div>
       </section>
 
       <!-- ===== MOVIMENTOS ===== -->
@@ -775,6 +802,7 @@ function mostrarAba(aba){
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
+  if(aba==='lancar') carregarNfeImportadas();
 }
 
 /* ================= DASHBOARD ================= */
@@ -1040,6 +1068,350 @@ async function salvarMovimentacao(){
     if(e.message!=='Descarte cancelado pelo usuário.') toast(e.message,'erro');
   }finally{
     btn.disabled=false; btn.textContent='Salvar movimentação';
+  }
+}
+
+/* ================= IMPORTAÇÃO DE NF-e (XML) — 03/10/2026 =================
+   Fluxo: anexa XML → parse (DOMParser) → conferência → confirma (grava
+   fornecedor/produtos/lotes/movimentações de entrada) → lista "NFs importadas"
+   com ESTORNO (reversível). Exige a migração 06 no banco.
+   ============================================================================ */
+const NFE_NS = 'http://www.portalfiscal.inf.br/nfe';
+let nfeAtual = null;
+let nfeMigracaoOk = true;
+
+function nfeTag(el, tag){
+  const n = el.getElementsByTagNameNS(NFE_NS, tag)[0];
+  return n ? n.textContent.trim() : '';
+}
+function nfeNum(s){ const v = parseFloat(String(s || '0').replace(',', '.')); return isNaN(v) ? 0 : v; }
+
+function parseNFeXML(text){
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('Arquivo XML inválido.');
+  const inf = doc.getElementsByTagNameNS(NFE_NS, 'infNFe')[0];
+  if(!inf) throw new Error('Não é um XML de NF-e (infNFe não encontrado).');
+  const chave = (inf.getAttribute('Id') || '').replace(/^NFe/, '');
+  if(chave.length !== 44 || !/^\d+$/.test(chave)) throw new Error('Chave de acesso da NF-e não encontrada ou inválida.');
+  const ide = inf.getElementsByTagNameNS(NFE_NS, 'ide')[0];
+  const emit = inf.getElementsByTagNameNS(NFE_NS, 'emit')[0];
+  if(!ide || !emit) throw new Error('XML de NF-e incompleto (ide/emit).');
+  const itens = [];
+  const dets = inf.getElementsByTagNameNS(NFE_NS, 'det');
+  for(const det of dets){
+    const prod = det.getElementsByTagNameNS(NFE_NS, 'prod')[0];
+    if(!prod) continue;
+    const base = {
+      nItem: det.getAttribute('nItem') || '',
+      xProd: nfeTag(prod, 'xProd'),
+      NCM: nfeTag(prod, 'NCM'),
+      CFOP: nfeTag(prod, 'CFOP'),
+      qCom: nfeNum(nfeTag(prod, 'qCom')),
+      uCom: nfeTag(prod, 'uCom') || 'un',
+      vUnCom: nfeTag(prod, 'vUnCom'),
+      vProd: nfeTag(prod, 'vProd'),
+    };
+    if(!base.xProd) continue;
+    const rastros = prod.getElementsByTagNameNS(NFE_NS, 'rastro');
+    if(rastros.length){
+      for(const r of rastros) itens.push(Object.assign({}, base, {
+        nLote: nfeTag(r, 'nLote'),
+        qLote: nfeNum(nfeTag(r, 'qLote')) || base.qCom,
+        dFab: nfeTag(r, 'dFab') || null,
+        dVal: nfeTag(r, 'dVal') || null,
+      }));
+    } else {
+      itens.push(Object.assign({}, base, { nLote: '', qLote: base.qCom, dFab: null, dVal: null }));
+    }
+  }
+  if(!itens.length) throw new Error('Nenhum item encontrado na NF-e.');
+  const tot = inf.getElementsByTagNameNS(NFE_NS, 'ICMSTot')[0];
+  return {
+    chave,
+    numero: nfeTag(ide, 'nNF'),
+    serie: nfeTag(ide, 'serie'),
+    dhEmi: nfeTag(ide, 'dhEmi').slice(0, 10) || null,
+    natOp: nfeTag(ide, 'natOp'),
+    emitente: { nome: nfeTag(emit, 'xNome'), cnpj: nfeTag(emit, 'CNPJ').replace(/\D/g, '') },
+    itens,
+    vNF: tot ? nfeTag(tot, 'vNF') : null,
+  };
+}
+
+function normNFe(s){
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+function sugerirProdutoNFe(xProd){
+  const n = normNFe(xProd);
+  return cacheProdutos.find(p => normNFe(p.nome) === n) || null;
+}
+
+async function analisarNFe(){
+  const fi = document.getElementById('nfeFile');
+  const box = document.getElementById('nfeConf');
+  const aviso = document.getElementById('nfeAvisoMigracao');
+  aviso.classList.add('hidden'); box.classList.add('hidden'); box.innerHTML = '';
+  nfeAtual = null;
+  if(!fi.files.length){ toast('Escolha o arquivo XML da NF-e.', 'erro'); return; }
+  const btn = document.getElementById('btnNfeAnalisar');
+  btn.disabled = true; btn.textContent = 'Analisando…';
+  try{
+    const text = await fi.files[0].text();
+    const nfe = parseNFeXML(text);
+    // trava anti-duplicidade (exige a migração 06)
+    nfeMigracaoOk = true;
+    try{
+      const dup = await apiGET(`nfe_importacoes?chave=eq.${nfe.chave}&select=id,numero,data_emissao,fornecedores(nome)`);
+      if(dup.length){
+        const d = dup[0];
+        toast(`⚠️ Esta NF-e já foi importada (NF ${d.numero || '?'} · ${d.fornecedores?.nome || '?'} · ${fmtData(d.data_emissao)}).`, 'alerta');
+        return;
+      }
+    }catch(e){
+      nfeMigracaoOk = false;
+      aviso.innerHTML = '⚠️ <b>Atenção:</b> controle de NF-e não encontrado no banco. Aplique a <b>migração 06</b> (sql/migracao-06-nfe-importacao.sql) antes de confirmar — a conferência abaixo funciona, mas a gravação e o estorno exigem a migração.';
+      aviso.classList.remove('hidden');
+    }
+    nfeAtual = nfe;
+    renderConfNFe();
+  }catch(e){
+    toast('Erro ao ler o XML: ' + e.message, 'erro');
+  }finally{
+    btn.disabled = false; btn.textContent = '🔍 Analisar XML';
+  }
+}
+
+function nfeTrocarProduto(i){
+  const sel = document.querySelector(`.nfe-prod[data-i="${i}"]`);
+  const lin = document.querySelector(`.nfe-linha[data-i="${i}"]`);
+  if(lin) lin.classList.toggle('hidden', sel.value !== '__novo');
+}
+
+function renderConfNFe(){
+  const nfe = nfeAtual;
+  if(!nfe) return;
+  const box = document.getElementById('nfeConf');
+  const local = document.getElementById('nfeLocal').value;
+  const linhas = ['Coagulação', 'Gasometria', 'Beckman', 'Vyttra'];
+  const rows = nfe.itens.map((it, i) => {
+    const sug = sugerirProdutoNFe(it.xProd);
+    const opts = cacheProdutos.map(p => `<option value="${p.id}"${sug && sug.id === p.id ? ' selected' : ''}>${esc(p.nome)}</option>`).join('');
+    return `<tr class="rowline" data-nfe-item="${i}">
+      <td class="py-2 pr-2 text-xs align-top"><b>${esc(it.xProd)}</b><div class="text-gray-500">NCM ${esc(it.NCM || '—')} · CFOP ${esc(it.CFOP || '—')}</div></td>
+      <td class="py-2 pr-2 align-top">
+        <select class="inp nfe-prod" data-i="${i}" onchange="nfeTrocarProduto(${i})">
+          <option value="__novo"${sug ? '' : ' selected'}>＋ Criar novo produto</option>${opts}
+        </select>
+        <select class="inp nfe-linha mt-1${sug ? ' hidden' : ''}" data-i="${i}">
+          <option value="">— linha do novo produto —</option>${linhas.map(l => `<option>${l}</option>`).join('')}
+        </select>
+      </td>
+      <td class="py-2 pr-2 align-top"><input type="number" min="0" step="any" class="inp nfe-qtd" data-i="${i}" value="${it.qLote}"></td>
+      <td class="py-2 pr-2 text-xs align-top">${esc(it.uCom)}</td>
+      <td class="py-2 pr-2 align-top"><input class="inp nfe-lote" data-i="${i}" value="${esc(it.nLote)}" placeholder="nº do lote"></td>
+      <td class="py-2 pr-2 text-xs align-top">${it.dFab ? fmtData(it.dFab) : '—'}</td>
+      <td class="py-2 pr-2 align-top"><input type="date" class="inp nfe-val" data-i="${i}" value="${esc(it.dVal || '')}"></td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="p-3 bg-gray-50 border rounded-lg mb-3 text-xs grid gap-1">
+      <div><b>NF-e ${esc(nfe.numero || '?')}</b> <span class="text-gray-500">série ${esc(nfe.serie || '—')} · emissão ${fmtData(nfe.dhEmi)}${nfe.natOp ? ' · ' + esc(nfe.natOp) : ''}</span></div>
+      <div><b>Fornecedor:</b> ${esc(nfe.emitente.nome || '?')} <span class="text-gray-500">· CNPJ ${esc(nfe.emitente.cnpj || '—')}</span> <span class="text-gray-400">(será cadastrado se não existir)</span></div>
+      <div class="text-gray-500">Chave: <span class="font-mono break-all">${esc(nfe.chave)}</span></div>
+      <div><b>Local:</b> 📍 ${esc(local)}${nfe.vNF ? ` · <b>Valor da NF:</b> R$ ${Number(nfe.vNF).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}</div>
+    </div>
+    <div class="text-xs text-gray-500 mb-1">Confira cada item antes de confirmar. O produto pode ser ligado a um cadastro existente ou criado novo.</div>
+    <div class="overflow-x-auto"><table class="w-full">
+      <thead><tr class="text-left text-xs text-gray-500">
+        <th class="py-1 pr-2">Produto na NF</th><th class="py-1 pr-2">Produto no sistema</th>
+        <th class="py-1 pr-2">Qtd</th><th class="py-1 pr-2">Un</th><th class="py-1 pr-2">Lote</th>
+        <th class="py-1 pr-2">Fab</th><th class="py-1 pr-2">Validade</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="flex gap-2 mt-3">
+      <button class="btn-brand flex-1" id="btnNfeConfirmar" onclick="confirmarImportacaoNFe()">✅ Confirmar importação (${nfe.itens.length} ${nfe.itens.length === 1 ? 'item' : 'itens'})</button>
+      <button class="px-4 py-2 rounded-lg border font-semibold text-gray-600" onclick="document.getElementById('nfeConf').classList.add('hidden'); nfeAtual = null;">Cancelar</button>
+    </div>`;
+  box.classList.remove('hidden');
+}
+
+async function nfeResolverFornecedor(nome, cnpj){
+  // 1) por CNPJ
+  if(cnpj){
+    const f = await apiGET(`fornecedores?cnpj=eq.${cnpj}&select=id&limit=1`);
+    if(f.length) return f[0].id;
+  }
+  // 2) por nome (normalizado em JS)
+  const todos = await apiGET('fornecedores?select=id,nome,cnpj');
+  const achou = todos.find(x => normNFe(x.nome) === normNFe(nome));
+  if(achou){
+    if(cnpj && !achou.cnpj) await apiPATCH('fornecedores', `id=eq.${achou.id}`, { cnpj });
+    return achou.id;
+  }
+  // 3) cria
+  const novo = await apiPOST('fornecedores', { nome: (nome || 'FORNECEDOR NF-e').trim(), cnpj: cnpj || null, contato: null, ativo: true });
+  return novo.id;
+}
+
+async function confirmarImportacaoNFe(){
+  if(!nfeAtual) return;
+  if(!nfeMigracaoOk){ toast('Aplique a migração 06 no banco antes de confirmar.', 'erro'); return; }
+  const btn = document.getElementById('btnNfeConfirmar');
+  btn.disabled = true; btn.textContent = 'Importando…';
+  const nfe = nfeAtual;
+  const local = document.getElementById('nfeLocal').value;
+  try{
+    // pré-validação de TODOS os itens antes de gravar qualquer coisa
+    // (evita importação parcial por erro de preenchimento)
+    const plano = nfe.itens.map((it, i) => {
+      const prodSel = document.querySelector(`.nfe-prod[data-i="${i}"]`).value;
+      let linha = null;
+      if(prodSel === '__novo'){
+        linha = document.querySelector(`.nfe-linha[data-i="${i}"]`).value;
+        if(!linha) throw new Error(`Escolha a linha do novo produto "${it.xProd}".`);
+      }
+      const qtd = Number(document.querySelector(`.nfe-qtd[data-i="${i}"]`).value);
+      if(!(qtd > 0)) throw new Error(`Quantidade inválida no item ${i + 1} (${it.xProd}).`);
+      const numLote = document.querySelector(`.nfe-lote[data-i="${i}"]`).value.trim();
+      if(!numLote) throw new Error(`Informe o número do lote no item ${i + 1} (${it.xProd}).`);
+      return { it, prodSel, linha, qtd, numLote, val: document.querySelector(`.nfe-val[data-i="${i}"]`).value || null };
+    });
+
+    // re-checa duplicidade
+    const dup = await apiGET(`nfe_importacoes?chave=eq.${nfe.chave}&select=id`);
+    if(dup.length) throw new Error('Esta NF-e já foi importada.');
+    if(!nfe.emitente.nome) throw new Error('XML sem nome do emitente.');
+
+    const fornecedorId = await nfeResolverFornecedor(nfe.emitente.nome, nfe.emitente.cnpj);
+
+    // cabeçalho primeiro: se falhar no meio (rede etc.), o estorno limpa o parcial
+    await apiPOST('nfe_importacoes', {
+      chave: nfe.chave, numero: nfe.numero || null, serie: nfe.serie || null,
+      fornecedor_id: fornecedorId, data_emissao: nfe.dhEmi,
+      usuario_id: sessao.id, valor_total: nfe.vNF ? Number(nfe.vNF) : null,
+      qtd_itens: nfe.itens.length,
+    });
+
+    const loteCache = {};
+    for(const p of plano){
+      const { it, qtd, numLote, val } = p;
+      let produtoId;
+      if(p.prodSel === '__novo'){
+        const ex = cacheProdutos.find(x => normNFe(x.nome) === normNFe(it.xProd));
+        if(ex){ produtoId = ex.id; }
+        else{
+          const novo = await apiPOST('produtos', { nome: it.xProd.trim(), linha: p.linha, unidade: (it.uCom || 'un').slice(0, 20), ativo: true });
+          produtoId = novo.id;
+          cacheProdutos.push({ id: novo.id, nome: novo.nome, linha: novo.linha, unidade: novo.unidade });
+        }
+      } else produtoId = p.prodSel;
+
+      const ck = `${produtoId}|${numLote}|${local}`;
+      let loteId = loteCache[ck];
+      if(!loteId){
+        const exL = await apiGET(`lotes?produto_id=eq.${produtoId}&numero_lote=eq.${encodeURIComponent(numLote)}&local=eq.${encodeURIComponent(local)}&select=id&limit=1`);
+        if(exL.length) loteId = exL[0].id;
+        else{
+          const novo = await apiPOST('lotes', { produto_id: produtoId, numero_lote: numLote, validade: val, quantidade_atual: 0, local, nfe_chave: nfe.chave });
+          loteId = novo.id;
+        }
+        loteCache[ck] = loteId;
+      }
+      await apiPOST('movimentacoes', {
+        tipo: 'entrada_compra', produto_id: produtoId, lote_id: loteId,
+        quantidade: qtd, data: nfe.dhEmi || hojeISO(),
+        observacao: `NF-e ${nfe.numero || '?'} (chave ${nfe.chave})`,
+        usuario_id: sessao.id, fornecedor_id: fornecedorId, transportadora_id: null,
+        nfe_chave: nfe.chave,
+      });
+      const [loteAt] = await apiGET(`lotes?id=eq.${loteId}&select=quantidade_atual`);
+      await apiPATCH('lotes', `id=eq.${loteId}`, { quantidade_atual: Number(loteAt.quantidade_atual || 0) + qtd });
+    }
+
+    toast(`NF-e ${nfe.numero || ''} importada: ${nfe.itens.length} ${nfe.itens.length === 1 ? 'item' : 'itens'} em 📍 ${local}. ✓`, 'ok');
+    nfeAtual = null;
+    document.getElementById('nfeConf').classList.add('hidden');
+    document.getElementById('nfeFile').value = '';
+    await carregarProdutosCache(); preencherDatalistProdutos();
+    carregarNfeImportadas();
+  }catch(e){
+    toast('Erro na importação: ' + e.message + (nfeMigracaoOk ? ' Se falhou no meio, use o estorno na lista de NFs para desfazer o parcial.' : ''), 'erro');
+  }finally{
+    btn.disabled = false; btn.textContent = '✅ Confirmar importação';
+  }
+}
+
+async function carregarNfeImportadas(){
+  const box = document.getElementById('listaNfe');
+  if(!box) return;
+  try{
+    const rows = await apiGET('nfe_importacoes?select=*,fornecedores(nome)&order=data_importacao.desc&limit=50');
+    if(!rows.length){ box.innerHTML = '<span class="text-gray-400 text-xs">Nenhuma NF importada ainda.</span>'; return; }
+    box.innerHTML = rows.map(r => `
+      <div class="rowline px-3 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+        <div class="min-w-0">
+          <div class="font-bold">NF-e ${esc(r.numero || '?')} <span class="text-xs font-normal text-gray-500">série ${esc(r.serie || '—')}</span></div>
+          <div class="text-xs text-gray-500">${esc(r.fornecedores?.nome || '?')} · emissão ${fmtData(r.data_emissao)} · ${r.qtd_itens ?? '?'} ${r.qtd_itens === 1 ? 'item' : 'itens'}${r.valor_total ? ` · R$ ${Number(r.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}</div>
+          <div class="text-[11px] text-gray-400 font-mono truncate">chave ${esc(r.chave)}</div>
+        </div>
+        <button class="text-xs font-bold text-red-600 underline shrink-0" onclick="estornarNFe('${esc(r.chave)}')">↩ Estornar</button>
+      </div>`).join('');
+  }catch(e){
+    box.innerHTML = '<span class="text-gray-400 text-xs">Aplique a migração 06 no banco para ver as NFs importadas.</span>';
+  }
+}
+
+async function estornarNFe(chave){
+  if(!chave) return;
+  try{
+    const imps = await apiGET(`nfe_importacoes?chave=eq.${chave}&select=*,fornecedores(nome)`);
+    if(!imps.length){ toast('Importação não encontrada.', 'erro'); return; }
+    const imp = imps[0];
+    const movs = await apiGET(`movimentacoes?nfe_chave=eq.${chave}&select=id,lote_id,quantidade`);
+    if(!movs.length){ toast('Nenhuma movimentação vinculada a esta NF.', 'alerta'); return; }
+
+    // valida TODOS os lotes antes de apagar qualquer coisa
+    const loteIds = [...new Set(movs.map(m => m.lote_id))];
+    const problemas = [];
+    const plano = [];
+    for(const lid of loteIds){
+      const lrs = await apiGET(`lotes?id=eq.${lid}&select=id,numero_lote,quantidade_atual`);
+      if(!lrs.length){ problemas.push(`Lote ${lid}: não encontrado.`); continue; }
+      const lote = lrs[0];
+      const todas = await apiGET(`movimentacoes?lote_id=eq.${lid}&select=id,nfe_chave,quantidade,tipo`);
+      const manuais = todas.filter(m => !m.nfe_chave);
+      if(manuais.length){
+        problemas.push(`Lote ${lote.numero_lote}: tem ${manuais.length} movimentação(ões) fora da importação (ex.: saída).`);
+        continue;
+      }
+      const qtdImp = todas.filter(m => m.nfe_chave === chave).reduce((s, m) => s + Number(m.quantidade || 0), 0);
+      const saldo = Number(lote.quantidade_atual || 0);
+      if(saldo + 1e-9 < qtdImp){
+        problemas.push(`Lote ${lote.numero_lote}: saldo atual (${fmtQtd(saldo)}) menor que o importado (${fmtQtd(qtdImp)}).`);
+        continue;
+      }
+      const outrasNfe = todas.filter(m => m.nfe_chave && m.nfe_chave !== chave);
+      plano.push({ lote, qtdImp, saldo, apagarLote: Math.abs(saldo - qtdImp) < 1e-9 && outrasNfe.length === 0 });
+    }
+    if(problemas.length){
+      alert('⛔ Estorno BLOQUEADO — nada foi apagado:\n\n' + problemas.join('\n'));
+      return;
+    }
+    const nApagar = plano.filter(p => p.apagarLote).length;
+    if(!confirm(`Estornar a NF-e ${imp.numero || ''} (${imp.fornecedores?.nome || '?'})?\n\nSerão removidas ${movs.length} movimentações de entrada.\n${nApagar} lote(s) criado(s) pela importação serão apagados; ${plano.length - nApagar} lote(s) terão o saldo apenas reduzido.\n\nEsta ação não pode ser desfeita.`)) return;
+
+    for(const m of movs) await apiDELETE('movimentacoes', `id=eq.${m.id}`);
+    for(const p of plano){
+      if(p.apagarLote) await apiDELETE('lotes', `id=eq.${p.lote.id}`);
+      else await apiPATCH('lotes', `id=eq.${p.lote.id}`, { quantidade_atual: p.saldo - p.qtdImp, nfe_chave: null });
+    }
+    await apiDELETE('nfe_importacoes', `chave=eq.${chave}`);
+    toast(`NF-e ${imp.numero || ''} estornada. ✓`, 'ok');
+    carregarNfeImportadas();
+    await carregarProdutosCache();
+  }catch(e){
+    toast('Erro no estorno: ' + e.message, 'erro');
   }
 }
 
