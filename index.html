@@ -82,6 +82,27 @@
 <!-- ============ TOAST ============ -->
 <div id="toast" class="hidden"></div>
 
+<!-- ============ MODAL ALTERAR SENHA (admin) ============ -->
+<div id="modalSenha" class="fixed inset-0 z-[95] flex items-center justify-center p-4" style="display:none;background:rgba(0,0,0,.5)" onclick="fecharEditorSenha()">
+  <div class="card p-5 w-full max-w-sm" onclick="event.stopPropagation()">
+    <div class="font-bold mb-1">🔑 Alterar senha</div>
+    <div class="text-sm text-gray-500 mb-3">Usuário: <b id="senhaUserNome"></b> <span class="text-gray-400" id="senhaUserLogin"></span></div>
+    <label class="lbl">Nova senha</label>
+    <input id="senhaNova" type="password" class="inp text-sm mb-2" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+    <label class="lbl">Confirmar nova senha</label>
+    <input id="senhaConf" type="password" class="inp text-sm mb-2" placeholder="Repita a nova senha" autocomplete="new-password">
+    <button class="btn-ghost w-full mb-2 !py-2 text-sm" onclick="gerarSenhaTemp()">🎲 Gerar senha temporária</button>
+    <div id="senhaTempBox" class="hidden mb-2 p-2 rounded-lg text-sm" style="background:var(--input-bg);border:1px dashed var(--brand)">
+      <span class="text-gray-500">Senha gerada — anote e repasse ao usuário:</span><br>
+      <b id="senhaTempValor" class="text-base select-all"></b>
+    </div>
+    <div class="flex gap-2 mt-1">
+      <button class="btn-ghost flex-1" onclick="fecharEditorSenha()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="salvarNovaSenha()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ LOGIN ============ -->
 <div id="telaLogin" class="min-h-screen flex items-center justify-center p-6 bg-gray-100">
   <div class="card w-full max-w-sm p-6">
@@ -1547,7 +1568,7 @@ async function carregarAdmin(){
         <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
           <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
           ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}</div>
-        ${u.ativo&&u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}
+        ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
   }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
 }
@@ -1570,6 +1591,50 @@ async function desativarUsuario(id){
   if(!confirm(`Desativar o usuário ${nome}?`)) return;
   try{ await apiPATCH('usuarios',`id=eq.${id}`,{ativo:false}); toast('Usuário desativado.','ok'); carregarAdmin(); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+/* ---------- Editor de senhas (admin) — 03/10/2026 ---------- */
+let senhaEditId = null;
+function abrirEditorSenha(id){
+  if(sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
+  const u = (cacheUsuarios||[]).find(x=>x.id===id);
+  if(!u){ toast('Usuário não encontrado.','erro'); return; }
+  senhaEditId = id;
+  document.getElementById('senhaUserNome').textContent = u.nome;
+  document.getElementById('senhaUserLogin').textContent = '@'+u.login;
+  document.getElementById('senhaNova').value = '';
+  document.getElementById('senhaConf').value = '';
+  document.getElementById('senhaTempBox').classList.add('hidden');
+  document.getElementById('modalSenha').style.display = 'flex';
+  setTimeout(()=>document.getElementById('senhaNova').focus(), 60);
+}
+function fecharEditorSenha(){
+  senhaEditId = null;
+  document.getElementById('modalSenha').style.display = 'none';
+}
+function gerarSenhaTemp(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const rnd = new Uint32Array(8);
+  if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(rnd);
+  else for(let i=0;i<8;i++) rnd[i] = Math.floor(Math.random()*4294967296);
+  let s = '';
+  for(let i=0;i<8;i++) s += chars[rnd[i] % chars.length];
+  document.getElementById('senhaNova').value = s;
+  document.getElementById('senhaConf').value = s;
+  document.getElementById('senhaTempValor').textContent = s;
+  document.getElementById('senhaTempBox').classList.remove('hidden');
+}
+async function salvarNovaSenha(){
+  if(sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
+  if(!senhaEditId){ fecharEditorSenha(); return; }
+  const nova = document.getElementById('senhaNova').value;
+  const conf = document.getElementById('senhaConf').value;
+  if(nova.length < 4){ toast('A senha deve ter no mínimo 4 caracteres.','erro'); return; }
+  if(nova !== conf){ toast('As senhas não coincidem.','erro'); return; }
+  try{
+    await apiPATCH('usuarios', `id=eq.${senhaEditId}`, {senha: nova});
+    toast('Senha alterada. ✓','ok');
+    fecharEditorSenha();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function criarProduto(){
   const nome=document.getElementById('pNome').value.trim(),
