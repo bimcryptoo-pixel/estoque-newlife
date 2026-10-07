@@ -147,6 +147,7 @@
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
+      <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -602,6 +603,130 @@
 
       </section>
 
+      <!-- ===== CONTRATOS DE CLIENTES ===== -->
+      <section id="aba-contratos" class="hidden">
+
+        <!-- LISTA -->
+        <div id="ctListaWrap">
+          <div class="card p-4 mb-4">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <div class="font-bold text-lg">📑 Contratos de clientes</div>
+                <div class="text-xs text-gray-500">Contrato anual por cliente × consumo realizado mês a mês.</div>
+              </div>
+              <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="abrirFormContrato()">➕ Novo contrato</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div><label class="lbl">Ano</label><select id="ctAnoFiltro" class="inp text-sm" onchange="carregarContratos()"></select></div>
+              <div class="col-span-2 md:col-span-3"><label class="lbl">Buscar</label><input id="ctBusca" class="inp text-sm" placeholder="Nome do cliente…" oninput="ctBuscaDeb()"></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="card p-4"><div class="text-2xl font-black brand" id="ctkTotal">–</div><div class="text-xs text-gray-500 font-semibold">Contratos no filtro</div></div>
+            <div class="card p-4"><div class="text-2xl font-black text-green-700" id="ctkAtivos">–</div><div class="text-xs text-gray-500 font-semibold">Ativos</div></div>
+            <div class="card p-4"><div class="text-2xl font-black text-amber-600" id="ctkAlerta">–</div><div class="text-xs text-gray-500 font-semibold">Atenção / acima</div></div>
+            <div class="card p-4"><div class="text-2xl font-black" id="ctkExec">–</div><div class="text-xs text-gray-500 font-semibold">Execução média</div></div>
+          </div>
+
+          <div class="card p-4">
+            <div class="overflow-x-auto -mx-4 px-4">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Ano</th><th class="py-2 pr-2">Período</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2">% executado</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
+                </tr></thead>
+                <tbody id="tbodyContratos"><tr><td colspan="7" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORMULÁRIO -->
+        <div id="ctFormWrap" class="hidden">
+          <div class="card p-4 md:p-6 max-w-6xl">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div class="font-bold text-lg" id="ctFormTitulo">📑 Novo contrato</div>
+              <button class="btn-ghost !py-1.5 text-xs" onclick="voltarListaContratos()">← Voltar à lista</button>
+            </div>
+
+            <div class="text-xs font-bold text-gray-500 uppercase mb-2">Dados do contrato</div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div class="col-span-2">
+                <label class="lbl">Cliente *</label>
+                <select id="ctCliente" class="inp text-sm"></select>
+              </div>
+              <div>
+                <label class="lbl">Ano *</label>
+                <input id="ctAno" type="number" min="2000" max="2100" class="inp text-sm" onchange="ctAnoMudou()">
+              </div>
+              <div>
+                <label class="lbl">Status</label>
+                <select id="ctStatus" class="inp text-sm"><option value="ativo">Ativo</option><option value="encerrado">Encerrado</option></select>
+              </div>
+              <div>
+                <label class="lbl">Início da vigência *</label>
+                <input id="ctInicio" type="date" class="inp text-sm">
+              </div>
+              <div>
+                <label class="lbl">Fim da vigência *</label>
+                <input id="ctFim" type="date" class="inp text-sm">
+              </div>
+              <div class="col-span-2 md:col-span-4">
+                <label class="lbl">Observação</label>
+                <textarea id="ctObs" class="inp text-sm" rows="2" placeholder="Ex.: contrato de fornecimento anual, reajuste, condições…"></textarea>
+              </div>
+            </div>
+
+            <div class="text-xs font-bold text-gray-500 uppercase mb-2">Produtos contratados</div>
+            <div class="border rounded-xl p-3 mb-3 bg-gray-50">
+              <div class="grid grid-cols-2 md:grid-cols-12 gap-2">
+                <div class="col-span-2 md:col-span-7">
+                  <label class="lbl">Produto *</label>
+                  <input id="ctProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off">
+                </div>
+                <div class="md:col-span-3">
+                  <label class="lbl">Qtd anual contratada *</label>
+                  <input id="ctQtd" type="number" min="0" step="any" class="inp text-sm" placeholder="0">
+                </div>
+                <div class="md:col-span-2 flex items-end">
+                  <button class="btn-brand !py-2 text-sm" onclick="ctAdicionarItem()">＋ Adicionar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto -mx-4 px-4 mb-3">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                  <th class="py-2 pr-2">#</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2 text-right">Qtd anual</th><th class="py-2 pr-2 text-right">Base mensal</th><th class="py-2"></th>
+                </tr></thead>
+                <tbody id="tbodyCtItens"><tr><td colspan="5" class="py-4 text-gray-400 text-center">Nenhum produto adicionado.</td></tr></tbody>
+              </table>
+            </div>
+
+            <div class="flex gap-2 flex-wrap">
+              <button class="btn-brand flex-1 !py-3" onclick="salvarContrato()">💾 Salvar contrato</button>
+            </div>
+            <div class="text-xs text-gray-400 mt-3">💡 O realizado é apurado automaticamente do <b>Consumo</b> lançado para o cliente no ano do contrato.</div>
+          </div>
+        </div>
+
+        <!-- DETALHE -->
+        <div id="ctDetalheWrap" class="hidden">
+          <div class="card p-4 md:p-6 max-w-6xl">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <button class="btn-ghost !py-1.5 text-xs" onclick="voltarListaContratos()">← Voltar à lista</button>
+              <div class="flex gap-2 flex-wrap">
+                <button class="btn-ghost !py-1.5 text-xs" id="ctBtnEditar" onclick="editarContratoAtual()">✏️ Editar</button>
+                <button class="btn-ghost !py-1.5 text-xs" id="ctBtnStatus" onclick="alternarStatusContrato()">🔒 Encerrar</button>
+                <button class="btn-ghost !py-1.5 text-xs !text-red-600" onclick="excluirContratoAtual()">🗑️ Excluir</button>
+              </div>
+            </div>
+            <div id="ctDetalhe"></div>
+          </div>
+        </div>
+
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -688,6 +813,7 @@
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -811,7 +937,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','pedidos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','pedidos','contratos','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -824,6 +950,7 @@ function mostrarAba(aba){
   if(aba==='emprestimos') carregarEmprestimos();
   if(aba==='consumo') carregarConsumo();
   if(aba==='pedidos') carregarPedidos();
+  if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
@@ -2425,6 +2552,393 @@ function imprimirPedido(){
   doc.open(); doc.write(html); doc.close();
   f.contentWindow.focus();
   setTimeout(()=>f.contentWindow.print(), 400);
+}
+
+/* ================= CONTRATOS DE CLIENTES (07/10/2026) =================
+   Contrato anual por cliente (produtos + qtd anual contratada).
+   Realizado apurado da tabela `consumo` (cliente_id, produto_id, ano, mes).
+   Regras: meses_decorridos = ano<atual?12 : ano==atual?mês atual : 0
+           base_acumulada = (qtd_anual/12) * meses_decorridos
+           realizado > base*1.1 → 🔴 acima | > base → 🟡 atenção | senão 🟢 dentro */
+let CT_LISTA = [];
+let CT_ITENS_FORM = [];
+let CT_EDIT_ID = null;
+let CT_DETALHE_ID = null;
+let ctBuscaTimer = null;
+
+function ctBuscaDeb(){ clearTimeout(ctBuscaTimer); ctBuscaTimer = setTimeout(carregarContratos, 350); }
+
+function ctMesesDecorridos(ano){
+  const h = new Date();
+  if(ano < h.getFullYear()) return 12;
+  if(ano === h.getFullYear()) return h.getMonth()+1;
+  return 0;
+}
+
+/* soma consumo -> { "clienteId|produtoId|mes": qtd } (com paginação) */
+async function ctConsumoAgregado(clienteIds, ano){
+  const map = {};
+  if(!clienteIds.length) return map;
+  let off = 0;
+  for(;;){
+    const pg = await apiGET(`consumo?cliente_id=in.(${clienteIds.join(',')})&ano=eq.${ano}&select=cliente_id,produto_id,mes,quantidade&limit=1000&offset=${off}`);
+    pg.forEach(r=>{ const k = r.cliente_id+'|'+r.produto_id+'|'+r.mes; map[k] = (map[k]||0)+Number(r.quantidade); });
+    if(pg.length<1000) break;
+    off += 1000;
+  }
+  return map;
+}
+
+function ctStatusAgregado(contratado, realizado, mDec){
+  if(mDec===0) return 'futuro';
+  const base = (contratado/12)*mDec;
+  if(realizado > base*1.1) return 'acima';
+  if(realizado > base) return 'alerta';
+  return 'dentro';
+}
+
+function ctBadgeStatus(st){
+  if(st==='acima')  return '<span class="text-red-700 font-bold">🔴 Acima</span>';
+  if(st==='atencao') return '<span class="text-amber-600 font-bold">🟡 Atenção</span>';
+  if(st==='futuro')  return '<span class="text-gray-500 font-semibold">📅 Futuro</span>';
+  return '<span class="text-green-700 font-semibold">🟢 Dentro</span>';
+}
+
+/* ---------- lista ---------- */
+async function carregarContratos(){
+  try{
+    const anoSel = document.getElementById('ctAnoFiltro');
+    if(!anoSel.options.length){
+      const a = new Date().getFullYear();
+      anoSel.innerHTML = [a+1,a,a-1,a-2].map(x=>`<option value="${x}"${x===a?' selected':''}>${x}</option>`).join('');
+    }
+    const ano = Number(anoSel.value);
+    const busca = (document.getElementById('ctBusca').value||'').trim().toLowerCase();
+    const contratos = await apiGET(`contratos?ano=eq.${ano}&select=*,clientes(id,nome)&order=created_at.desc`);
+    const ctIds = contratos.map(c=>c.id);
+    const cliIds = [...new Set(contratos.map(c=>c.cliente_id))];
+    const itensPorCt = {};
+    if(ctIds.length){
+      const itens = await apiGET(`contratos_itens?contrato_id=in.(${ctIds.join(',')})&select=contrato_id,produto_id,qtd_anual`);
+      itens.forEach(it=>{
+        const e = itensPorCt[it.contrato_id] || (itensPorCt[it.contrato_id] = { prods:new Set(), contratado:0, n:0 });
+        e.prods.add(it.produto_id); e.contratado += Number(it.qtd_anual); e.n++;
+      });
+    }
+    const cons = await ctConsumoAgregado(cliIds, ano);
+    const mDec = ctMesesDecorridos(ano);
+    CT_LISTA = contratos.map(c=>{
+      const e = itensPorCt[c.id] || { prods:new Set(), contratado:0, n:0 };
+      let realizado = 0;
+      e.prods.forEach(pid=>{ for(let m=1;m<=12;m++) realizado += cons[c.cliente_id+'|'+pid+'|'+m]||0; });
+      const pct = e.contratado>0 ? realizado/e.contratado*100 : 0;
+      return { ...c, contratado:e.contratado, realizado, pct, nItens:e.n, sit:ctStatusAgregado(e.contratado, realizado, mDec) };
+    }).filter(c=> !busca || ((c.clientes&&c.clientes.nome)||'').toLowerCase().includes(busca));
+
+    const ativos = CT_LISTA.filter(c=>c.status==='ativo');
+    document.getElementById('ctkTotal').textContent = CT_LISTA.length;
+    document.getElementById('ctkAtivos').textContent = ativos.length;
+    document.getElementById('ctkAlerta').textContent = ativos.filter(c=>c.sit==='alerta'||c.sit==='acima').length;
+    document.getElementById('ctkExec').textContent = (CT_LISTA.length ? CT_LISTA.reduce((s,c)=>s+c.pct,0)/CT_LISTA.length : 0).toFixed(0)+'%';
+
+    document.getElementById('tbodyContratos').innerHTML = CT_LISTA.map(c=>{
+      const cor = c.sit==='acima' ? '#dc2626' : c.sit==='alerta' ? '#d97706' : '#15803d';
+      const rotSt = c.status==='encerrado'
+        ? '<span class="text-gray-500 font-semibold">Encerrado</span>'
+        : '<span class="text-green-700 font-semibold">Ativo</span>';
+      return `<tr class="rowline border-t">
+        <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
+        <td class="py-2 pr-2">${c.ano}</td>
+        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)}</td>
+        <td class="py-2 pr-2 text-right">${c.nItens}</td>
+        <td class="py-2 pr-2"><div class="flex items-center gap-2">
+          <div class="w-20 bg-gray-200 rounded-full h-2"><div class="h-2 rounded-full" style="width:${Math.min(100,c.pct).toFixed(0)}%;background:${cor}"></div></div>
+          <span class="text-xs font-bold" style="color:${cor}">${c.pct.toFixed(0)}%</span></div></td>
+        <td class="py-2 pr-2">${rotSt}</td>
+        <td class="py-2 text-right"><button class="btn-ghost !py-1 !px-2 text-xs" onclick="verContrato('${c.id}')">Abrir</button></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" class="py-4 text-gray-400 text-center">Nenhum contrato encontrado.</td></tr>';
+  }catch(e){ toast('Erro ao carregar contratos: '+e.message,'erro'); }
+}
+
+/* ---------- formulário ---------- */
+function abrirFormContrato(id){
+  CT_EDIT_ID = id||null;
+  CT_ITENS_FORM = [];
+  document.getElementById('ctListaWrap').classList.add('hidden');
+  document.getElementById('ctDetalheWrap').classList.add('hidden');
+  document.getElementById('ctFormWrap').classList.remove('hidden');
+  document.getElementById('ctFormTitulo').textContent = id ? '📑 Editar contrato' : '📑 Novo contrato';
+  const cliAtivos = (CLIENTES||[]).filter(c=>c.ativo && c.tipo==='cliente');
+  document.getElementById('ctCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+    || '<option value="">— cadastre um cliente —</option>';
+  if(!id){
+    document.getElementById('ctAno').value = new Date().getFullYear();
+    ctAnoMudou();
+    document.getElementById('ctStatus').value = 'ativo';
+    document.getElementById('ctObs').value = '';
+  }
+  document.getElementById('ctProduto').value = '';
+  document.getElementById('ctQtd').value = '';
+  if(id) carregarContratoNoForm(id);
+  ctRenderItens();
+  window.scrollTo({top:0});
+}
+
+async function carregarContratoNoForm(id){
+  try{
+    const rows = await apiGET(`contratos?id=eq.${id}&select=*`);
+    if(!rows.length) return;
+    const c = rows[0];
+    document.getElementById('ctCliente').value = c.cliente_id;
+    document.getElementById('ctAno').value = c.ano;
+    document.getElementById('ctInicio').value = String(c.data_inicio).slice(0,10);
+    document.getElementById('ctFim').value = String(c.data_fim).slice(0,10);
+    document.getElementById('ctStatus').value = c.status;
+    document.getElementById('ctObs').value = c.observacao||'';
+    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade)&order=created_at.asc`);
+    CT_ITENS_FORM = itens.map(it=>({
+      produto_id: it.produto_id,
+      produto_nome: it.produtos ? it.produtos.nome : '—',
+      unidade: (it.produtos && it.produtos.unidade) || 'un',
+      qtd_anual: Number(it.qtd_anual)
+    }));
+    ctRenderItens();
+  }catch(e){ toast('Erro ao carregar contrato: '+e.message,'erro'); }
+}
+
+function ctAnoMudou(){
+  const a = Number(document.getElementById('ctAno').value);
+  if(a>=2000 && a<=2100){
+    document.getElementById('ctInicio').value = `${a}-01-01`;
+    document.getElementById('ctFim').value = `${a}-12-31`;
+  }
+}
+
+function ctAdicionarItem(){
+  const p = resolverProduto(document.getElementById('ctProduto').value);
+  const qtd = parseFloat(String(document.getElementById('ctQtd').value).replace(',','.'));
+  if(!p){ toast('Escolha um produto da lista.','erro'); return; }
+  if(!qtd || qtd<=0){ toast('Informe a quantidade anual contratada.','erro'); return; }
+  if(CT_ITENS_FORM.some(i=>i.produto_id===p.id)){ toast('⚠️ Produto já adicionado ao contrato.','alerta'); return; }
+  CT_ITENS_FORM.push({ produto_id:p.id, produto_nome:p.nome, unidade:p.unidade||'un', qtd_anual:qtd });
+  document.getElementById('ctProduto').value='';
+  document.getElementById('ctQtd').value='';
+  ctRenderItens();
+}
+function ctRemoverItem(i){ CT_ITENS_FORM.splice(i,1); ctRenderItens(); }
+function ctRenderItens(){
+  document.getElementById('tbodyCtItens').innerHTML = CT_ITENS_FORM.map((it,i)=>`<tr class="rowline">
+    <td class="py-2 pr-2 text-gray-500">${i+1}</td>
+    <td class="py-2 pr-2 font-semibold">${esc(it.produto_nome)}</td>
+    <td class="py-2 pr-2 text-right">${fmtQtd(it.qtd_anual)} ${esc(it.unidade)}</td>
+    <td class="py-2 pr-2 text-right text-gray-500">${fmtQtd(it.qtd_anual/12)} ${esc(it.unidade)}/mês</td>
+    <td class="py-2 text-right"><button class="text-red-600 font-bold" onclick="ctRemoverItem(${i})">✕</button></td>
+  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-gray-400 text-center">Nenhum produto adicionado.</td></tr>';
+}
+
+async function salvarContrato(){
+  const cliente_id = document.getElementById('ctCliente').value||null;
+  const ano = Number(document.getElementById('ctAno').value);
+  const data_inicio = document.getElementById('ctInicio').value||null;
+  const data_fim = document.getElementById('ctFim').value||null;
+  const observacao = document.getElementById('ctObs').value.trim()||null;
+  const status = document.getElementById('ctStatus').value;
+  if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(!(ano>=2000 && ano<=2100)){ toast('Informe um ano válido.','erro'); return; }
+  if(!data_inicio || !data_fim){ toast('Informe o período de vigência.','erro'); return; }
+  if(data_fim < data_inicio){ toast('Fim da vigência anterior ao início.','erro'); return; }
+  if(!CT_ITENS_FORM.length){ toast('Adicione ao menos um produto.','erro'); return; }
+  try{
+    let cid = CT_EDIT_ID;
+    if(cid){
+      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, status });
+      await apiDELETE('contratos_itens', `contrato_id=eq.${cid}`);
+    }else{
+      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, status });
+      cid = c.id;
+    }
+    for(const it of CT_ITENS_FORM)
+      await apiPOST('contratos_itens', { contrato_id:cid, produto_id:it.produto_id, qtd_anual:it.qtd_anual });
+    toast('Contrato salvo. ✓','ok');
+    voltarListaContratos();
+  }catch(e){
+    const dup = /(409|23505|duplicate|unique)/i.test(e.message);
+    toast(dup ? '⚠️ Já existe contrato deste cliente para o ano informado.' : 'Erro ao salvar: '+e.message, dup?'alerta':'erro');
+  }
+}
+
+function voltarListaContratos(){
+  document.getElementById('ctFormWrap').classList.add('hidden');
+  document.getElementById('ctDetalheWrap').classList.add('hidden');
+  document.getElementById('ctListaWrap').classList.remove('hidden');
+  carregarContratos();
+  window.scrollTo({top:0});
+}
+
+/* ---------- detalhe ---------- */
+function ctKpi(valor, rotulo, cls){
+  return `<div class="border rounded-xl p-3 bg-white"><div class="text-xl font-black ${cls||''}">${valor}</div><div class="text-xs text-gray-500 font-semibold">${rotulo}</div></div>`;
+}
+
+function ctAnalise(c, linhas, mDec){
+  const out = [];
+  const totC = linhas.reduce((s,l)=>s+l.qtdAnual,0);
+  const totR = linhas.reduce((s,l)=>s+l.total,0);
+  const pct = totC>0 ? totR/totC*100 : 0;
+  if(mDec===0){
+    out.push(`📅 Contrato futuro (${c.ano}) — o realizado começa a contar em janeiro de ${c.ano}.`);
+  }else{
+    const baseAcumTot = (totC/12)*mDec;
+    out.push(`📈 No geral: realizado <b>${fmtQtd(totR)} un</b> de <b>${fmtQtd(totC)} un</b> contratados (<b>${pct.toFixed(1).replace('.',',')}%</b>) em ${mDec} ${mDec===1?'mês':'meses'}; base acumulada esperada: ${fmtQtd(baseAcumTot)} un.`);
+  }
+  linhas.filter(l=>l.status==='acima'||l.status==='atencao').forEach(l=>{
+    const nome = esc(l.it.produtos ? l.it.produtos.nome : '—');
+    const icone = l.status==='acima' ? '🔴' : '🟡';
+    const rot = l.status==='acima' ? 'acima do contrato' : 'em atenção';
+    const dif = l.baseAcum>0 ? ((l.total-l.baseAcum)/l.baseAcum*100) : 0;
+    out.push(`${icone} <b>${nome}</b>: realizado ${fmtQtd(l.total)} un vs base acumulada ${fmtQtd(l.baseAcum)} un (${dif>=0?'+':''}${dif.toFixed(0)}%) — ${rot}; projeção de ${fmtQtd(l.proj)} un até dezembro (contratado: ${fmtQtd(l.qtdAnual)}).`);
+  });
+  if(mDec>0 && !linhas.some(l=>l.status==='acima'||l.status==='atencao'))
+    out.push('✅ Todos os produtos estão dentro da base contratual.');
+  return out.map(p=>`<p>${p}</p>`).join('');
+}
+
+function desenharGraficoContrato(labels, realizado, base){
+  const el = document.getElementById('ctChart');
+  if(!el) return;
+  if(CH['ctChart']){ CH['ctChart'].destroy(); CH['ctChart']=null; }
+  if(typeof Chart==='undefined'){
+    el.parentElement.innerHTML='<div class="text-sm text-gray-400 py-8 text-center">Gráfico indisponível (sem conexão).</div>';
+    return;
+  }
+  CH['ctChart'] = new Chart(el, {
+    data:{ labels, datasets:[
+      { type:'bar', label:'Realizado', data:realizado, backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:4 },
+      { type:'line', label:'Base contratual/mês', data:base, borderColor:'#374151', backgroundColor:'#374151', borderWidth:2, tension:0.25, pointRadius:3 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true, position:'bottom'} },
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+  });
+}
+
+async function verContrato(id){
+  CT_DETALHE_ID = id;
+  document.getElementById('ctListaWrap').classList.add('hidden');
+  document.getElementById('ctFormWrap').classList.add('hidden');
+  document.getElementById('ctDetalheWrap').classList.remove('hidden');
+  document.getElementById('ctDetalhe').innerHTML = '<div class="py-8 text-center text-gray-400">Carregando…</div>';
+  window.scrollTo({top:0});
+  try{
+    const rows = await apiGET(`contratos?id=eq.${id}&select=*,clientes(id,nome)`);
+    if(!rows.length){ toast('Contrato não encontrado.','erro'); return; }
+    const c = rows[0];
+    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)&order=created_at.asc`);
+    const cons = await ctConsumoAgregado([c.cliente_id], c.ano);
+    const mDec = ctMesesDecorridos(c.ano);
+    const linhas = itens.map(it=>{
+      const meses = [];
+      for(let m=1;m<=12;m++) meses.push(cons[c.cliente_id+'|'+it.produto_id+'|'+m]||0);
+      const total = meses.reduce((a,b)=>a+b,0);
+      const qtdAnual = Number(it.qtd_anual);
+      const baseMensal = qtdAnual/12;
+      const baseAcum = baseMensal*mDec;
+      const pct = qtdAnual>0 ? total/qtdAnual*100 : 0;
+      let status;
+      if(mDec===0) status = 'futuro';
+      else if(total > baseAcum*1.1) status = 'acima';
+      else if(total > baseAcum) status = 'atencao';
+      else status = 'dentro';
+      const proj = mDec>0 ? (total/mDec)*12 : qtdAnual;
+      return { it, meses, total, qtdAnual, baseMensal, baseAcum, pct, status, proj };
+    });
+    const totContratado = linhas.reduce((s,l)=>s+l.qtdAnual,0);
+    const totRealizado = linhas.reduce((s,l)=>s+l.total,0);
+    const pctGeral = totContratado>0 ? totRealizado/totContratado*100 : 0;
+    const projGeral = mDec>0 ? (totRealizado/mDec)*12 : totContratado;
+    const saldo = totContratado - totRealizado;
+
+    document.getElementById('ctBtnStatus').textContent = c.status==='ativo' ? '🔒 Encerrar' : '🔓 Reabrir';
+
+    const thMeses = MESES_PT.map(m=>`<th class="py-2 px-1 text-center text-xs text-gray-500 uppercase">${m}</th>`).join('');
+    document.getElementById('ctDetalhe').innerHTML = `
+      <div class="mb-4">
+        <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
+        <div class="text-sm text-gray-500">Contrato ${c.ano} · ${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)} · ${c.status==='ativo'?'<span class="text-green-700 font-semibold">Ativo</span>':'<span class="text-gray-500 font-semibold">Encerrado</span>'}</div>
+        ${c.observacao?`<div class="text-sm text-gray-600 mt-1">${esc(c.observacao)}</div>`:''}
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        ${ctKpi(fmtQtd(totContratado)+' un','Contratado anual','brand')}
+        ${ctKpi(fmtQtd(totRealizado)+' un','Realizado no ano','')}
+        ${ctKpi(pctGeral.toFixed(1).replace('.',',')+'%','% executado','')}
+        ${ctKpi(fmtQtd(saldo)+' un','Saldo restante', saldo<0?'text-red-700':'text-green-700')}
+        ${ctKpi(fmtQtd(projGeral)+' un','Projeção 12 meses','')}
+      </div>
+      <div class="border rounded-xl p-4 mb-4 bg-gray-50">
+        <div class="font-bold mb-2">🔎 Análise do contrato</div>
+        <div class="text-sm space-y-1 text-gray-700">${ctAnalise(c, linhas, mDec)}</div>
+      </div>
+      <div class="border rounded-xl p-4 mb-4">
+        <div class="font-bold mb-2">📊 Realizado × base contratual por mês</div>
+        <div class="relative h-56"><canvas id="ctChart"></canvas></div>
+      </div>
+      <div class="font-bold mb-2">🧾 Produtos do contrato</div>
+      <div class="overflow-x-auto -mx-4 px-4">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left border-b">
+            <th class="py-2 pr-2 text-xs text-gray-500 uppercase">Produto</th>
+            <th class="py-2 pr-2 text-xs text-gray-500 uppercase text-right">Contratado</th>
+            <th class="py-2 pr-2 text-xs text-gray-500 uppercase text-right">Base/mês</th>
+            ${thMeses}
+            <th class="py-2 pr-2 text-xs text-gray-500 uppercase text-right">Total</th>
+            <th class="py-2 pr-2 text-xs text-gray-500 uppercase text-right">%</th>
+            <th class="py-2 pl-2 text-xs text-gray-500 uppercase">Status</th>
+          </tr></thead>
+          <tbody>${linhas.map(l=>`
+            <tr class="rowline border-t">
+              <td class="py-2 pr-2 font-semibold whitespace-nowrap">${esc(l.it.produtos?l.it.produtos.nome:'—')}</td>
+              <td class="py-2 pr-2 text-right">${fmtQtd(l.qtdAnual)}</td>
+              <td class="py-2 pr-2 text-right text-gray-500">${fmtQtd(l.baseMensal)}</td>
+              ${l.meses.map(v=>`<td class="py-2 px-1 text-center ${v?'font-semibold':'text-gray-300'}">${v||'–'}</td>`).join('')}
+              <td class="py-2 pr-2 text-right font-bold">${fmtQtd(l.total)}</td>
+              <td class="py-2 pr-2 text-right font-bold">${l.pct.toFixed(0)}%</td>
+              <td class="py-2 pl-2 whitespace-nowrap">${ctBadgeStatus(l.status)}</td>
+            </tr>`).join('') || '<tr><td colspan="19" class="py-4 text-gray-400 text-center">Sem produtos neste contrato.</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+
+    const labels = MESES_PT.map(m=>m+'/'+String(c.ano).slice(2));
+    const realMensal = [];
+    for(let m=0;m<12;m++) realMensal.push(linhas.reduce((s,l)=>s+l.meses[m],0));
+    desenharGraficoContrato(labels, realMensal, Array(12).fill(totContratado/12));
+  }catch(e){ toast('Erro ao abrir contrato: '+e.message,'erro'); }
+}
+
+function editarContratoAtual(){ if(CT_DETALHE_ID) abrirFormContrato(CT_DETALHE_ID); }
+
+async function alternarStatusContrato(){
+  if(!CT_DETALHE_ID) return;
+  try{
+    const rows = await apiGET(`contratos?id=eq.${CT_DETALHE_ID}&select=status`);
+    if(!rows.length) return;
+    const novo = rows[0].status==='ativo' ? 'encerrado' : 'ativo';
+    await apiPATCH('contratos', `id=eq.${CT_DETALHE_ID}`, { status:novo });
+    toast(novo==='ativo' ? 'Contrato reaberto. ✓' : 'Contrato encerrado. ✓','ok');
+    verContrato(CT_DETALHE_ID);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+async function excluirContratoAtual(){
+  if(!CT_DETALHE_ID) return;
+  if(!confirm('Excluir este contrato e todos os seus itens?')) return;
+  try{
+    await apiDELETE('contratos', `id=eq.${CT_DETALHE_ID}`);
+    toast('Contrato excluído.','ok');
+    CT_DETALHE_ID = null;
+    voltarListaContratos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ================= INIT ================= */
