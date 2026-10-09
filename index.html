@@ -2897,6 +2897,14 @@ async function verContrato(id){
     document.getElementById('ctBtnStatus').textContent = c.status==='ativo' ? '🔒 Encerrar' : '🔓 Reabrir';
 
     const thMeses = MESES_PT.map(m=>`<th class="py-2 px-1 text-center text-xs text-gray-500 uppercase">${m}</th>`).join('');
+    const baseMensalCt = totContratado/12;
+    const totMensalCt = [];
+    for(let m=0;m<12;m++) totMensalCt.push(linhas.reduce((s,l)=>s+l.meses[m],0));
+    const pctMesHtml = MESES_PT.map((nm,m)=>{
+      const v = totMensalCt[m];
+      const pct = baseMensalCt>0 && v>0 ? v/baseMensalCt*100 : null;
+      return `<tr class="rowline border-t"><td class="py-1 pr-2 text-gray-500 capitalize">${nm}</td><td class="py-1 pr-2 text-right ${v?'font-semibold':'text-gray-300'}">${v||'–'}</td><td class="py-1 text-right font-bold ${pct===null?'text-gray-300':pct>=100?'text-green-700':''}">${pct===null?'–':pct.toFixed(0)+'%'}</td></tr>`;
+    }).join('');
     document.getElementById('ctDetalhe').innerHTML = `
       <div class="mb-4">
         <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
@@ -2918,7 +2926,16 @@ async function verContrato(id){
       </div>
       <div class="border rounded-xl p-4 mb-4">
         <div class="font-bold mb-2">📊 Realizado × base contratual por mês</div>
-        <div class="relative h-56"><canvas id="ctChart"></canvas></div>
+        <div class="flex flex-col md:flex-row gap-4">
+          <div class="relative h-56 flex-1 min-w-0"><canvas id="ctChart"></canvas></div>
+          <div class="md:w-52 shrink-0">
+            <div class="text-xs font-bold text-gray-500 uppercase mb-1">% do pedido ideal</div>
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs text-gray-500 uppercase border-b"><th class="py-1 pr-2">Mês</th><th class="py-1 pr-2 text-right">Realiz.</th><th class="py-1 text-right">% ideal</th></tr></thead>
+              <tbody>${pctMesHtml}</tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div class="font-bold mb-2">🧾 Produtos do contrato</div>
       <div class="overflow-x-auto -mx-4 px-4">
