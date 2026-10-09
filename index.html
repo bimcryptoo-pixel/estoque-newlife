@@ -633,9 +633,9 @@
             <div class="overflow-x-auto -mx-4 px-4">
               <table class="w-full text-sm">
                 <thead><tr class="text-left text-xs text-gray-500 uppercase">
-                  <th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Linha</th><th class="py-2 pr-2">Ano</th><th class="py-2 pr-2">Período</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2">% executado</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
+                  <th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Número</th><th class="py-2 pr-2">Linha</th><th class="py-2 pr-2">Ano</th><th class="py-2 pr-2">Período</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2">% executado</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
                 </tr></thead>
-                <tbody id="tbodyContratos"><tr><td colspan="8" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+                <tbody id="tbodyContratos"><tr><td colspan="9" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -666,6 +666,10 @@
               <div>
                 <label class="lbl">Linha</label>
                 <select id="ctLinha" class="inp text-sm" onchange="ctLinhaMudou()"></select>
+              </div>
+              <div>
+                <label class="lbl">Número do contrato</label>
+                <input id="ctNumero" type="text" class="inp text-sm" placeholder="Ex.: 042/2026">
               </div>
               <div>
                 <label class="lbl">Início da vigência *</label>
@@ -2672,6 +2676,7 @@ async function carregarContratos(){
         : '<span class="text-green-700 font-semibold">Ativo</span>';
       return `<tr class="rowline border-t">
         <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
+        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.linhaTxt||'—')}</td>
         <td class="py-2 pr-2">${c.ano}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)}</td>
@@ -2682,7 +2687,7 @@ async function carregarContratos(){
         <td class="py-2 pr-2">${rotSt}</td>
         <td class="py-2 text-right"><button class="btn-ghost !py-1 !px-2 text-xs" onclick="verContrato('${c.id}')">Abrir</button></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="8" class="py-4 text-gray-400 text-center">Nenhum contrato encontrado.</td></tr>';
+    }).join('') || '<tr><td colspan="9" class="py-4 text-gray-400 text-center">Nenhum contrato encontrado.</td></tr>';
   }catch(e){ toast('Erro ao carregar contratos: '+e.message,'erro'); }
 }
 
@@ -2703,6 +2708,7 @@ function abrirFormContrato(id){
     ctAnoMudou();
     document.getElementById('ctStatus').value = 'ativo';
     document.getElementById('ctObs').value = '';
+    document.getElementById('ctNumero').value = '';
     document.getElementById('ctLinha').value = '';
   }
   ctLinhaMudou();
@@ -2724,6 +2730,7 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctFim').value = String(c.data_fim).slice(0,10);
     document.getElementById('ctStatus').value = c.status;
     document.getElementById('ctObs').value = c.observacao||'';
+    document.getElementById('ctNumero').value = c.numero||'';
     const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
     CT_ITENS_FORM = itens.map(it=>({
       produto_id: it.produto_id,
@@ -2790,6 +2797,7 @@ async function salvarContrato(){
   const data_inicio = document.getElementById('ctInicio').value||null;
   const data_fim = document.getElementById('ctFim').value||null;
   const observacao = document.getElementById('ctObs').value.trim()||null;
+  const numero = document.getElementById('ctNumero').value.trim()||null;
   const status = document.getElementById('ctStatus').value;
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!(ano>=2000 && ano<=2100)){ toast('Informe um ano válido.','erro'); return; }
@@ -2799,10 +2807,10 @@ async function salvarContrato(){
   try{
     let cid = CT_EDIT_ID;
     if(cid){
-      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, status });
+      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, status });
       await apiDELETE('contratos_itens', `contrato_id=eq.${cid}`);
     }else{
-      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, status });
+      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, status });
       cid = c.id;
     }
     for(const it of CT_ITENS_FORM)
@@ -2926,6 +2934,7 @@ async function verContrato(id){
     document.getElementById('ctDetalhe').innerHTML = `
       <div class="mb-4">
         <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
+        ${c.numero?`<div class="text-sm font-semibold text-gray-700">Contrato nº ${esc(c.numero)}</div>`:''}
         <div class="text-sm text-gray-500">Contrato ${c.ano} · ${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)} · ${c.status==='ativo'?'<span class="text-green-700 font-semibold">Ativo</span>':'<span class="text-gray-500 font-semibold">Encerrado</span>'}</div>
         ${c.observacao?`<div class="text-sm text-gray-600 mt-1">${esc(c.observacao)}</div>`:''}
       </div>
