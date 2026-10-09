@@ -2902,8 +2902,10 @@ async function verContrato(id){
     for(let m=0;m<12;m++) totMensalCt.push(linhas.reduce((s,l)=>s+l.meses[m],0));
     const pctMesHtml = MESES_PT.map((nm,m)=>{
       const v = totMensalCt[m];
-      const pct = baseMensalCt>0 && v>0 ? v/baseMensalCt*100 : null;
-      return `<tr class="rowline border-t"><td class="py-1 pr-2 text-gray-500 capitalize">${nm}</td><td class="py-1 pr-2 text-right ${v?'font-semibold':'text-gray-300'}">${v||'–'}</td><td class="py-1 text-right font-bold ${pct===null?'text-gray-300':pct>=100?'text-green-700':''}">${pct===null?'–':pct.toFixed(0)+'%'}</td></tr>`;
+      const pct = baseMensalCt>0 && v>0 ? (v-baseMensalCt)/baseMensalCt*100 : null;
+      const pctTxt = pct===null ? '–' : (pct>0?'+':'')+pct.toFixed(0)+'%';
+      const pctCor = pct===null ? 'text-gray-300' : pct<0 ? 'text-red-700' : pct>0 ? 'text-green-700' : '';
+      return `<tr class="rowline border-t"><td class="py-1 pr-2 text-gray-500 capitalize">${nm}</td><td class="py-1 pr-2 text-right ${v?'font-semibold':'text-gray-300'}">${v||'–'}</td><td class="py-1 text-right font-bold ${pctCor}">${pctTxt}</td></tr>`;
     }).join('');
     document.getElementById('ctDetalhe').innerHTML = `
       <div class="mb-4">
@@ -2931,7 +2933,7 @@ async function verContrato(id){
           <div class="md:w-52 shrink-0">
             <div class="text-xs font-bold text-gray-500 uppercase mb-1">% do pedido ideal</div>
             <table class="w-full text-sm">
-              <thead><tr class="text-left text-xs text-gray-500 uppercase border-b"><th class="py-1 pr-2">Mês</th><th class="py-1 pr-2 text-right">Realiz.</th><th class="py-1 text-right">% ideal</th></tr></thead>
+              <thead><tr class="text-left text-xs text-gray-500 uppercase border-b"><th class="py-1 pr-2">Mês</th><th class="py-1 pr-2 text-right">Realiz.</th><th class="py-1 text-right">% vs ideal</th></tr></thead>
               <tbody>${pctMesHtml}</tbody>
             </table>
           </div>
