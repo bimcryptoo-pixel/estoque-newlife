@@ -683,6 +683,11 @@
                 <label class="lbl">Observação</label>
                 <textarea id="ctObs" class="inp text-sm" rows="2" placeholder="Ex.: contrato de fornecimento anual, reajuste, condições…"></textarea>
               </div>
+              <div class="col-span-2 md:col-span-4">
+                <label class="lbl">📎 Anexar contrato (PDF, doc ou imagem)</label>
+                <input id="ctArquivo" type="file" class="inp text-sm" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                <div id="ctAnexoAtual" class="text-xs mt-1 text-gray-500"></div>
+              </div>
             </div>
 
             <div class="text-xs font-bold text-gray-500 uppercase mb-2">Produtos contratados</div>
@@ -1141,6 +1146,19 @@ async function uploadRecibo(file){
   });
   if(!r.ok){ const t=await r.text(); throw new Error('Upload do recibo falhou ('+r.status+'): '+t.slice(0,150)); }
   return `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+}
+async function uploadContrato(file){
+  const partes = file.name.split('.');
+  const ext = partes.length>1 ? partes.pop().replace(/[^a-zA-Z0-9]/g,'').slice(0,5) : 'bin';
+  const base = file.name.replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9.\-_]/g,'_').slice(0,60) || 'contrato';
+  const nomeArq = Date.now()+'-'+base+'.'+(ext||'bin');
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/contratos/${encodeURIComponent(nomeArq)}`, {
+    method:'POST',
+    headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'application/octet-stream' },
+    body: file
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error('Upload do contrato falhou ('+r.status+'): '+t.slice(0,150)); }
+  return `${SUPA_URL}/storage/v1/object/public/recibos/contratos/${encodeURIComponent(nomeArq)}`;
 }
 
 async function salvarMovimentacao(){
@@ -2572,6 +2590,7 @@ function imprimirPedido(){
 let CT_LISTA = [];
 let CT_ITENS_FORM = [];
 let CT_EDIT_ID = null;
+let CT_ANEXO_ATUAL = null;
 let CT_DETALHE_ID = null;
 let ctBuscaTimer = null;
 
@@ -2676,7 +2695,7 @@ async function carregarContratos(){
         : '<span class="text-green-700 font-semibold">Ativo</span>';
       return `<tr class="rowline border-t">
         <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
-        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}</td>
+        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}${c.anexo_url?' <span title="Contrato anexado">📎</span>':''}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.linhaTxt||'—')}</td>
         <td class="py-2 pr-2">${c.ano}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)}</td>
@@ -2710,6 +2729,9 @@ function abrirFormContrato(id){
     document.getElementById('ctObs').value = '';
     document.getElementById('ctNumero').value = '';
     document.getElementById('ctLinha').value = '';
+    document.getElementById('ctArquivo').value = '';
+    document.getElementById('ctAnexoAtual').innerHTML = '';
+    CT_ANEXO_ATUAL = null;
   }
   ctLinhaMudou();
   document.getElementById('ctProduto').value = '';
@@ -2731,6 +2753,11 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctStatus').value = c.status;
     document.getElementById('ctObs').value = c.observacao||'';
     document.getElementById('ctNumero').value = c.numero||'';
+    document.getElementById('ctArquivo').value = '';
+    CT_ANEXO_ATUAL = c.anexo_url || null;
+    document.getElementById('ctAnexoAtual').innerHTML = c.anexo_url
+      ? `Anexo atual: <a class="brand font-bold underline" href="${esc(c.anexo_url)}" target="_blank" rel="noopener">📎 ver contrato</a> <span class="text-gray-400">— escolha um arquivo acima para substituir.</span>`
+      : '';
     const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
     CT_ITENS_FORM = itens.map(it=>({
       produto_id: it.produto_id,
@@ -2804,13 +2831,19 @@ async function salvarContrato(){
   if(!data_inicio || !data_fim){ toast('Informe o período de vigência.','erro'); return; }
   if(data_fim < data_inicio){ toast('Fim da vigência anterior ao início.','erro'); return; }
   if(!CT_ITENS_FORM.length){ toast('Adicione ao menos um produto.','erro'); return; }
+  const arqInput = document.getElementById('ctArquivo');
+  let anexoUrl = CT_ANEXO_ATUAL;
   try{
+    if(arqInput && arqInput.files && arqInput.files[0]){
+      toast('Enviando anexo…','alerta');
+      anexoUrl = await uploadContrato(arqInput.files[0]);
+    }
     let cid = CT_EDIT_ID;
     if(cid){
-      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, status });
+      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status });
       await apiDELETE('contratos_itens', `contrato_id=eq.${cid}`);
     }else{
-      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, status });
+      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status });
       cid = c.id;
     }
     for(const it of CT_ITENS_FORM)
@@ -2935,6 +2968,7 @@ async function verContrato(id){
       <div class="mb-4">
         <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
         ${c.numero?`<div class="text-sm font-semibold text-gray-700">Contrato nº ${esc(c.numero)}</div>`:''}
+        ${c.anexo_url?`<div class="mt-2"><a class="btn-ghost !py-1.5 text-xs" href="${esc(c.anexo_url)}" target="_blank" rel="noopener">📎 Ver contrato anexado</a></div>`:''}
         <div class="text-sm text-gray-500">Contrato ${c.ano} · ${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)} · ${c.status==='ativo'?'<span class="text-green-700 font-semibold">Ativo</span>':'<span class="text-gray-500 font-semibold">Encerrado</span>'}</div>
         ${c.observacao?`<div class="text-sm text-gray-600 mt-1">${esc(c.observacao)}</div>`:''}
       </div>
