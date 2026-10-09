@@ -2696,7 +2696,7 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctFim').value = String(c.data_fim).slice(0,10);
     document.getElementById('ctStatus').value = c.status;
     document.getElementById('ctObs').value = c.observacao||'';
-    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade)&order=created_at.asc`);
+    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade)`);
     CT_ITENS_FORM = itens.map(it=>({
       produto_id: it.produto_id,
       produto_nome: it.produtos ? it.produtos.nome : '—',
@@ -2834,7 +2834,7 @@ async function verContrato(id){
     const rows = await apiGET(`contratos?id=eq.${id}&select=*,clientes(id,nome)`);
     if(!rows.length){ toast('Contrato não encontrado.','erro'); return; }
     const c = rows[0];
-    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)&order=created_at.asc`);
+    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
     const cons = await ctConsumoAgregado([c.cliente_id], c.ano);
     const mDec = ctMesesDecorridos(c.ano);
     const linhas = itens.map(it=>{
