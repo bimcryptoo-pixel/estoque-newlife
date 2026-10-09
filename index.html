@@ -765,6 +765,7 @@
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo fornecedor</div>
               <input id="fornNome" class="inp text-sm" placeholder="Nome">
+              <input id="fornCnpj" class="inp text-sm" placeholder="CNPJ (opcional)" inputmode="numeric">
               <input id="fornContato" class="inp text-sm" placeholder="Contato (tel/e-mail)">
               <button class="btn-brand !py-2 text-sm" onclick="criarFornecedor()">Cadastrar fornecedor</button>
             </div>
@@ -776,6 +777,7 @@
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Nova transportadora</div>
               <input id="transNome" class="inp text-sm" placeholder="Nome">
+              <input id="transCnpj" class="inp text-sm" placeholder="CNPJ (opcional)" inputmode="numeric">
               <input id="transContato" class="inp text-sm" placeholder="Contato (tel/e-mail)">
               <button class="btn-brand !py-2 text-sm" onclick="criarTransportadora()">Cadastrar transportadora</button>
             </div>
@@ -787,6 +789,7 @@
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo cliente</div>
               <input id="cliNome" class="inp text-sm" placeholder="Nome do cliente">
+              <input id="cliCnpj" class="inp text-sm" placeholder="CNPJ (opcional)" inputmode="numeric">
               <select id="cliTipo" class="inp text-sm">
                 <option value="cliente">cliente</option>
                 <option value="interno">interno (NEW LIFE)</option>
@@ -1945,9 +1948,9 @@ async function carregarCadastros(){
   try{
     const [prods, forns, trans, clis] = await Promise.all([
       apiGET('produtos?select=id,nome,linha,unidade,ativo&order=nome.asc'),
-      apiGET('fornecedores?select=id,nome,contato,ativo&order=nome.asc'),
-      apiGET('transportadoras?select=id,nome,contato,ativo&order=nome.asc'),
-      apiGET('clientes?select=id,nome,tipo,ativo&order=nome.asc'),
+      apiGET('fornecedores?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
+      apiGET('transportadoras?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
+      apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc'),
     ]);
     CAD.produtos = prods; CAD.fornecedores = forns; CAD.transportadoras = trans; CLIENTES = clis;
     ['produtos','fornecedores','transportadoras','clientes'].forEach(t=>renderBuscaCad(t));
@@ -1958,8 +1961,11 @@ function fonteCad(tipo){
 }
 function detalheCad(tipo, item){
   if(tipo==='produtos') return `· ${esc(item.linha)} · ${esc(item.unidade)}`;
-  if(tipo==='clientes') return `· ${esc(item.tipo)}`;
-  return item.contato ? `· ${esc(item.contato)}` : '';
+  const extras = [];
+  if(tipo==='clientes') extras.push(esc(item.tipo));
+  if(item.cnpj) extras.push('CNPJ '+esc(item.cnpj));
+  if(item.contato) extras.push(esc(item.contato));
+  return extras.length ? '· '+extras.join(' · ') : '';
 }
 function buscarCad(tipo, termo){
   CAD['_busca_'+tipo] = termo;
@@ -2003,24 +2009,26 @@ async function toggleCadastro(tabela, id, novoAtivo){
 async function criarFornecedor(){
   const nome=document.getElementById('fornNome').value.trim();
   const contato=document.getElementById('fornContato').value.trim()||null;
+  const cnpj=document.getElementById('fornCnpj').value.trim()||null;
   if(!nome){ toast('Informe o nome do fornecedor.','erro'); return; }
   if(duplicado('fornecedores', nome, 'Fornecedor')) return;
   try{
-    await apiPOST('fornecedores',{nome,contato,ativo:true});
+    await apiPOST('fornecedores',{nome,contato,cnpj,ativo:true});
     toast('Fornecedor cadastrado. ✓','ok');
-    document.getElementById('fornNome').value=''; document.getElementById('fornContato').value='';
+    document.getElementById('fornNome').value=''; document.getElementById('fornContato').value=''; document.getElementById('fornCnpj').value='';
     carregarCadastros();
   }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Fornecedor já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
 async function criarTransportadora(){
   const nome=document.getElementById('transNome').value.trim();
   const contato=document.getElementById('transContato').value.trim()||null;
+  const cnpj=document.getElementById('transCnpj').value.trim()||null;
   if(!nome){ toast('Informe o nome da transportadora.','erro'); return; }
   if(duplicado('transportadoras', nome, 'Transportadora')) return;
   try{
-    await apiPOST('transportadoras',{nome,contato,ativo:true});
+    await apiPOST('transportadoras',{nome,contato,cnpj,ativo:true});
     toast('Transportadora cadastrada. ✓','ok');
-    document.getElementById('transNome').value=''; document.getElementById('transContato').value='';
+    document.getElementById('transNome').value=''; document.getElementById('transContato').value=''; document.getElementById('transCnpj').value='';
     carregarCadastros();
   }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Transportadora já cadastrada.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
@@ -2032,7 +2040,7 @@ let CH = {};
 
 async function carregarClientesCache(){
   try{
-    CLIENTES = await apiGET('clientes?select=id,nome,tipo,ativo&order=nome.asc');
+    CLIENTES = await apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc');
     const ativos = CLIENTES.filter(c=>c.ativo);
     const opts = ativos.map(c=>`<option value="${c.id}">${esc(c.nome)}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
     const selC = document.getElementById('cCliente');
@@ -2048,12 +2056,13 @@ async function carregarClientesCache(){
 async function criarCliente(){
   const nome=document.getElementById('cliNome').value.trim();
   const tipo=document.getElementById('cliTipo').value;
+  const cnpj=document.getElementById('cliCnpj').value.trim()||null;
   if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
   if(duplicado('clientes', nome, 'Cliente')) return;
   try{
-    await apiPOST('clientes',{nome,tipo,ativo:true});
+    await apiPOST('clientes',{nome,tipo,cnpj,ativo:true});
     toast('Cliente cadastrado. ✓','ok');
-    document.getElementById('cliNome').value='';
+    document.getElementById('cliNome').value=''; document.getElementById('cliCnpj').value='';
     await carregarClientesCache();
     carregarCadastros();
   }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Cliente já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
@@ -2919,7 +2928,7 @@ async function verContrato(id){
   document.getElementById('ctDetalhe').innerHTML = '<div class="py-8 text-center text-gray-400">Carregando…</div>';
   window.scrollTo({top:0});
   try{
-    const rows = await apiGET(`contratos?id=eq.${id}&select=*,clientes(id,nome)`);
+    const rows = await apiGET(`contratos?id=eq.${id}&select=*,clientes(id,nome,cnpj)`);
     if(!rows.length){ toast('Contrato não encontrado.','erro'); return; }
     const c = rows[0];
     const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
@@ -2967,6 +2976,7 @@ async function verContrato(id){
     document.getElementById('ctDetalhe').innerHTML = `
       <div class="mb-4">
         <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
+        ${c.clientes&&c.clientes.cnpj?`<div class="text-sm text-gray-500">CNPJ ${esc(c.clientes.cnpj)}</div>`:''}
         ${c.numero?`<div class="text-sm font-semibold text-gray-700">Contrato nº ${esc(c.numero)}</div>`:''}
         ${c.anexo_url?`<div class="mt-2"><a class="btn-ghost !py-1.5 text-xs" href="${esc(c.anexo_url)}" target="_blank" rel="noopener">📎 Ver contrato anexado</a></div>`:''}
         <div class="text-sm text-gray-500">Contrato ${c.ano} · ${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)} · ${c.status==='ativo'?'<span class="text-green-700 font-semibold">Ativo</span>':'<span class="text-gray-500 font-semibold">Encerrado</span>'}</div>
