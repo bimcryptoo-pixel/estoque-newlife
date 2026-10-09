@@ -2695,7 +2695,7 @@ async function carregarContratos(){
         : '<span class="text-green-700 font-semibold">Ativo</span>';
       return `<tr class="rowline border-t">
         <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
-        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}${c.anexo_url?' <span title="Contrato anexado">📎</span>':''}</td>
+        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}${c.anexo_url?` <a href="${esc(c.anexo_url)}" target="_blank" rel="noopener" title="Abrir contrato anexado">📎</a>`:''}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.linhaTxt||'—')}</td>
         <td class="py-2 pr-2">${c.ano}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)}</td>
