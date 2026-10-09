@@ -91,7 +91,7 @@
     main > section:not(#aba-contratos){ display:none !important; }
     #aba-contratos > div:not(#ctDetalheWrap){ display:none !important; }
     #ctDetalheWrap{ display:block !important; }
-    #ctDetalheWrap .card{ max-width:none !important; box-shadow:none !important; border:none !important; padding:0 !important; margin:0 !important; }
+    #ctDetalheWrap .card{ max-width:none !important; box-shadow:none !important; border:none !important; padding:0 !important; margin:0 !important; page-break-inside:avoid; }
     main{ padding:0 !important; }
     .overflow-x-auto{ overflow:visible !important; }
   }
@@ -3066,9 +3066,18 @@ async function verContrato(id){
 
 function editarContratoAtual(){ if(CT_DETALHE_ID) abrirFormContrato(CT_DETALHE_ID); }
 
-/* Impressão do contrato: usa a própria página (CSS @media print) */
+/* Impressão do contrato: usa a própria página (CSS @media print), ajustada para caber em 1 folha A4 */
 function imprimirContrato(){
   if(!CT_PRINT){ toast('Abra o contrato primeiro.','erro'); return; }
+  const el = document.getElementById('ctDetalheWrap');
+  // A4 paisagem com 8mm de margem: altura útil ≈ 194mm ≈ 733px a 96dpi (margem de segurança: 710px)
+  const ALTURA_UTIL_PX = 710;
+  const h = el.scrollHeight || el.offsetHeight;
+  const zoom = h > ALTURA_UTIL_PX ? ALTURA_UTIL_PX / h : 1;
+  el.style.zoom = zoom;
+  const restaurar = () => { el.style.zoom = ''; window.removeEventListener('afterprint', restaurar); };
+  window.addEventListener('afterprint', restaurar);
+  setTimeout(restaurar, 10000); // segurança caso o afterprint não dispare
   window.print();
 }
 
