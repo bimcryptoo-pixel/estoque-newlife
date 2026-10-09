@@ -75,6 +75,26 @@
   .rowline{ border-bottom:1px solid var(--border-soft); }
   .rowline:last-child{ border-bottom:none; }
   @media (min-width:768px){ #toast{ bottom:2rem; } }
+  /* ===== Impressão do detalhe do contrato: sai igual à tela ===== */
+  @media print{
+    @page{ size:A4 landscape; margin:8mm; }
+    :root{
+      --bg:#ffffff !important; --surface:#ffffff !important; --surface2:#f9fafb !important;
+      --text:#111827 !important; --muted:#6b7280 !important; --faint:#9ca3af !important;
+      --border:#e5e7eb !important; --border-soft:#f1f1f1 !important;
+      --row-alt:rgba(0,0,0,.028) !important; --row-hover:transparent !important;
+      --input-bg:#ffffff !important; --input-border:#d1d5db !important;
+    }
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    body{ background:#fff !important; }
+    #app > header, nav, .no-print, #toast{ display:none !important; }
+    main > section:not(#aba-contratos){ display:none !important; }
+    #aba-contratos > div:not(#ctDetalheWrap){ display:none !important; }
+    #ctDetalheWrap{ display:block !important; }
+    #ctDetalheWrap .card{ max-width:none !important; box-shadow:none !important; border:none !important; padding:0 !important; margin:0 !important; }
+    main{ padding:0 !important; }
+    .overflow-x-auto{ overflow:visible !important; }
+  }
 </style>
 </head>
 <body class="bg-gray-100 text-gray-900 min-h-screen">
@@ -727,7 +747,7 @@
         <!-- DETALHE -->
         <div id="ctDetalheWrap" class="hidden">
           <div class="card p-4 md:p-6 max-w-6xl">
-            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2 no-print">
               <button class="btn-ghost !py-1.5 text-xs" onclick="voltarListaContratos()">← Voltar à lista</button>
               <div class="flex gap-2 flex-wrap">
                 <button class="btn-ghost !py-1.5 text-xs" onclick="imprimirContrato()">🖨️ Imprimir / PDF</button>
@@ -3046,101 +3066,10 @@ async function verContrato(id){
 
 function editarContratoAtual(){ if(CT_DETALHE_ID) abrirFormContrato(CT_DETALHE_ID); }
 
-/* Relatório do contrato para impressão / PDF (reuniões) */
+/* Impressão do contrato: usa a própria página (CSS @media print) */
 function imprimirContrato(){
-  const P = CT_PRINT;
-  if(!P){ toast('Abra o contrato primeiro.','erro'); return; }
-  const { c, linhas, mDec, totContratado, totRealizado, pctGeral, projGeral, saldo, varIdealTxt } = P;
-  const cli = c.clientes || {};
-  const agora = new Date();
-  const dtEmissao = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  const baseMensal = totContratado / 12;
-  const statusTxt = c.status === 'ativo' ? 'Ativo' : 'Encerrado';
-  const statusRot = { acima:'Acima', atencao:'Atenção', dentro:'Dentro', futuro:'Futura' };
-
-  let mesRows = '';
-  for(let m = 0; m < 12; m++){
-    const v = linhas.reduce((s, l) => s + l.meses[m], 0);
-    const pct = baseMensal > 0 && v > 0 ? (v - baseMensal) / baseMensal * 100 : null;
-    const pctTxt = pct === null ? '–' : (pct > 0 ? '+' : '') + pct.toFixed(0) + '%';
-    mesRows += `<tr><td class="cap">${MESES_PT[m]}</td><td class="num">${v || '–'}</td><td class="num">${pctTxt}</td></tr>`;
-  }
-  const thMesesPrint = MESES_PT.map(m => `<th>${m}</th>`).join('');
-  const prodRows = linhas.map(l => `
-    <tr>
-      <td>${esc(l.it.produtos ? l.it.produtos.nome : '—')}</td>
-      <td class="num">${fmtQtd(l.qtdAnual)}</td>
-      <td class="num">${fmtQtd(l.baseMensal)}</td>
-      ${l.meses.map(v => `<td class="num">${v || '–'}</td>`).join('')}
-      <td class="num b">${fmtQtd(l.total)}</td>
-      <td class="num b">${l.pct.toFixed(0)}%</td>
-      <td>${statusRot[l.status] || l.status}</td>
-    </tr>`).join('') || `<tr><td colspan="18" style="text-align:center;color:#999">Sem produtos neste contrato.</td></tr>`;
-
-  const kpis = [
-    ['Contratado anual', fmtQtd(totContratado) + ' un'],
-    ['Pedido ideal/mês', fmtQtd(baseMensal) + ' un'],
-    ['Ideal × realizado', varIdealTxt],
-    ['Realizado no ano', fmtQtd(totRealizado) + ' un'],
-    ['% executado', pctGeral.toFixed(1).replace('.', ',') + '%'],
-    ['Saldo restante', fmtQtd(saldo) + ' un'],
-    ['Projeção 12 meses', fmtQtd(projGeral) + ' un'],
-  ];
-  const kpiCells = kpis.map(([k, v]) => `<td><div class="kpi-v">${v}</div><div class="kpi-k">${k}</div></td>`).join('');
-
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8">
-<title>Relatório de Contrato — ${esc(cli.nome || '')}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; font-size: 12px; }
-  .topo { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #b91c1c; padding-bottom: 12px; margin-bottom: 16px; }
-  .marca { font-size: 20px; font-weight: 900; color: #b91c1c; letter-spacing: 1px; }
-  .marca small { display: block; font-size: 10px; color: #666; font-weight: 400; letter-spacing: 2px; }
-  .emissao { text-align: right; font-size: 11px; color: #555; }
-  h1 { font-size: 22px; margin: 0 0 2px; }
-  .sub { color: #555; margin-bottom: 12px; }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #b91c1c; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin: 20px 0 8px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 11px; }
-  th { background: #f5f5f5; text-transform: uppercase; font-size: 10px; }
-  td.num, th.num { text-align: right; }
-  td.num.b { font-weight: 700; }
-  .cap { text-transform: capitalize; }
-  .kpis td { border: 1px solid #ddd; padding: 10px; text-align: center; width: ${100 / kpis.length}%; }
-  .kpi-v { font-size: 16px; font-weight: 800; }
-  .kpi-k { font-size: 10px; color: #666; margin-top: 2px; }
-  .analise p { margin: 4px 0; }
-  .obs { background: #fafafa; border: 1px solid #eee; padding: 8px 10px; border-radius: 4px; }
-  footer { margin-top: 24px; border-top: 1px solid #ddd; padding-top: 8px; font-size: 10px; color: #888; display: flex; justify-content: space-between; }
-  @media print { body { margin: 0; } }
-</style></head><body>
-  <div class="topo">
-    <div class="marca">NEW LIFE<small>DIAGNÓSTICO</small></div>
-    <div class="emissao"><b>Relatório de Contrato</b><br>Emitido em ${dtEmissao}</div>
-  </div>
-  <h1>${esc(cli.nome || '—')}</h1>
-  <div class="sub">
-    ${cli.cnpj ? `CNPJ ${esc(cli.cnpj)}<br>` : ''}
-    ${c.numero ? `Contrato nº ${esc(c.numero)} · ` : ''}Contrato ${c.ano} · ${fmtData(c.data_inicio)} a ${fmtData(c.data_fim)} · <b>${statusTxt}</b>
-  </div>
-  ${c.observacao ? `<div class="obs">${esc(c.observacao)}</div>` : ''}
-  <h2>Indicadores</h2>
-  <table class="kpis"><tr>${kpiCells}</tr></table>
-  <h2>Análise</h2>
-  <div class="analise">${ctAnalise(c, linhas, mDec)}</div>
-  <h2>Realizado por mês</h2>
-  <table><thead><tr><th>Mês</th><th class="num">Realizado</th><th class="num">% vs ideal</th></tr></thead><tbody>${mesRows}</tbody></table>
-  <h2>Produtos do contrato</h2>
-  <table><thead><tr><th>Produto</th><th class="num">Contratado</th><th class="num">Base/mês</th>${thMesesPrint}<th class="num">Total</th><th class="num">%</th><th>Status</th></tr></thead><tbody>${prodRows}</tbody></table>
-  <footer><span>Sistema de Estoque NEW LIFE</span><span>Página gerada em ${dtEmissao}</span></footer>
-  <script>window.onload = function(){ window.print(); };<\/script>
-</body></html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){ toast('Permita pop-ups para gerar o PDF.','erro'); return; }
-  w.document.write(html);
-  w.document.close();
+  if(!CT_PRINT){ toast('Abra o contrato primeiro.','erro'); return; }
+  window.print();
 }
 
 async function alternarStatusContrato(){
