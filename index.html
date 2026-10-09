@@ -633,9 +633,9 @@
             <div class="overflow-x-auto -mx-4 px-4">
               <table class="w-full text-sm">
                 <thead><tr class="text-left text-xs text-gray-500 uppercase">
-                  <th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Ano</th><th class="py-2 pr-2">Período</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2">% executado</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
+                  <th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Linha</th><th class="py-2 pr-2">Ano</th><th class="py-2 pr-2">Período</th><th class="py-2 pr-2 text-right">Itens</th><th class="py-2 pr-2">% executado</th><th class="py-2 pr-2">Status</th><th class="py-2 pr-2"></th>
                 </tr></thead>
-                <tbody id="tbodyContratos"><tr><td colspan="7" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+                <tbody id="tbodyContratos"><tr><td colspan="8" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -664,6 +664,10 @@
                 <select id="ctStatus" class="inp text-sm"><option value="ativo">Ativo</option><option value="encerrado">Encerrado</option></select>
               </div>
               <div>
+                <label class="lbl">Linha</label>
+                <select id="ctLinha" class="inp text-sm" onchange="ctLinhaMudou()"></select>
+              </div>
+              <div>
                 <label class="lbl">Início da vigência *</label>
                 <input id="ctInicio" type="date" class="inp text-sm">
               </div>
@@ -678,6 +682,7 @@
             </div>
 
             <div class="text-xs font-bold text-gray-500 uppercase mb-2">Produtos contratados</div>
+            <datalist id="dlProdutosCt"></datalist>
             <div class="border rounded-xl p-3 mb-3 bg-gray-50">
               <div class="grid grid-cols-2 md:grid-cols-12 gap-2">
                 <div class="col-span-2 md:col-span-7">
@@ -2619,20 +2624,23 @@ async function carregarContratos(){
     const cliIds = [...new Set(contratos.map(c=>c.cliente_id))];
     const itensPorCt = {};
     if(ctIds.length){
-      const itens = await apiGET(`contratos_itens?contrato_id=in.(${ctIds.join(',')})&select=contrato_id,produto_id,qtd_anual`);
+      const itens = await apiGET(`contratos_itens?contrato_id=in.(${ctIds.join(',')})&select=contrato_id,produto_id,qtd_anual,produtos(linha)`);
       itens.forEach(it=>{
-        const e = itensPorCt[it.contrato_id] || (itensPorCt[it.contrato_id] = { prods:new Set(), contratado:0, n:0 });
+        const e = itensPorCt[it.contrato_id] || (itensPorCt[it.contrato_id] = { prods:new Set(), linhas:new Set(), contratado:0, n:0 });
         e.prods.add(it.produto_id); e.contratado += Number(it.qtd_anual); e.n++;
+        if(it.produtos && it.produtos.linha) e.linhas.add(it.produtos.linha);
       });
     }
     const cons = await ctConsumoAgregado(cliIds, ano);
     const mDec = ctMesesDecorridos(ano);
     CT_LISTA = contratos.map(c=>{
-      const e = itensPorCt[c.id] || { prods:new Set(), contratado:0, n:0 };
+      const e = itensPorCt[c.id] || { prods:new Set(), linhas:new Set(), contratado:0, n:0 };
       let realizado = 0;
       e.prods.forEach(pid=>{ for(let m=1;m<=12;m++) realizado += cons[c.cliente_id+'|'+pid+'|'+m]||0; });
       const pct = e.contratado>0 ? realizado/e.contratado*100 : 0;
-      return { ...c, contratado:e.contratado, realizado, pct, nItens:e.n, sit:ctStatusAgregado(e.contratado, realizado, mDec) };
+      const linhasArr = [...e.linhas];
+      const linhaTxt = linhasArr.length===1 ? linhasArr[0] : linhasArr.length>1 ? 'Mistas' : '—';
+      return { ...c, contratado:e.contratado, realizado, pct, nItens:e.n, linhaTxt, sit:ctStatusAgregado(e.contratado, realizado, mDec) };
     }).filter(c=> !busca || ((c.clientes&&c.clientes.nome)||'').toLowerCase().includes(busca));
 
     const ativos = CT_LISTA.filter(c=>c.status==='ativo');
@@ -2648,6 +2656,7 @@ async function carregarContratos(){
         : '<span class="text-green-700 font-semibold">Ativo</span>';
       return `<tr class="rowline border-t">
         <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
+        <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.linhaTxt||'—')}</td>
         <td class="py-2 pr-2">${c.ano}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${fmtData(c.data_inicio)} – ${fmtData(c.data_fim)}</td>
         <td class="py-2 pr-2 text-right">${c.nItens}</td>
@@ -2657,7 +2666,7 @@ async function carregarContratos(){
         <td class="py-2 pr-2">${rotSt}</td>
         <td class="py-2 text-right"><button class="btn-ghost !py-1 !px-2 text-xs" onclick="verContrato('${c.id}')">Abrir</button></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="7" class="py-4 text-gray-400 text-center">Nenhum contrato encontrado.</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="py-4 text-gray-400 text-center">Nenhum contrato encontrado.</td></tr>';
   }catch(e){ toast('Erro ao carregar contratos: '+e.message,'erro'); }
 }
 
@@ -2672,12 +2681,15 @@ function abrirFormContrato(id){
   const cliAtivos = (CLIENTES||[]).filter(c=>c.ativo && c.tipo==='cliente');
   document.getElementById('ctCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')
     || '<option value="">— cadastre um cliente —</option>';
+  ctPreencherLinhas();
   if(!id){
     document.getElementById('ctAno').value = new Date().getFullYear();
     ctAnoMudou();
     document.getElementById('ctStatus').value = 'ativo';
     document.getElementById('ctObs').value = '';
+    document.getElementById('ctLinha').value = '';
   }
+  ctLinhaMudou();
   document.getElementById('ctProduto').value = '';
   document.getElementById('ctQtd').value = '';
   if(id) carregarContratoNoForm(id);
@@ -2696,13 +2708,17 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctFim').value = String(c.data_fim).slice(0,10);
     document.getElementById('ctStatus').value = c.status;
     document.getElementById('ctObs').value = c.observacao||'';
-    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade)`);
+    const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
     CT_ITENS_FORM = itens.map(it=>({
       produto_id: it.produto_id,
       produto_nome: it.produtos ? it.produtos.nome : '—',
       unidade: (it.produtos && it.produtos.unidade) || 'un',
+      linha: it.produtos ? it.produtos.linha : null,
       qtd_anual: Number(it.qtd_anual)
     }));
+    const linhasItens = [...new Set(CT_ITENS_FORM.map(i=>i.linha).filter(Boolean))];
+    document.getElementById('ctLinha').value = linhasItens.length===1 ? linhasItens[0] : '';
+    ctLinhaMudou();
     ctRenderItens();
   }catch(e){ toast('Erro ao carregar contrato: '+e.message,'erro'); }
 }
@@ -2715,13 +2731,28 @@ function ctAnoMudou(){
   }
 }
 
+/* ---------- linha do contrato: filtra os produtos do formulário ---------- */
+function ctPreencherLinhas(){
+  const linhas = [...new Set((cacheProdutos||[]).map(p=>p.linha).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  document.getElementById('ctLinha').innerHTML =
+    '<option value="">Todas as linhas</option>' + linhas.map(l=>`<option value="${esc(l)}">${esc(l)}</option>`).join('');
+}
+function ctLinhaMudou(){
+  const lin = document.getElementById('ctLinha').value;
+  const lista = (cacheProdutos||[]).filter(p=>!lin || p.linha===lin);
+  document.getElementById('dlProdutosCt').innerHTML = lista.map(p=>`<option value="${esc(p.nome)}">`).join('');
+  document.getElementById('ctProduto').setAttribute('list', lin ? 'dlProdutosCt' : 'dlProdutos');
+}
+
 function ctAdicionarItem(){
   const p = resolverProduto(document.getElementById('ctProduto').value);
   const qtd = parseFloat(String(document.getElementById('ctQtd').value).replace(',','.'));
   if(!p){ toast('Escolha um produto da lista.','erro'); return; }
   if(!qtd || qtd<=0){ toast('Informe a quantidade anual contratada.','erro'); return; }
   if(CT_ITENS_FORM.some(i=>i.produto_id===p.id)){ toast('⚠️ Produto já adicionado ao contrato.','alerta'); return; }
-  CT_ITENS_FORM.push({ produto_id:p.id, produto_nome:p.nome, unidade:p.unidade||'un', qtd_anual:qtd });
+  const linSel = document.getElementById('ctLinha').value;
+  if(linSel && p.linha!==linSel){ toast(`Produto da linha "${p.linha||'—'}" — fora da linha selecionada (${linSel}).`,'erro'); return; }
+  CT_ITENS_FORM.push({ produto_id:p.id, produto_nome:p.nome, unidade:p.unidade||'un', linha:p.linha||null, qtd_anual:qtd });
   document.getElementById('ctProduto').value='';
   document.getElementById('ctQtd').value='';
   ctRenderItens();
