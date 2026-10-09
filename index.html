@@ -2580,6 +2580,22 @@ function ctMesesDecorridos(ano){
   return 0;
 }
 
+/* meses de vigência decorridos (meses completos desde data_inicio) */
+function ctMesesVigencia(data_inicio, data_fim){
+  const ini = new Date(String(data_inicio).slice(0,10)+'T00:00:00');
+  const fim = new Date(String(data_fim).slice(0,10)+'T00:00:00');
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  if(hoje <= ini) return 0;
+  if(hoje > fim){
+    let m = (fim.getFullYear()-ini.getFullYear())*12 + (fim.getMonth()-ini.getMonth());
+    if(fim.getDate() >= ini.getDate()) m++;
+    return Math.min(12, Math.max(0, m));
+  }
+  let m = (hoje.getFullYear()-ini.getFullYear())*12 + (hoje.getMonth()-ini.getMonth());
+  if(hoje.getDate() < ini.getDate()) m--;
+  return Math.max(0, m);
+}
+
 /* soma consumo -> { "clienteId|produtoId|mes": qtd } (com paginação) */
 async function ctConsumoAgregado(clienteIds, ano){
   const map = {};
@@ -2867,7 +2883,7 @@ async function verContrato(id){
     const c = rows[0];
     const itens = await apiGET(`contratos_itens?contrato_id=eq.${id}&select=*,produtos(id,nome,unidade,linha)`);
     const cons = await ctConsumoAgregado([c.cliente_id], c.ano);
-    const mDec = ctMesesDecorridos(c.ano);
+    const mDec = ctMesesVigencia(c.data_inicio, c.data_fim);
     const linhas = itens.map(it=>{
       const meses = [];
       for(let m=1;m<=12;m++) meses.push(cons[c.cliente_id+'|'+it.produto_id+'|'+m]||0);
