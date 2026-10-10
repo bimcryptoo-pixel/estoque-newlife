@@ -23,14 +23,6 @@
     --row-alt:rgba(255,255,255,.03); --row-hover:rgba(229,72,77,.13);
     --input-bg:#0f1a30; --input-border:#2a3c5f;
   }
-  [data-theme="azul"]{
-    --brand:#1d4ed8; --brand-dark:#1e40af;
-    --bg:#e9eef7; --surface:#ffffff; --surface2:#f2f6fd;
-    --text:#0f1c33; --muted:#5b6b85; --faint:#8ba0bd;
-    --border:#d7e1f2; --border-soft:#e9effa;
-    --row-alt:rgba(29,78,216,.045); --row-hover:rgba(29,78,216,.1);
-    --input-bg:#ffffff; --input-border:#c3d2ea;
-  }
   body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
   #app > header{ background:var(--surface); border-color:var(--border); }
   /* tabelas: linhas alternadas + destaque onde o mouse está */
@@ -41,7 +33,7 @@
   .rowline:hover{ background:var(--row-hover); }
   /* ajustes de utilitários do Tailwind por tema */
   [data-theme="escuro"] .bg-white{ background-color:var(--surface) !important; }
-  [data-theme="escuro"] .bg-gray-100, [data-theme="azul"] .bg-gray-100{ background-color:var(--bg) !important; }
+  [data-theme="escuro"] .bg-gray-100{ background-color:var(--bg) !important; }
   [data-theme="escuro"] .bg-gray-50{ background-color:var(--surface2) !important; }
   [data-theme="escuro"] .text-gray-900, [data-theme="escuro"] .text-gray-800{ color:var(--text) !important; }
   [data-theme="escuro"] .text-gray-700{ color:#cfd8e6 !important; }
@@ -149,7 +141,6 @@
         <select id="selTema" class="inp !w-auto !py-1.5 !px-2 !text-xs" onchange="aplicarTema(this.value)" title="Tema do sistema">
           <option value="claro">☀️ Claro</option>
           <option value="escuro">🌙 Escuro</option>
-          <option value="azul">💧 Azul</option>
         </select>
         <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
         <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
@@ -902,7 +893,7 @@ function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigi
 function corMarca(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#C1272D'; }
 function corMarcaEscura(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand-dark').trim() || '#9c1e23'; }
 function aplicarTema(t){
-  if(!['claro','escuro','azul'].includes(t)) t='claro';
+  if(!['claro','escuro'].includes(t)) t='claro';
   document.documentElement.setAttribute('data-theme', t);
   try{ localStorage.setItem('nl_tema', t); }catch(e){}
   const s=document.getElementById('selTema'); if(s) s.value=t;
