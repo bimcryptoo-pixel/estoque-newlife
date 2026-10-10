@@ -692,6 +692,10 @@
                 <input id="ctNumero" type="text" class="inp text-sm" placeholder="Ex.: 042/2026">
               </div>
               <div>
+                <label class="lbl">Valor do teste (R$)</label>
+                <input id="ctValorTeste" type="text" inputmode="decimal" class="inp text-sm" placeholder="7,4877">
+              </div>
+              <div>
                 <label class="lbl">Início da vigência *</label>
                 <input id="ctInicio" type="date" class="inp text-sm">
               </div>
@@ -2759,6 +2763,7 @@ function abrirFormContrato(id){
     document.getElementById('ctStatus').value = 'ativo';
     document.getElementById('ctObs').value = '';
     document.getElementById('ctNumero').value = '';
+    document.getElementById('ctValorTeste').value = '7,4877';
     document.getElementById('ctLinha').value = '';
     document.getElementById('ctArquivo').value = '';
     document.getElementById('ctAnexoAtual').innerHTML = '';
@@ -2784,6 +2789,7 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctStatus').value = c.status;
     document.getElementById('ctObs').value = c.observacao||'';
     document.getElementById('ctNumero').value = c.numero||'';
+    document.getElementById('ctValorTeste').value = (c.valor_teste!=null && c.valor_teste!=='') ? String(c.valor_teste).replace('.',',') : '7,4877';
     document.getElementById('ctArquivo').value = '';
     CT_ANEXO_ATUAL = c.anexo_url || null;
     document.getElementById('ctAnexoAtual').innerHTML = c.anexo_url
@@ -2857,6 +2863,9 @@ async function salvarContrato(){
   const observacao = document.getElementById('ctObs').value.trim()||null;
   const numero = document.getElementById('ctNumero').value.trim()||null;
   const status = document.getElementById('ctStatus').value;
+  const vtRaw = document.getElementById('ctValorTeste').value.trim();
+  const valor_teste = vtRaw==='' ? null : parseFloat(vtRaw.replace(/\./g,'').replace(',','.'));
+  if(vtRaw!=='' && !(valor_teste>0)){ toast('Valor do teste inválido.','erro'); return; }
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!(ano>=2000 && ano<=2100)){ toast('Informe um ano válido.','erro'); return; }
   if(!data_inicio || !data_fim){ toast('Informe o período de vigência.','erro'); return; }
@@ -2871,10 +2880,10 @@ async function salvarContrato(){
     }
     let cid = CT_EDIT_ID;
     if(cid){
-      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status });
+      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste });
       await apiDELETE('contratos_itens', `contrato_id=eq.${cid}`);
     }else{
-      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status });
+      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste });
       cid = c.id;
     }
     for(const it of CT_ITENS_FORM)
@@ -2982,6 +2991,22 @@ async function verContrato(id){
     const varIdealTxt = baseAcum>0 ? (varIdeal>0?'+':'')+varIdeal.toFixed(1).replace('.',',')+'%' : '—';
     const varIdealCor = baseAcum>0 ? (varIdeal<0?'text-red-700':varIdeal>0?'text-green-700':'') : '';
 
+    /* 💰 Valor do teste × consumo: relação inversa — consumo abaixo do ideal eleva o teste efetivo; acima, reduz */
+    const TESTES_POR_KIT = 450;
+    const VALOR_TESTE_PADRAO = 7.4877;
+    const valorTesteCt = Number(c.valor_teste)>0 ? Number(c.valor_teste) : VALOR_TESTE_PADRAO;
+    const testesReal = Math.round(totRealizado*TESTES_POR_KIT);
+    const testesBase = Math.round(baseAcum*TESTES_POR_KIT);
+    let testeEfetivoTxt = '—', testeVarTxt = '—', testeCor = '';
+    if(testesReal>0 && testesBase>0){
+      const ef = valorTesteCt*testesBase/testesReal;
+      const vv = (valorTesteCt-ef)/valorTesteCt*100; /* invertida: + = consumo acima do ideal (vai aditivar, lucrativo) */
+      testeEfetivoTxt = 'R$ '+ef.toFixed(4).replace('.',',');
+      testeVarTxt = (vv>0?'+':'')+vv.toFixed(1).replace('.',',')+'%';
+      testeCor = vv>0 ? 'text-green-700' : vv<0 ? 'text-red-700' : '';
+    }
+    const fmtInt = n => Number(n).toLocaleString('pt-BR');
+
     document.getElementById('ctBtnStatus').textContent = c.status==='ativo' ? '🔒 Encerrar' : '🔓 Reabrir';
 
     const thMeses = MESES_PT.map(m=>`<th class="py-2 px-1 text-center text-xs text-gray-500 uppercase">${m}</th>`).join('');
@@ -3016,6 +3041,16 @@ async function verContrato(id){
       <div class="border rounded-xl p-4 mb-4 bg-gray-50">
         <div class="font-bold mb-2">🔎 Análise do contrato</div>
         <div class="text-sm space-y-1 text-gray-700">${ctAnalise(c, linhas, mDec)}</div>
+      </div>
+      <div class="border rounded-xl p-4 mb-4">
+        <div class="font-bold mb-2">💰 Valor do teste × consumo</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div><div class="text-xs text-gray-500 uppercase">Teste no contrato</div><div class="font-bold text-lg">R$ ${valorTesteCt.toFixed(4).replace('.',',')}</div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Testes realizados</div><div class="font-bold text-lg">${fmtInt(testesReal)}<span class="text-xs font-normal text-gray-500"> de ${fmtInt(testesBase)} da base</span></div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Teste efetivo</div><div class="font-bold text-lg ${testeCor}">${testeEfetivoTxt}</div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Variação</div><div class="font-bold text-lg ${testeCor}">${testeVarTxt}</div></div>
+        </div>
+        <div class="text-xs text-gray-500 mt-2"><b>+%</b> = consumo acima do ideal: o teste efetivo cai e o hospital deve precisar de aditivo antes do término (lucrativo). <b>−%</b> = consumo abaixo do ideal: o teste efetivo sobe.</div>
       </div>
       <div class="border rounded-xl p-4 mb-4">
         <div class="font-bold mb-2">📊 Realizado × base contratual por mês</div>
