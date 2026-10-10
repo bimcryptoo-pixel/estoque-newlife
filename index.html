@@ -16,12 +16,12 @@
     --input-bg:#ffffff; --input-border:#d1d5db;
   }
   [data-theme="escuro"]{
-    --brand:#e5484d; --brand-dark:#c1272d;
-    --bg:#0d1526; --surface:#142038; --surface2:#0f1a30;
-    --text:#e8edf5; --muted:#9aa7bd; --faint:#66748e;
-    --border:#233353; --border-soft:#1b2946;
-    --row-alt:rgba(255,255,255,.03); --row-hover:rgba(229,72,77,.13);
-    --input-bg:#0f1a30; --input-border:#2a3c5f;
+    --brand:#f0434d; --brand-dark:#d21f2d;
+    --bg:#09090b; --surface:#111114; --surface2:#18181c;
+    --text:#f4f4f5; --muted:#a1a1aa; --faint:#82828c;
+    --border:#26262b; --border-soft:#1b1b1f;
+    --row-alt:rgba(255,255,255,.028); --row-hover:rgba(240,67,77,.13);
+    --input-bg:#111114; --input-border:#3f3f46;
   }
   body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
   #app > header{ background:var(--surface); border-color:var(--border); }
@@ -35,13 +35,27 @@
   [data-theme="escuro"] .bg-white{ background-color:var(--surface) !important; }
   [data-theme="escuro"] .bg-gray-100{ background-color:var(--bg) !important; }
   [data-theme="escuro"] .bg-gray-50{ background-color:var(--surface2) !important; }
-  [data-theme="escuro"] .text-gray-900, [data-theme="escuro"] .text-gray-800{ color:var(--text) !important; }
-  [data-theme="escuro"] .text-gray-700{ color:#cfd8e6 !important; }
+  [data-theme="escuro"] .bg-gray-200{ background-color:var(--border) !important; }
+  [data-theme="escuro"] .bg-gray-800{ background-color:#27272a !important; }
+  [data-theme="escuro"] .text-gray-900, [data-theme="escuro"] .text-gray-800, [data-theme="escuro"] .text-gray-700, [data-theme="escuro"] .text-gray-300{ color:var(--text) !important; }
   [data-theme="escuro"] .text-gray-600, [data-theme="escuro"] .text-gray-500{ color:var(--muted) !important; }
   [data-theme="escuro"] .text-gray-400{ color:var(--faint) !important; }
+  /* semânticas no dark: tons claros e legíveis sobre o preto */
+  [data-theme="escuro"] .text-red-800, [data-theme="escuro"] .text-red-700, [data-theme="escuro"] .text-red-600{ color:#f87171 !important; }
+  [data-theme="escuro"] .text-green-700, [data-theme="escuro"] .text-emerald-700, [data-theme="escuro"] .text-emerald-600{ color:#4ade80 !important; }
+  [data-theme="escuro"] .text-amber-700, [data-theme="escuro"] .text-amber-600, [data-theme="escuro"] .text-yellow-800{ color:#fbbf24 !important; }
+  [data-theme="escuro"] .text-blue-600{ color:#60a5fa !important; }
+  /* fundos tintados: translúcidos no dark */
+  [data-theme="escuro"] .bg-red-50{ background-color:rgba(248,113,113,.10) !important; }
+  [data-theme="escuro"] .bg-red-100{ background-color:rgba(248,113,113,.16) !important; }
+  [data-theme="escuro"] .bg-emerald-100{ background-color:rgba(74,222,128,.14) !important; }
+  [data-theme="escuro"] .bg-amber-100{ background-color:rgba(251,191,36,.14) !important; }
+  [data-theme="escuro"] .bg-yellow-50{ background-color:rgba(250,204,21,.10) !important; }
   [data-theme="escuro"] .border-gray-200{ border-color:var(--border) !important; }
+  [data-theme="escuro"] .border-yellow-300{ border-color:rgba(250,204,21,.40) !important; }
+  [data-theme="escuro"] .border-red-300, [data-theme="escuro"] .border-red-200{ border-color:rgba(248,113,113,.40) !important; }
   [data-theme="escuro"] .hover\:bg-white:hover{ background-color:var(--surface2) !important; }
-  [data-theme="escuro"] select.inp option{ background-color:var(--surface); }
+  [data-theme="escuro"] select.inp option{ background-color:var(--surface); color:var(--text); }
   .brand{ color:var(--brand); }
   .bg-brand{ background:var(--brand); }
   .bg-brand-dark{ background:var(--brand-dark); }
@@ -56,7 +70,26 @@
   .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; }
   .btn-brand:active{ background:var(--brand-dark); }
   .btn-ghost{ border:1px solid var(--input-border); border-radius:0.7rem; padding:0.6rem 0.9rem; font-weight:600; font-size:.85rem; color:var(--text); background:transparent; }
-  .badge{ font-size:.68rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; }
+  .badge{ font-size:.68rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; white-space:nowrap; }
+  /* badges de status/prioridade (pedidos): tons claros no claro, translúcidos no dark */
+  .st-rascunho, .st-baixa{ background:#f3f4f6; color:#374151; }
+  .st-solicitado, .st-alta{ background:#fef3c7; color:#92400e; }
+  .st-aprovado, .st-normal{ background:#dbeafe; color:#1e40af; }
+  .st-em_separacao{ background:#ede9fe; color:#5b21b6; }
+  .st-pronto{ background:#ccfbf1; color:#0f766e; }
+  .st-faturado{ background:#e0e7ff; color:#3730a3; }
+  .st-concluido{ background:#dcfce7; color:#166534; }
+  .st-cancelado, .st-urgente{ background:#fee2e2; color:#991b1b; }
+  [data-theme="escuro"] .st-rascunho, [data-theme="escuro"] .st-baixa{ background:rgba(161,161,170,.14); color:#d4d4d8; }
+  [data-theme="escuro"] .st-solicitado, [data-theme="escuro"] .st-alta{ background:rgba(251,191,36,.14); color:#fbbf24; }
+  [data-theme="escuro"] .st-aprovado, [data-theme="escuro"] .st-normal{ background:rgba(96,165,250,.14); color:#60a5fa; }
+  [data-theme="escuro"] .st-em_separacao, [data-theme="escuro"] .st-faturado{ background:rgba(167,139,250,.16); color:#a78bfa; }
+  [data-theme="escuro"] .st-pronto{ background:rgba(45,212,191,.14); color:#2dd4bf; }
+  [data-theme="escuro"] .st-concluido{ background:rgba(74,222,128,.14); color:#4ade80; }
+  [data-theme="escuro"] .st-cancelado, [data-theme="escuro"] .st-urgente{ background:rgba(248,113,113,.14); color:#f87171; }
+  /* urgência de vencimento */
+  [data-theme="escuro"] .urg-60{ background:rgba(251,146,60,.14); color:#fdba74; border-color:rgba(251,146,60,.45); }
+  [data-theme="escuro"] .urg-90{ background:rgba(250,204,21,.12); color:#fde047; border-color:rgba(250,204,21,.45); }
   #toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:5.5rem; z-index:90; max-width:92vw; }
   .urg-vencido{ background:#7f1d1d; color:#fff; }
   .urg-30{ background:#fecaca; color:#7f1d1d; border:1px solid #fca5a5; }
@@ -79,6 +112,11 @@
     }
     *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     body{ background:#fff !important; }
+    /* impressão sempre em cores claras, mesmo com o tema escuro ativo */
+    [data-theme="escuro"] .text-red-800, [data-theme="escuro"] .text-red-700, [data-theme="escuro"] .text-red-600{ color:#b91c1c !important; }
+    [data-theme="escuro"] .text-green-700, [data-theme="escuro"] .text-emerald-700, [data-theme="escuro"] .text-emerald-600{ color:#15803d !important; }
+    [data-theme="escuro"] .text-amber-700, [data-theme="escuro"] .text-amber-600, [data-theme="escuro"] .text-yellow-800{ color:#b45309 !important; }
+    [data-theme="escuro"] .text-blue-600{ color:#2563eb !important; }
     #app > header, nav, .no-print, #toast{ display:none !important; }
     main > section:not(#aba-contratos){ display:none !important; }
     #aba-contratos > div:not(#ctDetalheWrap){ display:none !important; }
@@ -899,7 +937,7 @@ function aplicarTema(t){
   const s=document.getElementById('selTema'); if(s) s.value=t;
   if(typeof Chart!=='undefined'){
     const escuro = t==='escuro';
-    Chart.defaults.color = escuro ? '#9aa7bd' : '#666';
+    Chart.defaults.color = escuro ? '#a1a1aa' : '#666';
     Chart.defaults.borderColor = escuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
     Object.values(CH).forEach(ch=>{ try{ ch.data.datasets[0].backgroundColor=corMarca(); ch.data.datasets[0].hoverBackgroundColor=corMarcaEscura(); ch.update(); }catch(e){} });
   }
@@ -2193,20 +2231,20 @@ async function lancarConsumo(){
 
 /* ================= PEDIDOS AO ESTOQUE ================= */
 const PED_STATUS = {
-  rascunho:    { t:'📝 Rascunho',     c:'background:#f3f4f6;color:#374151;' },
-  solicitado:  { t:'📨 Solicitado',   c:'background:#fef3c7;color:#92400e;' },
-  aprovado:    { t:'✅ Aprovado',      c:'background:#dbeafe;color:#1e40af;' },
-  em_separacao:{ t:'📦 Em separação',  c:'background:#ede9fe;color:#5b21b6;' },
-  pronto:      { t:'✔️ Pronto',        c:'background:#ccfbf1;color:#0f766e;' },
-  faturado:    { t:'🧾 Faturado',      c:'background:#e0e7ff;color:#3730a3;' },
-  concluido:   { t:'🏁 Concluído',     c:'background:#dcfce7;color:#166534;' },
-  cancelado:   { t:'❌ Cancelado',     c:'background:#fee2e2;color:#991b1b;' },
+  rascunho:    { t:'📝 Rascunho',     k:'st-rascunho' },
+  solicitado:  { t:'📨 Solicitado',   k:'st-solicitado' },
+  aprovado:    { t:'✅ Aprovado',      k:'st-aprovado' },
+  em_separacao:{ t:'📦 Em separação',  k:'st-em_separacao' },
+  pronto:      { t:'✔️ Pronto',        k:'st-pronto' },
+  faturado:    { t:'🧾 Faturado',      k:'st-faturado' },
+  concluido:   { t:'🏁 Concluído',     k:'st-concluido' },
+  cancelado:   { t:'❌ Cancelado',     k:'st-cancelado' },
 };
 const PED_PRIOR = {
-  baixa:  { t:'Baixa',      c:'background:#f3f4f6;color:#374151;' },
-  normal: { t:'Normal',     c:'background:#dbeafe;color:#1e40af;' },
-  alta:   { t:'Alta',       c:'background:#fef3c7;color:#92400e;' },
-  urgente:{ t:'🔥 Urgente',  c:'background:#fee2e2;color:#991b1b;' },
+  baixa:  { t:'Baixa',      k:'st-baixa' },
+  normal: { t:'Normal',     k:'st-normal' },
+  alta:   { t:'Alta',       k:'st-alta' },
+  urgente:{ t:'🔥 Urgente',  k:'st-urgente' },
 };
 const PED_TIPO = { cliente:'🧍 Cliente', interno:'🏢 Consumo interno' };
 const PED_PROX = {
@@ -2224,8 +2262,8 @@ let PED_LOTES = [];
 let PED_DETALHE_ATUAL = null;
 let pedBuscaT = null;
 
-function badgePedStatus(s){ const b=PED_STATUS[s]||PED_STATUS.rascunho; return `<span class="badge" style="${b.c}">${b.t}</span>`; }
-function badgePedPrior(p){ const b=PED_PRIOR[p]||PED_PRIOR.normal; return `<span class="badge" style="${b.c}">${b.t}</span>`; }
+function badgePedStatus(s){ const b=PED_STATUS[s]||PED_STATUS.rascunho; return `<span class="badge ${b.k}">${b.t}</span>`; }
+function badgePedPrior(p){ const b=PED_PRIOR[p]||PED_PRIOR.normal; return `<span class="badge ${b.k}">${b.t}</span>`; }
 function fmtReais(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function pedidosBuscaDeb(){ clearTimeout(pedBuscaT); pedBuscaT=setTimeout(carregarPedidos, 400); }
 
@@ -2719,7 +2757,8 @@ async function carregarContratos(){
     document.getElementById('ctkExec').textContent = (CT_LISTA.length ? CT_LISTA.reduce((s,c)=>s+c.pct,0)/CT_LISTA.length : 0).toFixed(0)+'%';
 
     document.getElementById('tbodyContratos').innerHTML = CT_LISTA.map(c=>{
-      const cor = c.sit==='acima' ? '#dc2626' : c.sit==='alerta' ? '#d97706' : '#15803d';
+      const escuro = document.documentElement.getAttribute('data-theme')==='escuro';
+      const cor = c.sit==='acima' ? (escuro?'#f87171':'#dc2626') : c.sit==='alerta' ? (escuro?'#fbbf24':'#d97706') : (escuro?'#4ade80':'#15803d');
       const rotSt = c.status==='encerrado'
         ? '<span class="text-gray-500 font-semibold">Encerrado</span>'
         : '<span class="text-green-700 font-semibold">Ativo</span>';
