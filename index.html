@@ -696,6 +696,10 @@
                 <input id="ctValorTeste" type="text" inputmode="decimal" class="inp text-sm" placeholder="7,4877">
               </div>
               <div>
+                <label class="lbl">Valor do kit (R$)</label>
+                <input id="ctValorKit" type="text" inputmode="decimal" class="inp text-sm" placeholder="3.369,46">
+              </div>
+              <div>
                 <label class="lbl">Início da vigência *</label>
                 <input id="ctInicio" type="date" class="inp text-sm">
               </div>
@@ -2764,6 +2768,7 @@ function abrirFormContrato(id){
     document.getElementById('ctObs').value = '';
     document.getElementById('ctNumero').value = '';
     document.getElementById('ctValorTeste').value = '7,4877';
+    document.getElementById('ctValorKit').value = '3.369,46';
     document.getElementById('ctLinha').value = '';
     document.getElementById('ctArquivo').value = '';
     document.getElementById('ctAnexoAtual').innerHTML = '';
@@ -2790,6 +2795,7 @@ async function carregarContratoNoForm(id){
     document.getElementById('ctObs').value = c.observacao||'';
     document.getElementById('ctNumero').value = c.numero||'';
     document.getElementById('ctValorTeste').value = (c.valor_teste!=null && c.valor_teste!=='') ? String(c.valor_teste).replace('.',',') : '7,4877';
+    document.getElementById('ctValorKit').value = (c.valor_kit!=null && c.valor_kit!=='') ? Number(c.valor_kit).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '3.369,46';
     document.getElementById('ctArquivo').value = '';
     CT_ANEXO_ATUAL = c.anexo_url || null;
     document.getElementById('ctAnexoAtual').innerHTML = c.anexo_url
@@ -2866,6 +2872,9 @@ async function salvarContrato(){
   const vtRaw = document.getElementById('ctValorTeste').value.trim();
   const valor_teste = vtRaw==='' ? null : parseFloat(vtRaw.replace(/\./g,'').replace(',','.'));
   if(vtRaw!=='' && !(valor_teste>0)){ toast('Valor do teste inválido.','erro'); return; }
+  const vkRaw = document.getElementById('ctValorKit').value.trim();
+  const valor_kit = vkRaw==='' ? null : parseFloat(vkRaw.replace(/\./g,'').replace(',','.'));
+  if(vkRaw!=='' && !(valor_kit>0)){ toast('Valor do kit inválido.','erro'); return; }
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!(ano>=2000 && ano<=2100)){ toast('Informe um ano válido.','erro'); return; }
   if(!data_inicio || !data_fim){ toast('Informe o período de vigência.','erro'); return; }
@@ -2880,10 +2889,10 @@ async function salvarContrato(){
     }
     let cid = CT_EDIT_ID;
     if(cid){
-      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste });
+      await apiPATCH('contratos', `id=eq.${cid}`, { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste, valor_kit });
       await apiDELETE('contratos_itens', `contrato_id=eq.${cid}`);
     }else{
-      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste });
+      const c = await apiPOST('contratos', { cliente_id, ano, data_inicio, data_fim, observacao, numero, anexo_url: anexoUrl, status, valor_teste, valor_kit });
       cid = c.id;
     }
     for(const it of CT_ITENS_FORM)
@@ -3006,6 +3015,23 @@ async function verContrato(id){
       testeCor = vv>0 ? 'text-green-700' : vv<0 ? 'text-red-700' : '';
     }
     const fmtInt = n => Number(n).toLocaleString('pt-BR');
+    const fmtBRL = n => Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+
+    /* 💵 Linha em R$: valor contratado × valor consumido × saldo */
+    const valorKitCt = Number(c.valor_kit)>0 ? Number(c.valor_kit) : null;
+    let finHtml = '';
+    if(valorKitCt){
+      const vContratado = totContratado*valorKitCt;
+      const vConsumido = totRealizado*valorKitCt;
+      const vSaldo = vContratado - vConsumido;
+      const pctV = vContratado>0 ? vConsumido/vContratado*100 : 0;
+      finHtml = `
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">
+          <div><div class="text-xs text-gray-500 uppercase">Valor contratado</div><div class="font-bold text-lg">R$ ${fmtBRL(vContratado)}</div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Valor consumido</div><div class="font-bold text-lg">R$ ${fmtBRL(vConsumido)} <span class="text-xs font-normal text-gray-500">(${pctV.toFixed(1).replace('.',',')}%)</span></div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Saldo em R$</div><div class="font-bold text-lg ${vSaldo<0?'text-red-700':'text-green-700'}">R$ ${fmtBRL(vSaldo)}</div></div>
+        </div>`;
+    }
 
     document.getElementById('ctBtnStatus').textContent = c.status==='ativo' ? '🔒 Encerrar' : '🔓 Reabrir';
 
@@ -3050,6 +3076,7 @@ async function verContrato(id){
           <div><div class="text-xs text-gray-500 uppercase">Teste efetivo</div><div class="font-bold text-lg ${testeCor}">${testeEfetivoTxt}</div></div>
           <div><div class="text-xs text-gray-500 uppercase">Variação</div><div class="font-bold text-lg ${testeCor}">${testeVarTxt}</div></div>
         </div>
+        ${finHtml}
         <div class="text-xs text-gray-500 mt-2"><b>+%</b> = consumo acima do ideal: o teste efetivo cai e o hospital deve precisar de aditivo antes do término (lucrativo). <b>−%</b> = consumo abaixo do ideal: o teste efetivo sobe.</div>
       </div>
       <div class="border rounded-xl p-4 mb-4">
