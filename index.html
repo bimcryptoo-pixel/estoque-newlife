@@ -3006,6 +3006,8 @@ async function verContrato(id){
     const valorTesteCt = Number(c.valor_teste)>0 ? Number(c.valor_teste) : VALOR_TESTE_PADRAO;
     const testesReal = Math.round(totRealizado*TESTES_POR_KIT);
     const testesBase = Math.round(baseAcum*TESTES_POR_KIT);
+    const testesContratados = Math.round(totContratado*TESTES_POR_KIT);
+    const pctTestesTxt = testesContratados>0 ? (testesReal/testesContratados*100).toFixed(1).replace('.',',')+'%' : '—';
     let testeEfetivoTxt = '—', testeVarTxt = '—', testeCor = '';
     if(testesReal>0 && testesBase>0){
       const ef = valorTesteCt*testesBase/testesReal;
@@ -3072,12 +3074,12 @@ async function verContrato(id){
         <div class="font-bold mb-2">💰 Valor do teste × consumo</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div><div class="text-xs text-gray-500 uppercase">Teste no contrato</div><div class="font-bold text-lg">R$ ${valorTesteCt.toFixed(4).replace('.',',')}</div></div>
-          <div><div class="text-xs text-gray-500 uppercase">Testes realizados</div><div class="font-bold text-lg">${fmtInt(testesReal)}<span class="text-xs font-normal text-gray-500"> de ${fmtInt(testesBase)} da base</span></div></div>
-          <div><div class="text-xs text-gray-500 uppercase">Teste efetivo</div><div class="font-bold text-lg ${testeCor}">${testeEfetivoTxt}</div></div>
-          <div><div class="text-xs text-gray-500 uppercase">Variação</div><div class="font-bold text-lg ${testeCor}">${testeVarTxt}</div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Testes contratados</div><div class="font-bold text-lg">${fmtInt(testesContratados)}</div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Testes consumidos</div><div class="font-bold text-lg">${fmtInt(testesReal)} <span class="text-xs font-normal text-gray-500">(${pctTestesTxt})</span></div></div>
+          <div><div class="text-xs text-gray-500 uppercase">Teste efetivo</div><div class="font-bold text-lg ${testeCor}">${testeEfetivoTxt} <span class="text-xs font-normal">(${testeVarTxt} vs base)</span></div></div>
         </div>
         ${finHtml}
-        <div class="text-xs text-gray-500 mt-2"><b>+%</b> = consumo acima do ideal: o teste efetivo cai e o hospital deve precisar de aditivo antes do término (lucrativo). <b>−%</b> = consumo abaixo do ideal: o teste efetivo sobe.</div>
+        <div class="text-xs text-gray-500 mt-2"><b>+%</b> = consumo acima da base acumulada (${fmtInt(testesBase)} testes): o teste efetivo cai e o hospital deve precisar de aditivo antes do término (lucrativo). <b>−%</b> = consumo abaixo da base: o teste efetivo sobe. 1 kit = ${TESTES_POR_KIT} testes.</div>
       </div>
       <div class="border rounded-xl p-4 mb-4">
         <div class="font-bold mb-2">📊 Realizado × base contratual por mês</div>
