@@ -2940,13 +2940,29 @@ function desenharGraficoContrato(labels, realizado, base){
     el.parentElement.innerHTML='<div class="text-sm text-gray-400 py-8 text-center">Gráfico indisponível (sem conexão).</div>';
     return;
   }
+  /* cor da barra pelo desempenho vs pedido ideal: acima=verde, no ideal=amarelo, abaixo=vermelho (cor atual) */
+  const VERDE='#16a34a', VERDE_H='#15803d', AMARELO='#eab308', AMARELO_H='#ca8a04';
+  const corBarra = (v,i,hover)=>{
+    const b = Number(base[i])||0;
+    if(v > b + 0.5) return hover?VERDE_H:VERDE;
+    if(Math.abs(v - b) <= 0.5) return hover?AMARELO_H:AMARELO;
+    return hover?corMarcaEscura():corMarca();
+  };
   CH['ctChart'] = new Chart(el, {
     data:{ labels, datasets:[
-      { type:'bar', label:'Realizado', data:realizado, backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:4 },
+      { type:'bar', label:'Realizado', data:realizado,
+        backgroundColor:realizado.map((v,i)=>corBarra(v,i,false)),
+        hoverBackgroundColor:realizado.map((v,i)=>corBarra(v,i,true)), borderRadius:4 },
       { type:'line', label:'Base contratual/mês', data:base, borderColor:'#374151', backgroundColor:'#374151', borderWidth:2, tension:0.25, pointRadius:3 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:true, position:'bottom'} },
+      plugins:{ legend:{ display:true, position:'bottom', onClick:()=>{},
+        labels:{ generateLabels:()=>[
+          { text:'Acima do ideal', fillStyle:VERDE, strokeStyle:VERDE, lineWidth:0 },
+          { text:'No ideal', fillStyle:AMARELO, strokeStyle:AMARELO, lineWidth:0 },
+          { text:'Abaixo do ideal', fillStyle:corMarca(), strokeStyle:corMarca(), lineWidth:0 },
+          { text:'Base contratual/mês', fillStyle:'#374151', strokeStyle:'#374151', lineWidth:2 }
+        ] } } },
       scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
   });
 }
