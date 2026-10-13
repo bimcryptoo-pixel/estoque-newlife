@@ -262,8 +262,9 @@
             </div>
             <div>
               <label class="lbl">Produto</label>
-              <input id="fProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="aoEscolherProduto()">
+              <input id="fProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onfocus="this.select()" oninput="aoDigitarProduto()" onchange="aoEscolherProduto()">
               <datalist id="dlProdutos"></datalist>
+              <p id="prodHint" class="text-xs mt-1" style="display:none"></p>
             </div>
             <div>
               <label class="lbl">Local do estoque</label>
@@ -593,7 +594,7 @@
               <div class="grid grid-cols-2 md:grid-cols-12 gap-2">
                 <div class="col-span-2 md:col-span-4">
                   <label class="lbl">Produto *</label>
-                  <input id="npProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="aoEscolherProdutoPedido()">
+                  <input id="npProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onfocus="this.select()" onchange="aoEscolherProdutoPedido()">
                 </div>
                 <div class="md:col-span-2">
                   <label class="lbl">Qtd *</label>
@@ -1122,10 +1123,49 @@ function resolverProduto(nomeDigitado){
   return cacheProdutos.find(p=>p.nome.toLowerCase()===n) || null;
 }
 
-async function aoEscolherProduto(){
-  const p = resolverProduto(document.getElementById('fProduto').value);
+async function aoEscolherProduto(force){
+  const el = document.getElementById('fProduto');
+  const p = resolverProduto(el.value);
+  if(p && p.id===ultimoProdId && !force) return; // mesma seleção: não recarrega
+  ultimoProdId = p ? p.id : null;
   cacheLotesProd = p ? await apiGET(`lotes?produto_id=eq.${p.id}&select=id,numero_lote,validade,quantidade_atual,local&order=validade.asc`) : [];
   montarSelectLote();
+  atualizarHintProduto(p);
+}
+let ultimoProdId = null;
+function atualizarHintProduto(p){
+  const el = document.getElementById('fProduto');
+  const hint = document.getElementById('prodHint');
+  if(!hint) return;
+  if(p){
+    hint.style.display = 'none';
+    el.classList.remove('!border-amber-500');
+  } else if(el.value.trim()){
+    hint.style.display = '';
+    hint.innerHTML = '⚠️ <span class="text-amber-600">Nome incompleto — escolha um produto da lista.</span> <button type="button" class="underline text-red-600 font-semibold" onclick="limparProduto()">limpar e digitar de novo</button>';
+    el.classList.add('!border-amber-500');
+  } else {
+    hint.style.display = 'none';
+    el.classList.remove('!border-amber-500');
+  }
+}
+function aoDigitarProduto(){
+  const el = document.getElementById('fProduto');
+  const p = resolverProduto(el.value);
+  if(p){
+    atualizarHintProduto(p);
+    aoEscolherProduto();
+  } else {
+    ultimoProdId = null;
+    if(!el.value.trim()){ cacheLotesProd = []; montarSelectLote(); }
+    atualizarHintProduto(null);
+  }
+}
+function limparProduto(){
+  const el = document.getElementById('fProduto');
+  el.value = '';
+  el.focus();
+  aoDigitarProduto();
 }
 function montarSelectLote(){
   const sel = document.getElementById('fLote');
@@ -1303,7 +1343,7 @@ async function salvarMovimentacao(){
     document.getElementById('fNovoLoteVal').value='';
     document.getElementById('fFornecedor').value='';
     document.getElementById('fTransportadora').value='';
-    await aoEscolherProduto();
+    await aoEscolherProduto(true);
   }catch(e){
     if(e.message!=='Descarte cancelado pelo usuário.') toast(e.message,'erro');
   }finally{
