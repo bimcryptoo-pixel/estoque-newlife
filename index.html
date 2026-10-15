@@ -2201,11 +2201,21 @@ let CLIENTES = [];
 let CONSUMO_CACHE = null;
 let CH = {};
 
+// REGRA (usuário, 15/10/2026): clientes do tipo 'cliente' exibem 🏥 na frente do nome,
+// exceto UPAs, laboratórios e particulares — SEMPRE, em todas as listas de clientes.
+function ehHospital(nome, tipo){
+  if(tipo !== 'cliente') return false;
+  const n = String(nome||'').toUpperCase().trim();
+  if(/^(UPA[\s\-]|PRIMILAB|LACAM|OTOCL|PARTICULARES|NEW LIFE)/.test(n)) return false;
+  return true;
+}
+function fmtCliNome(nome, tipo){ return (ehHospital(nome, tipo || 'cliente') ? '🏥 ' : '') + nome; }
+
 async function carregarClientesCache(){
   try{
     CLIENTES = await apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc');
     const ativos = CLIENTES.filter(c=>c.ativo);
-    const opts = ativos.map(c=>`<option value="${c.id}">${esc(c.nome)}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
+    const opts = ativos.map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome, c.tipo))}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
     const selC = document.getElementById('cCliente');
     if(selC) selC.innerHTML = '<option value="">Todos</option>' + opts;
     const selL = document.getElementById('lcCliente');
@@ -2318,19 +2328,20 @@ async function carregarConsumo(){
     document.getElementById('ckpiTotal').textContent = rows.reduce((s,r)=>s+r.quantidade,0).toLocaleString('pt-BR');
     document.getElementById('ckpiClientes').textContent = new Set(rows.map(r=>r.cliente_id)).size;
     document.getElementById('ckpiProdutos').textContent = new Set(rows.map(r=>r.produto_id)).size;
-    const porCli={}, porProd={}, porMes={};
+    const porCli={}, porProd={}, porMes={}, tipoCli={};
     rows.forEach(r=>{
       porCli[r.clientes.nome]=(porCli[r.clientes.nome]||0)+r.quantidade;
+      tipoCli[r.clientes.nome]=r.clientes.tipo;
       porProd[r.produtos.nome]=(porProd[r.produtos.nome]||0)+r.quantidade;
       const mk=`${r.ano}-${String(r.mes).padStart(2,'0')}`;
       porMes[mk]=(porMes[mk]||0)+r.quantidade;
     });
-    desenharBarras('chCliente', topEntries(porCli,10), true, false);
+    desenharBarras('chCliente', topEntries(porCli,10).map(([n,v])=>[fmtCliNome(n, tipoCli[n]), v]), true, false);
     desenharBarras('chProduto', topEntries(porProd,10), true, false);
     desenharBarras('chMes', Object.entries(porMes).sort((a,b)=>a[0]<b[0]?-1:1), false, true);
     const hist = rows.slice(0,150);
     document.getElementById('tbodyConsumo').innerHTML = hist.map(r=>
-      `<tr class="rowline"><td class="py-2 pr-2 whitespace-nowrap">${String(r.mes).padStart(2,'0')}/${r.ano}</td><td class="py-2 pr-2">${esc(r.clientes.nome)}</td><td class="py-2 pr-2">${esc(r.produtos.nome)}</td><td class="py-2 pr-2 text-gray-500">${esc(r.produtos.linha)}</td><td class="py-2 text-right font-bold">${r.quantidade.toLocaleString('pt-BR')}</td></tr>`
+      `<tr class="rowline"><td class="py-2 pr-2 whitespace-nowrap">${String(r.mes).padStart(2,'0')}/${r.ano}</td><td class="py-2 pr-2">${esc(fmtCliNome(r.clientes.nome, r.clientes.tipo))}</td><td class="py-2 pr-2">${esc(r.produtos.nome)}</td><td class="py-2 pr-2 text-gray-500">${esc(r.produtos.linha)}</td><td class="py-2 text-right font-bold">${r.quantidade.toLocaleString('pt-BR')}</td></tr>`
     ).join('') || '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum registro no período.</td></tr>';
     document.getElementById('consumoMais').textContent =
       rows.length>150 ? `Mostrando 150 de ${rows.length.toLocaleString('pt-BR')} registros.` : `${rows.length} registros.`;
@@ -2394,7 +2405,7 @@ async function carregarArquivo(){
       const linhas = [...new Set(CONSUMO_CACHE.filter(r=>r.produtos).map(r=>r.produtos.linha))].sort();
       document.getElementById('arqLinha').innerHTML = '<option value="">Todas</option>' + linhas.map(l=>`<option>${esc(l)}</option>`).join('');
       document.getElementById('arqCliente').innerHTML = '<option value="">Todos</option>' +
-        CLIENTES.filter(c=>c.ativo).map(c=>`<option value="${c.id}">${esc(c.nome)}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
+        CLIENTES.filter(c=>c.ativo).map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome, c.tipo))}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
       arqInit = true;
     }
     const anosSel = new Set([...boxAnos.querySelectorAll('input[type=checkbox]:checked')].map(i=>Number(i.value)));
@@ -2444,12 +2455,13 @@ async function carregarArquivo(){
     desenharLinha('arqChSaz', MESES_PT,
       MESES_PT.map((_,i)=>{ const m=i+1; return anosMes[m] ? somaMes[m]/anosMes[m].size : 0; }));
     // tops
-    const porCli={}, porProd={};
+    const porCli={}, porProd={}, tipoCli={};
     rows.forEach(r=>{
       porCli[r.clientes.nome]=(porCli[r.clientes.nome]||0)+r.quantidade;
+      tipoCli[r.clientes.nome]=r.clientes.tipo;
       porProd[r.produtos.nome]=(porProd[r.produtos.nome]||0)+r.quantidade;
     });
-    desenharBarras('arqChCli', topEntries(porCli,10), true, false);
+    desenharBarras('arqChCli', topEntries(porCli,10).map(([n,v])=>[fmtCliNome(n, tipoCli[n]), v]), true, false);
     desenharBarras('arqChProd', topEntries(porProd,10), true, false);
     // tabela linha x ano
     const anosCols = [...anosSel].sort((a,b)=>a-b);
@@ -2590,7 +2602,7 @@ async function carregarPedidos(){
     document.getElementById('pkConc').textContent = rows.filter(p=>['faturado','concluido'].includes(p.status)).length;
     const vis = rows.slice(0,150);
     document.getElementById('tbodyPedidos').innerHTML = vis.map(p=>{
-      const destino = p.tipo==='cliente' ? esc((p.clientes&&p.clientes.nome)||'—') : esc(p.setor_destino||'—');
+      const destino = p.tipo==='cliente' ? esc(fmtCliNome((p.clientes&&p.clientes.nome)||'—')) : esc(p.setor_destino||'—');
       return `<tr class="rowline cursor-pointer" onclick="verPedido('${p.id}')">
         <td class="py-2 pr-2 font-bold whitespace-nowrap">${esc(p.numero)}</td>
         <td class="py-2 pr-2 whitespace-nowrap">${fmtData(p.data_emissao)}</td>
@@ -2614,7 +2626,7 @@ function abrirFormPedido(){
   document.getElementById('pedDetalheWrap').classList.add('hidden');
   document.getElementById('pedFormWrap').classList.remove('hidden');
   const cliAtivos = (CLIENTES||[]).filter(c=>c.ativo && c.tipo==='cliente');
-  document.getElementById('npCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+  document.getElementById('npCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome, c.tipo))}</option>`).join('')
     || '<option value="">— cadastre um cliente —</option>';
   document.getElementById('npSolicitante').value = (sessao&&sessao.nome)||'';
   document.getElementById('npResponsavel').value = '';
@@ -2776,7 +2788,7 @@ async function verPedido(id){
       </tr>`;
     }).join('');
     const destino = p.tipo==='cliente'
-      ? `<div><label class="lbl">Cliente</label><div class="font-semibold">${esc(p.clientes?p.clientes.nome:'—')}</div></div>
+      ? `<div><label class="lbl">Cliente</label><div class="font-semibold">${esc(fmtCliNome(p.clientes?p.clientes.nome:'—'))}</div></div>
          <div><label class="lbl">Endereço de entrega</label><div>${esc(p.endereco_entrega||'—')}</div></div>
          <div><label class="lbl">Condição de pagamento</label><div>${esc(p.condicao_pagamento||'—')}</div></div>`
       : `<div class="col-span-2"><label class="lbl">Setor de destino</label><div class="font-semibold">${esc(p.setor_destino||'—')}</div></div>`;
@@ -2878,7 +2890,7 @@ function imprimirPedido(){
       `<td style="text-align:right"><b>${sub!==null?fmtReais(sub):'—'}</b></td></tr>`;
   }).join('');
   const destinoHtml = p.tipo==='cliente'
-    ? `<div><span class="rl">Cliente:</span> <b>${esc(p.clientes?p.clientes.nome:'—')}</b></div>
+    ? `<div><span class="rl">Cliente:</span> <b>${esc(fmtCliNome(p.clientes?p.clientes.nome:'—'))}</b></div>
        <div><span class="rl">Endereço de entrega:</span> ${esc(p.endereco_entrega||'—')}</div>
        <div><span class="rl">Condição de pagamento:</span> ${esc(p.condicao_pagamento||'—')}</div>`
     : `<div><span class="rl">Setor de destino:</span> <b>${esc(p.setor_destino||'—')}</b></div>`;
@@ -3044,7 +3056,7 @@ async function carregarContratos(){
         ? '<span class="text-gray-500 font-semibold">Encerrado</span>'
         : '<span class="text-green-700 font-semibold">Ativo</span>';
       return `<tr class="rowline border-t">
-        <td class="py-2 pr-2 font-semibold">${esc(c.clientes&&c.clientes.nome||'—')}</td>
+        <td class="py-2 pr-2 font-semibold">${esc(fmtCliNome(c.clientes&&c.clientes.nome||'—'))}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.numero||'—')}${c.anexo_url?` <a href="${esc(c.anexo_url)}" target="_blank" rel="noopener" title="Abrir contrato anexado">📎</a>`:''}</td>
         <td class="py-2 pr-2 text-gray-500 text-xs whitespace-nowrap">${esc(c.linhaTxt||'—')}</td>
         <td class="py-2 pr-2">${c.ano}</td>
@@ -3069,7 +3081,7 @@ function abrirFormContrato(id){
   document.getElementById('ctFormWrap').classList.remove('hidden');
   document.getElementById('ctFormTitulo').textContent = id ? '📑 Editar contrato' : '📑 Novo contrato';
   const cliAtivos = (CLIENTES||[]).filter(c=>c.ativo && c.tipo==='cliente');
-  document.getElementById('ctCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+  document.getElementById('ctCliente').innerHTML = cliAtivos.map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome, c.tipo))}</option>`).join('')
     || '<option value="">— cadastre um cliente —</option>';
   ctPreencherLinhas();
   if(!id){
@@ -3377,7 +3389,7 @@ async function verContrato(id){
     }).join('');
     document.getElementById('ctDetalhe').innerHTML = `
       <div class="mb-4">
-        <div class="font-bold text-xl">${esc(c.clientes&&c.clientes.nome||'—')}</div>
+        <div class="font-bold text-xl">${esc(fmtCliNome(c.clientes&&c.clientes.nome||'—'))}</div>
         ${c.clientes&&c.clientes.cnpj?`<div class="text-sm text-gray-500">CNPJ ${esc(c.clientes.cnpj)}</div>`:''}
         ${c.numero?`<div class="text-sm font-semibold text-gray-700">Contrato nº ${esc(c.numero)}</div>`:''}
         ${c.anexo_url?`<div class="mt-2"><a class="btn-ghost !py-1.5 text-xs" href="${esc(c.anexo_url)}" target="_blank" rel="noopener">📎 Ver contrato anexado</a></div>`:''}
