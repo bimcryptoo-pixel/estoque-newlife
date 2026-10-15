@@ -274,6 +274,7 @@
               <select id="fTipo" class="inp" onchange="aoTrocarTipo()">
                 <option value="entrada_compra">📥 Entrada — compra</option>
                 <option value="saida_consumo">📤 Saída — consumo por cliente</option>
+                <option value="devolucao_compra">↩️ Devolução de compra</option>
                 <option value="perda">⚠️ Perda / quebra</option>
                 <option value="descarte_vencimento">🗑️ Descarte por vencimento</option>
                 <option value="emprestimo_saida">🤝 Empréstimo — saída</option>
@@ -332,6 +333,37 @@
         </div>
 
         <div class="card p-4 md:p-6 max-w-6xl mt-4">
+          <div class="font-bold text-lg mb-1">🔀 Transferência entre locais</div>
+          <p class="text-xs text-gray-500 mb-4">Move o saldo de um lote de Fortaleza para o Piauí (ou o inverso), mantendo número do lote e validade. Gera a saída e a entrada amarradas no histórico.</p>
+          <div class="grid gap-3 md:grid-cols-2">
+            <div>
+              <label class="lbl">Produto</label>
+              <input id="tProduto" class="inp" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" oninput="aoDigitarProdutoTransf()">
+            </div>
+            <div>
+              <label class="lbl">Lote de origem</label>
+              <select id="tLote" class="inp"><option value="">— escolha o produto —</option></select>
+            </div>
+            <div>
+              <label class="lbl">Destino</label>
+              <select id="tDestino" class="inp">
+                <option>Fortaleza</option>
+                <option>Piauí</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">Quantidade</label>
+              <input id="tQtd" type="number" min="0" step="any" class="inp" placeholder="0">
+            </div>
+            <div class="md:col-span-2">
+              <label class="lbl">Responsável / observação (opcional)</label>
+              <input id="tObs" class="inp" placeholder="">
+            </div>
+          </div>
+          <button class="btn-brand mt-3" onclick="fazerTransferencia()">Transferir</button>
+        </div>
+
+        <div class="card p-4 md:p-6 max-w-6xl mt-4">
           <div class="font-bold text-lg mb-1">📄 Importar NF-e (XML)</div>
           <p class="text-xs text-gray-500 mb-4">Anexe o XML da nota fiscal: o sistema lê fornecedor, produtos, lotes e validades e lança a entrada no estoque. Dá para <b>estornar</b> depois, se precisar.</p>
           <div class="grid gap-3 md:grid-cols-3">
@@ -372,6 +404,10 @@
               <option value="">Todos os tipos</option>
               <option value="entrada_compra">📥 Entrada — compra</option>
               <option value="saida_consumo">📤 Saída — consumo</option>
+              <option value="saida_pedido">📤 Saída — pedido</option>
+              <option value="transferencia_saida">🔀 Transferência saída</option>
+              <option value="transferencia_entrada">🔀 Transferência entrada</option>
+              <option value="devolucao_compra">↩️ Devolução de compra</option>
               <option value="perda">⚠️ Perda</option>
               <option value="descarte_vencimento">🗑️ Descarte vencimento</option>
               <option value="emprestimo_saida">🤝 Empréstimo saída</option>
@@ -1011,13 +1047,17 @@ const LOCAIS = ['Fortaleza','Piauí'];
 const TIPOS = {
   entrada_compra:      { label:'📥 Entrada — compra',        sinal:+1 },
   saida_consumo:       { label:'📤 Saída — consumo',         sinal:-1 },
+  saida_pedido:        { label:'📤 Saída — pedido',           sinal:-1 },
+  transferencia_saida: { label:'🔀 Transferência — saída',   sinal:-1 },
+  transferencia_entrada:{ label:'🔀 Transferência — entrada', sinal:+1 },
+  devolucao_compra:    { label:'↩️ Devolução de compra',      sinal:-1 },
   perda:               { label:'⚠️ Perda / quebra',          sinal:-1 },
   descarte_vencimento: { label:'🗑️ Descarte por vencimento', sinal:-1 },
   emprestimo_saida:    { label:'🤝 Empréstimo — saída',      sinal:-1 },
   emprestimo_devolucao:{ label:'↩️ Empréstimo — devolução',  sinal:+1 },
 };
 const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-const SAIDAS = ['saida_consumo','perda','descarte_vencimento','emprestimo_saida'];
+const SAIDAS = ['saida_consumo','saida_pedido','transferencia_saida','devolucao_compra','perda','descarte_vencimento','emprestimo_saida'];
 
 let sessao = null;
 let cacheProdutos = [];   // [{id,nome,linha,unidade}]
@@ -1297,8 +1337,9 @@ function aoTrocarTipo(){
   document.getElementById('boxResponsavel').classList.toggle('hidden', !(tipo==='emprestimo_saida'||tipo==='emprestimo_devolucao'));
   document.getElementById('boxAnexo').classList.toggle('hidden', !(tipo==='emprestimo_saida'||tipo==='entrada_compra'));
   const ehEntrada = tipo==='entrada_compra';
-  document.getElementById('boxFornTransp').classList.toggle('hidden', !ehEntrada);
-  if(ehEntrada) carregarFornTranspSelects();
+  const comFornecedor = tipo==='entrada_compra' || tipo==='devolucao_compra';
+  document.getElementById('boxFornTransp').classList.toggle('hidden', !comFornecedor);
+  if(comFornecedor) carregarFornTranspSelects();
   document.getElementById('cliObrig').textContent = tipo==='saida_consumo' ? '*' : '';
   montarSelectLote();
 }
@@ -1429,7 +1470,7 @@ async function salvarMovimentacao(){
       observacao: obs||null, anexo_url: anexoUrl, usuario_id: sessao.id,
       fornecedor_id: null, transportadora_id: null
     };
-    if(tipo==='entrada_compra'){
+    if(tipo==='entrada_compra'||tipo==='devolucao_compra'){
       movBody.fornecedor_id = document.getElementById('fFornecedor').value || null;
       movBody.transportadora_id = document.getElementById('fTransportadora').value || null;
     }
@@ -2989,6 +3030,7 @@ async function mudarStatusPedido(id, novo){
   const permitidos = [...(PED_PROX[(PED_DETALHE_ATUAL&&PED_DETALHE_ATUAL.pedido.status)]||[]).map(x=>x[0])];
   if(!permitidos.includes(novo)){ toast('Transição de status inválida.','erro'); return; }
   try{
+    if(novo==='faturado') await baixarEstoquePedido(id); /* baixa automática; se falhar, não fatura */
     await apiPATCH('pedidos', `id=eq.${id}`, { status:novo, updated_at:new Date().toISOString() });
     toast(`Pedido ${PED_STATUS[novo].t}. ✓`,'ok');
     PED_CACHE = null;
@@ -3006,6 +3048,112 @@ async function mudarStatusPedidoDireto(id, novo){
     toast('Pedido cancelado.','ok');
     PED_CACHE = null;
     voltarListaPedidos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- baixa automática de estoque ao faturar ---------- */
+async function baixarEstoquePedido(id){
+  const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
+  const ped = rows[0];
+  if(!ped) throw new Error('Pedido não encontrado.');
+  /* idempotência: já baixado antes? */
+  const ja = await apiGET(`movimentacoes?observacao=like.*${encodeURIComponent(ped.numero)}*&select=id&limit=1`);
+  if(ja.length) return;
+  const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
+  if(!itens.length) throw new Error('Pedido sem itens para baixar.');
+  const nomeCli = ped.clientes ? ped.clientes.nome : (ped.setor_destino || null);
+  const baixas = []; /* {produto_id, lote_id, qtd} */
+  for(const it of itens){
+    let falta = Number(it.quantidade)||0;
+    if(falta<=0) continue;
+    if(it.lote_id){
+      const l = it.lotes;
+      const saldo = Number((l && l.quantidade_atual) || 0);
+      if(saldo < falta) throw new Error(`Saldo insuficiente no lote ${l?l.numero_lote:'?'} (${it.produtos.nome}): tem ${fmtQtd(saldo)}, o pedido precisa de ${fmtQtd(falta)}.`);
+      baixas.push({ produto_id:it.produto_id, lote_id:it.lote_id, qtd:falta });
+    } else {
+      /* sem lote separado: distribui sozinho pelos que vencem primeiro (FEFO) */
+      const lotes = await apiGET(`lotes?produto_id=eq.${it.produto_id}&local=eq.${encodeURIComponent(ped.local_origem)}&quantidade_atual=gt.0&select=id,numero_lote,quantidade_atual&order=validade.asc`);
+      for(const l of lotes){
+        if(falta<=0) break;
+        const disp = Number(l.quantidade_atual)||0;
+        const usa = Math.min(disp, falta);
+        if(usa>0){ baixas.push({ produto_id:it.produto_id, lote_id:l.id, qtd:usa }); falta -= usa; }
+      }
+      if(falta>0) throw new Error(`Saldo insuficiente de ${it.produtos.nome} em ${ped.local_origem}: faltam ${fmtQtd(falta)} ${it.produtos.unidade||'un'} para faturar.`);
+    }
+  }
+  const hoje = hojeISO();
+  const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+  for(const b of baixas){
+    await apiPOST('movimentacoes', {
+      tipo:'saida_pedido', produto_id:b.produto_id, lote_id:b.lote_id, quantidade:b.qtd, data:hoje,
+      cliente:nomeCli, responsavel:ped.responsavel||null,
+      observacao:`[pedido ${ped.numero}] Baixa automática — faturamento do pedido ${ped.numero}`,
+      anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
+    });
+    const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
+    await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) - b.qtd });
+  }
+  toast(`Baixa de estoque do pedido ${ped.numero} concluída. ✓`,'ok');
+}
+
+/* ---------- transferência entre locais ---------- */
+async function aoDigitarProdutoTransf(){
+  const p = resolverProduto(document.getElementById('tProduto').value);
+  const sel = document.getElementById('tLote');
+  if(!p){ sel.innerHTML = '<option value="">— escolha o produto —</option>'; return; }
+  try{
+    const lotes = await apiGET(`lotes?produto_id=eq.${p.id}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual,local&order=validade.asc`);
+    sel.innerHTML = lotes.map(l=>`<option value="${l.id}">${esc(l.numero_lote)} · 📍 ${esc(l.local||'Fortaleza')} · val ${fmtData(l.validade)} · saldo ${fmtQtd(l.quantidade_atual)}</option>`).join('')
+      || '<option value="">— sem saldo —</option>';
+  }catch(e){ sel.innerHTML = '<option value="">— erro ao buscar —</option>'; }
+}
+
+async function fazerTransferencia(){
+  try{
+    const p = resolverProduto(document.getElementById('tProduto').value);
+    if(!p) throw new Error('Escolha um produto.');
+    const loteId = document.getElementById('tLote').value;
+    if(!loteId) throw new Error('Escolha o lote de origem.');
+    const destino = document.getElementById('tDestino').value;
+    const qtd = parseFloat(String(document.getElementById('tQtd').value).replace(',','.'));
+    if(!qtd || qtd<=0) throw new Error('Informe a quantidade.');
+    const rl = await apiGET(`lotes?id=eq.${loteId}&select=id,produto_id,numero_lote,validade,quantidade_atual,local`);
+    const lote = rl[0];
+    if(!lote) throw new Error('Lote não encontrado.');
+    const origem = lote.local || 'Fortaleza';
+    if(origem === destino) throw new Error('Origem e destino são iguais.');
+    const saldo = Number(lote.quantidade_atual||0);
+    if(qtd > saldo) throw new Error(`Saldo insuficiente no lote ${lote.numero_lote}: tem ${fmtQtd(saldo)}, tentou transferir ${fmtQtd(qtd)}.`);
+    const tid = 'TRF-' + Date.now().toString(36).toUpperCase();
+    const hoje = hojeISO();
+    const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+    const obsExtra = document.getElementById('tObs').value.trim();
+    const obs = `[transf ${tid}] ${origem} → ${destino}` + (obsExtra ? ' — ' + obsExtra : '');
+    /* saída na origem */
+    await apiPOST('movimentacoes', { tipo:'transferencia_saida', produto_id:lote.produto_id, lote_id:lote.id,
+      quantidade:qtd, data:hoje, cliente:null, responsavel:null, observacao:obs,
+      anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null });
+    await apiPATCH('lotes', `id=eq.${lote.id}`, { quantidade_atual: saldo - qtd });
+    /* entrada no destino (mesmo número de lote e validade) */
+    const ex = await apiGET(`lotes?produto_id=eq.${lote.produto_id}&local=eq.${encodeURIComponent(destino)}&numero_lote=eq.${encodeURIComponent(lote.numero_lote)}&select=id,quantidade_atual&limit=1`);
+    let loteDestId;
+    if(ex.length){
+      loteDestId = ex[0].id;
+      await apiPATCH('lotes', `id=eq.${loteDestId}`, { quantidade_atual: Number(ex[0].quantidade_atual||0) + qtd });
+    } else {
+      const novo = await apiPOST('lotes', { produto_id:lote.produto_id, numero_lote:lote.numero_lote, validade:lote.validade, quantidade_atual:0, local:destino });
+      loteDestId = novo.id;
+      await apiPATCH('lotes', `id=eq.${loteDestId}`, { quantidade_atual: qtd });
+    }
+    await apiPOST('movimentacoes', { tipo:'transferencia_entrada', produto_id:lote.produto_id, lote_id:loteDestId,
+      quantidade:qtd, data:hoje, cliente:null, responsavel:null, observacao:obs,
+      anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null });
+    toast(`Transferência ${tid}: ${fmtQtd(qtd)} un de ${origem} → ${destino}. ✓`,'ok');
+    document.getElementById('tQtd').value = '';
+    document.getElementById('tObs').value = '';
+    aoDigitarProdutoTransf();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function excluirPedido(id){
