@@ -215,6 +215,8 @@
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Arquivo Consumo</button>
       <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🏷️ Produtos</button>
+      <button data-aba="inventario" onclick="mostrarAba('inventario')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📋 Inventário</button>
+      <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📒 Kardex</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
@@ -235,6 +237,10 @@
         <div class="card p-4 mb-4">
           <div class="font-bold mb-2">⚠️ Lotes vencendo</div>
           <div id="listaVencendo" class="text-sm text-gray-500">Carregando…</div>
+        </div>
+        <div class="card p-4 mb-4" id="cardAbaixoMin" style="display:none">
+          <div class="font-bold mb-2">🔔 Abaixo do estoque mínimo</div>
+          <div id="listaAbaixoMin" class="text-sm text-gray-500"></div>
         </div>
         <div class="card p-4">
           <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
@@ -408,6 +414,8 @@
               <option value="transferencia_saida">🔀 Transferência saída</option>
               <option value="transferencia_entrada">🔀 Transferência entrada</option>
               <option value="devolucao_compra">↩️ Devolução de compra</option>
+              <option value="ajuste_entrada">📝 Ajuste inventário entrada</option>
+              <option value="ajuste_saida">📝 Ajuste inventário saída</option>
               <option value="perda">⚠️ Perda</option>
               <option value="descarte_vencimento">🗑️ Descarte vencimento</option>
               <option value="emprestimo_saida">🤝 Empréstimo saída</option>
@@ -606,6 +614,52 @@
 
         <div id="prodLoading" class="card p-4 text-sm text-gray-500 mb-4">Carregando…</div>
         <div id="prodCards" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      </section>
+
+      <!-- ===== INVENTÁRIO ===== -->
+      <section id="aba-inventario" class="hidden">
+        <div class="card p-4 mb-4">
+          <div class="font-bold text-lg mb-1">📋 Inventário — conciliação físico × sistema</div>
+          <div class="text-xs text-gray-500 mb-3">Conte o estoque físico, digite o encontrado e confirme: o sistema gera os ajustes sozinho.<br>Falta → saída dos lotes que vencem primeiro · Sobra → entrada no lote mais próximo do vencimento.</div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div><label class="lbl">Local</label><select id="invLocal" class="inp text-sm" onchange="carregarInventario()"><option>Fortaleza</option><option>Piauí</option></select></div>
+            <div><label class="lbl">Buscar produto</label><input id="invBusca" class="inp text-sm" placeholder="Digite para buscar…" oninput="renderInventario()"></div>
+            <div class="flex items-end"><button class="btn-ghost !w-auto text-sm" onclick="invRecarregar()">↻ Recarregar</button></div>
+          </div>
+        </div>
+        <div id="invLoading" class="card p-4 text-sm text-gray-500 mb-4">Carregando…</div>
+        <div id="invResumoWrap" class="card p-4 mb-4 hidden">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="text-sm">📝 <b id="invResumo">0</b> produto(s) com diferença</div>
+            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="confirmarInventario()">Confirmar inventário</button>
+          </div>
+        </div>
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs text-gray-500 uppercase">
+                <th class="py-2 px-3">Produto</th><th class="py-2 pr-2">Linha</th>
+                <th class="py-2 pr-2 text-right">Sistema</th><th class="py-2 pr-2 text-right">Contado</th>
+                <th class="py-2 pr-3 text-right">Diferença</th>
+              </tr></thead>
+              <tbody id="tbodyInv"><tr><td colspan="5" class="py-4 px-3 text-gray-400">Carregando…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== KARDEX ===== -->
+      <section id="aba-kardex" class="hidden">
+        <div class="card p-4 mb-4">
+          <div class="font-bold text-lg mb-1">📒 Kardex — extrato do produto</div>
+          <div class="text-xs text-gray-500 mb-3">Todo o histórico de entradas e saídas de um produto, em ordem cronológica, com saldo acumulado.</div>
+          <div class="grid md:grid-cols-3 gap-2">
+            <div class="md:col-span-2"><label class="lbl">Produto</label><input id="kdxProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off"></div>
+            <div class="flex items-end"><button class="btn-brand !py-2.5 text-sm" onclick="carregarKardex()">Ver extrato</button></div>
+          </div>
+        </div>
+        <div id="kdxLoading" class="card p-4 text-sm text-gray-500 mb-4 hidden">Carregando…</div>
+        <div id="kdxResult"></div>
       </section>
 
       <!-- ===== PEDIDOS AO ESTOQUE ===== -->
@@ -1020,7 +1074,7 @@
 
   <!-- NAV INFERIOR (mobile) -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="grid grid-cols-9 text-[10px] font-semibold text-gray-500">
+    <div class="grid grid-cols-7 text-[10px] font-semibold text-gray-500">
       <button data-aba="inicio" onclick="mostrarAba('inicio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏠</span>Início<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="lancar" onclick="mostrarAba('lancar')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">➕</span>Lançar<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="movs" onclick="mostrarAba('movs')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Movim.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1029,6 +1083,8 @@
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Arquivo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏷️</span>Prods<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="inventario" onclick="mostrarAba('inventario')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Invent.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📒</span>Kardex<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1051,13 +1107,15 @@ const TIPOS = {
   transferencia_saida: { label:'🔀 Transferência — saída',   sinal:-1 },
   transferencia_entrada:{ label:'🔀 Transferência — entrada', sinal:+1 },
   devolucao_compra:    { label:'↩️ Devolução de compra',      sinal:-1 },
+  ajuste_entrada:      { label:'📝 Ajuste inventário — entrada', sinal:+1 },
+  ajuste_saida:        { label:'📝 Ajuste inventário — saída',   sinal:-1 },
   perda:               { label:'⚠️ Perda / quebra',          sinal:-1 },
   descarte_vencimento: { label:'🗑️ Descarte por vencimento', sinal:-1 },
   emprestimo_saida:    { label:'🤝 Empréstimo — saída',      sinal:-1 },
   emprestimo_devolucao:{ label:'↩️ Empréstimo — devolução',  sinal:+1 },
 };
 const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-const SAIDAS = ['saida_consumo','saida_pedido','transferencia_saida','devolucao_compra','perda','descarte_vencimento','emprestimo_saida'];
+const SAIDAS = ['saida_consumo','saida_pedido','transferencia_saida','devolucao_compra','ajuste_saida','perda','descarte_vencimento','emprestimo_saida'];
 
 let sessao = null;
 let cacheProdutos = [];   // [{id,nome,linha,unidade}]
@@ -1102,6 +1160,18 @@ async function apiGET(path){
   const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: HJSON });
   if(!r.ok){ const t = await r.text(); throw new Error(`GET ${path} → ${r.status}: ${t.slice(0,200)}`); }
   return r.json();
+}
+/* GET com paginação automática (a API limita em 1000 linhas por resposta) */
+async function apiGETall(path){
+  const out = []; let off = 0;
+  const sep = path.includes('?') ? '&' : '?';
+  for(;;){
+    const pg = await apiGET(`${path}${sep}limit=1000&offset=${off}`);
+    out.push(...pg);
+    if(pg.length < 1000) break;
+    off += 1000;
+  }
+  return out;
 }
 async function apiPOST(table, body){
   const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
@@ -1158,7 +1228,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','pedidos','contratos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -1172,6 +1242,8 @@ function mostrarAba(aba){
   if(aba==='consumo') carregarConsumo();
   if(aba==='arquivo') carregarArquivo();
   if(aba==='produtos') carregarProdutos();
+  if(aba==='inventario') carregarInventario();
+  if(aba==='kardex') carregarKardexInit();
   if(aba==='pedidos') carregarPedidos();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
@@ -1183,8 +1255,10 @@ function mostrarAba(aba){
 /* ================= DASHBOARD ================= */
 async function carregarDashboard(){
   try{
-    const [prods, lotesSaldo, vencendo, saidasEmp, devolucoes, estoque] = await Promise.all([
-      apiGET('produtos?ativo=eq.true&select=id'),
+    let prods;
+    try{ prods = await apiGET('produtos?ativo=eq.true&select=id,nome,estoque_minimo'); }
+    catch(e){ prods = await apiGET('produtos?ativo=eq.true&select=id,nome'); /* coluna ainda não criada */ }
+    const [lotesSaldo, vencendo, saidasEmp, devolucoes, estoque] = await Promise.all([
       apiGET('lotes?quantidade_atual=gt.0&select=id'),
       apiGET('lotes_vencendo_90d?select=*'),
       apiGET('movimentacoes?tipo=eq.emprestimo_saida&select=id'),
@@ -1196,6 +1270,7 @@ async function carregarDashboard(){
     document.getElementById('kpiVencendo').textContent = vencendo.length;
     document.getElementById('kpiEmprestimos').textContent = contarEmprestimosAbertos(saidasEmp, devolucoes);
     renderVencendo(vencendo);
+    renderAbaixoMin(prods, estoque);
     cacheEstoque = estoque;
     renderEstoque();
   }catch(e){ toast('Erro ao carregar dashboard: '+e.message,'erro'); }
@@ -1216,6 +1291,182 @@ function renderVencendo(lista){
       <div class="text-xs text-gray-500">${esc(v.linha)} • 📍 ${esc(v.local||'Fortaleza')} • lote ${esc(v.lote)} • ${fmtQtd(v.quantidade)} un</div></div>
       <span class="badge ${cls} shrink-0">${rot}</span></div>`;
   }).join('');
+}
+
+function renderAbaixoMin(prods, estoque){
+  const card = document.getElementById('cardAbaixoMin');
+  const box = document.getElementById('listaAbaixoMin');
+  if(!card || !box) return;
+  const tot = {};
+  (estoque||[]).forEach(r=>{ tot[r.produto] = (tot[r.produto]||0) + Number(r.quantidade||0); });
+  const lista = (prods||[])
+    .filter(p=>Number(p.estoque_minimo||0) > 0 && (tot[p.nome]||0) < Number(p.estoque_minimo))
+    .sort((a,b)=>(tot[a.nome]||0) - (tot[b.nome]||0));
+  if(!lista.length){ card.style.display='none'; return; }
+  card.style.display='';
+  box.innerHTML = lista.map(p=>`<div class="flex items-center justify-between gap-2 py-1.5 rowline">
+      <div class="min-w-0"><div class="font-semibold truncate">${esc(p.nome)}</div>
+      <div class="text-xs text-gray-500">mínimo ${fmtQtd(p.estoque_minimo)} un</div></div>
+      <span class="badge urg-30 shrink-0">${fmtQtd(tot[p.nome]||0)} un</span></div>`).join('');
+}
+
+/* ================= INVENTÁRIO ================= */
+let INV = null; // {local, rows:[{id,nome,linha,sistema}], contados:{id:qtd}}
+async function carregarInventario(){
+  const box = document.getElementById('tbodyInv');
+  const loading = document.getElementById('invLoading');
+  const wrap = document.getElementById('invResumoWrap');
+  if(!box) return;
+  try{
+    loading.classList.remove('hidden'); wrap.classList.add('hidden');
+    const local = document.getElementById('invLocal').value;
+    const [prods, est] = await Promise.all([
+      apiGET('produtos?ativo=eq.true&select=id,nome,linha&order=nome.asc'),
+      apiGETall(`estoque_atual?local=eq.${encodeURIComponent(local)}&select=produto,quantidade`),
+    ]);
+    const mapa = {};
+    est.forEach(r=>{ mapa[r.produto] = (mapa[r.produto]||0) + Number(r.quantidade||0); });
+    const rows = prods.map(p=>({ id:p.id, nome:p.nome, linha:p.linha, sistema: mapa[p.nome]||0 }));
+    const contados = {};
+    rows.forEach(r=>{ contados[r.id] = r.sistema; });
+    INV = { local, rows, contados };
+    loading.classList.add('hidden'); wrap.classList.remove('hidden');
+    renderInventario();
+  }catch(e){ loading.classList.add('hidden'); box.innerHTML = `<tr><td colspan="5" class="py-4 px-3 text-red-600">Erro: ${esc(e.message)}</td></tr>`; }
+}
+function invRecarregar(){ carregarInventario(); }
+function renderInventario(){
+  const box = document.getElementById('tbodyInv');
+  if(!box || !INV) return;
+  const busca = (document.getElementById('invBusca').value||'').toLowerCase();
+  const rows = INV.rows.filter(r=>!busca || r.nome.toLowerCase().includes(busca));
+  let nDif = 0;
+  box.innerHTML = rows.map(r=>{
+    const cont = Number(INV.contados[r.id] ?? r.sistema);
+    const dif = cont - r.sistema;
+    if(dif !== 0) nDif++;
+    const cls = dif===0 ? 'text-gray-400' : (dif>0 ? 'text-green-700 font-bold' : 'text-red-700 font-bold');
+    return `<tr class="rowline">
+      <td class="py-2 px-3 font-medium">${esc(r.nome)}</td>
+      <td class="py-2 pr-2 text-xs text-gray-500">${esc(r.linha||'')}</td>
+      <td class="py-2 pr-2 text-right tabular-nums">${fmtQtd(r.sistema)}</td>
+      <td class="py-2 pr-2 text-right"><input type="number" min="0" step="any" value="${cont}"
+        class="inp !w-24 !py-1 text-sm text-right tabular-nums inline-block"
+        oninput="INV.contados['${r.id}']=this.value;invAtualizarDif('${r.id}')"></td>
+      <td class="py-2 pr-3 text-right tabular-nums ${cls}" id="invDif-${r.id}">${dif>0?'+':''}${fmtQtd(dif)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="py-4 px-3 text-gray-400">Nenhum produto.</td></tr>';
+  document.getElementById('invResumo').textContent = nDif;
+}
+function invAtualizarDif(id){
+  const r = INV.rows.find(x=>x.id===id); if(!r) return;
+  const cont = Number(INV.contados[id] ?? r.sistema);
+  const dif = cont - r.sistema;
+  const cel = document.getElementById('invDif-'+id);
+  if(cel){ cel.textContent = (dif>0?'+':'')+fmtQtd(dif);
+    cel.className = 'py-2 pr-3 text-right tabular-nums ' + (dif===0?'text-gray-400':(dif>0?'text-green-700 font-bold':'text-red-700 font-bold')); }
+  document.getElementById('invResumo').textContent = INV.rows.filter(x=>Number(INV.contados[x.id] ?? x.sistema) - x.sistema !== 0).length;
+}
+async function confirmarInventario(){
+  if(!INV) return;
+  const difs = INV.rows
+    .map(r=>({ ...r, contado: Number(INV.contados[r.id] ?? r.sistema), dif: Number(INV.contados[r.id] ?? r.sistema) - r.sistema }))
+    .filter(r=>r.dif !== 0);
+  if(!difs.length){ toast('Nenhuma diferença para ajustar.','alerta'); return; }
+  if(!confirm(`Confirmar inventário de ${INV.local}?\n${difs.length} produto(s) com diferença serão ajustados.`)) return;
+  const obs = `[inventario] Contagem ${hojeISO()} — ${INV.local}`;
+  let ok = 0, erros = [];
+  for(const r of difs){
+    try{
+      if(r.dif < 0){
+        // FALTA: saída dos lotes que vencem primeiro
+        let lotes = await apiGET(`lotes?produto_id=eq.${r.id}&local=eq.${encodeURIComponent(INV.local)}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
+        let falta = -r.dif, sobraTotal = lotes.reduce((s,l)=>s+Number(l.quantidade_atual),0);
+        if(sobraTotal < falta) throw new Error(`Saldo insuficiente para ajustar ${r.nome}`);
+        for(const l of lotes){
+          if(falta <= 0) break;
+          const q = Math.min(Number(l.quantidade_atual), falta);
+          await apiPOST('movimentacoes', { tipo:'ajuste_saida', produto_id:r.id, lote_id:l.id, quantidade:q, data:hojeISO(), observacao:`${obs} — falta ${fmtQtd(-r.dif)} un` });
+          await apiPATCH('lotes', `id=eq.${l.id}`, { quantidade_atual: Number(l.quantidade_atual)-q });
+          falta -= q;
+        }
+      }else{
+        // SOBRA: entrada no lote mais próximo do vencimento (ou cria lote)
+        let lotes = await apiGET(`lotes?produto_id=eq.${r.id}&local=eq.${encodeURIComponent(INV.local)}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
+        let loteId;
+        if(lotes.length){
+          loteId = lotes[0].id;
+          await apiPATCH('lotes', `id=eq.${loteId}`, { quantidade_atual: Number(lotes[0].quantidade_atual)+r.dif });
+        }else{
+          const novo = await apiPOST('lotes', { produto_id:r.id, numero_lote:'INVENTARIO', validade:null, quantidade_atual:r.dif, local:INV.local });
+          loteId = novo.id;
+        }
+        await apiPOST('movimentacoes', { tipo:'ajuste_entrada', produto_id:r.id, lote_id:loteId, quantidade:r.dif, data:hojeISO(), observacao:`${obs} — sobra ${fmtQtd(r.dif)} un` });
+      }
+      ok++;
+    }catch(e){ erros.push(`${r.nome}: ${e.message}`); }
+  }
+  toast(erros.length ? `Inventário parcial: ${ok} ok, ${erros.length} erro(s).` : `Inventário confirmado: ${ok} ajuste(s).`, erros.length ? 'alerta' : 'ok');
+  if(erros.length) console.warn('Inventário — erros:', erros);
+  carregarInventario();
+  carregarDashboard();
+}
+
+/* ================= KARDEX ================= */
+let KDX = null;
+function carregarKardexInit(){ /* aguarda o usuário buscar */ }
+async function carregarKardex(){
+  const box = document.getElementById('kdxResult');
+  const loading = document.getElementById('kdxLoading');
+  const nome = document.getElementById('kdxProduto').value.trim();
+  const p = resolverProduto(nome);
+  if(!p){ toast('Produto não encontrado.','erro'); return; }
+  try{
+    loading.classList.remove('hidden'); box.innerHTML = '';
+    const [lotes, movs] = await Promise.all([
+      apiGET(`lotes?produto_id=eq.${p.id}&select=id,numero_lote,validade,quantidade_atual,local`),
+      apiGETall(`movimentacoes?produto_id=eq.${p.id}&select=id,tipo,lote_id,quantidade,data,observacao,cliente,fornecedor_id&order=data.asc`),
+    ]);
+    const loteMap = {};
+    lotes.forEach(l=>{ loteMap[l.id] = l; });
+    const saldoAtual = lotes.reduce((s,l)=>s+Number(l.quantidade_atual||0),0);
+    const porLocal = {};
+    lotes.forEach(l=>{ porLocal[l.local||'Fortaleza'] = (porLocal[l.local||'Fortaleza']||0) + Number(l.quantidade_atual||0); });
+    // saldo de abertura implícito = atual − soma(sinal×qtd)
+    let soma = 0;
+    movs.forEach(m=>{ soma += (TIPOS[m.tipo]?.sinal ?? 0) * Number(m.quantidade||0); });
+    let saldo = saldoAtual - soma;
+    const linhas = movs.map(m=>{
+      const sinal = TIPOS[m.tipo]?.sinal ?? 0;
+      saldo += sinal * Number(m.quantidade||0);
+      const l = loteMap[m.lote_id];
+      const qtd = Number(m.quantidade||0);
+      return `<tr class="rowline">
+        <td class="py-2 px-3 whitespace-nowrap">${fmtData(m.data)}</td>
+        <td class="py-2 pr-2">${TIPOS[m.tipo]?.label || m.tipo}</td>
+        <td class="py-2 pr-2 text-xs">${l ? esc(l.numero_lote) + ' · 📍 ' + esc(l.local||'Fortaleza') : '—'}</td>
+        <td class="py-2 pr-2 text-right tabular-nums ${sinal>0?'text-green-700':'text-red-700'}">${sinal>0?'+':''}${fmtQtd(sinal*qtd)}</td>
+        <td class="py-2 pr-3 text-right tabular-nums font-semibold">${fmtQtd(saldo)}</td>
+      </tr>`;
+    }).join('');
+    loading.classList.add('hidden');
+    box.innerHTML = `
+      <div class="card p-4 mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div><div class="font-bold text-lg">${esc(p.nome)}</div>
+          <div class="text-xs text-gray-500">${esc(p.linha||'')} · saldo de abertura (implícito): <b>${fmtQtd(saldoAtual - soma)}</b></div></div>
+          <div class="text-right"><div class="text-2xl font-black">${fmtQtd(saldoAtual)} <span class="text-sm font-semibold text-gray-500">un</span></div>
+          <div class="text-xs text-gray-500">📍 Fortaleza: ${fmtQtd(porLocal['Fortaleza']||0)} · Piauí: ${fmtQtd(porLocal['Piauí']||0)}</div></div>
+        </div>
+      </div>
+      <div class="card overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-left text-xs text-gray-500 uppercase">
+          <th class="py-2 px-3">Data</th><th class="py-2 pr-2">Movimento</th><th class="py-2 pr-2">Lote</th>
+          <th class="py-2 pr-2 text-right">Qtd</th><th class="py-2 pr-3 text-right">Saldo</th>
+        </tr></thead>
+        <tbody>${linhas || '<tr><td colspan="5" class="py-4 px-3 text-gray-400">Sem movimentações.</td></tr>'}</tbody>
+      </table></div></div>`;
+  }catch(e){ loading.classList.add('hidden'); toast('Erro no kardex: '+e.message,'erro'); }
 }
 
 function renderEstoque(){
@@ -2618,7 +2869,8 @@ async function carregarProdutos(){
       loadEl.classList.remove('hidden');
       loadEl.textContent = 'Carregando…';
       const [prods, cons] = await Promise.all([
-        apiGET('produtos?ativo=eq.true&select=id,nome,linha&order=linha.asc,nome.asc'),
+        (async()=>{ try{ return await apiGET('produtos?ativo=eq.true&select=id,nome,linha,estoque_minimo&order=linha.asc,nome.asc'); }
+          catch(e){ return await apiGET('produtos?ativo=eq.true&select=id,nome,linha&order=linha.asc,nome.asc'); } })(),
         (async()=>{ const a=[]; let off=0; for(;;){ const pg=await apiGET(`consumo?ano=eq.2026&select=produto_id,quantidade&limit=1000&offset=${off}`); a.push(...pg); if(pg.length<1000) break; off+=1000; } return a; })(),
       ]);
       const est=[]; let off=0;
@@ -2645,6 +2897,7 @@ const PROD_STATUS_OPS = [
   ['warn', '🟡 Atenção'],
   ['ok', '🟢 OK'],
   ['none', '⚪ Sem consumo'],
+  ['abaixo', '⚠️ Abaixo do mínimo'],
 ];
 function renderProdStatus(){
   const box = document.getElementById('prodStatus');
@@ -2674,9 +2927,9 @@ function renderCobertura(){
       const media = totCons / COB_MESES_BASE;
       const e = estPorNome[p.nome] || { total:0, Fortaleza:0, Piaui:0 };
       const cob = media > 0 ? e.total / media : null;
-      return { p, totCons, media, total:e.total, Fortaleza:e.Fortaleza, Piaui:e.Piaui, cob, st: cobStatus(cob) };
+      return { p, min: Number(p.estoque_minimo||0), totCons, media, total:e.total, Fortaleza:e.Fortaleza, Piaui:e.Piaui, cob, st: cobStatus(cob) };
     })
-    .filter(i => !prodStatusSel || i.st === prodStatusSel);
+    .filter(i => !prodStatusSel || (prodStatusSel==='abaixo' ? (i.min>0 && i.total<i.min) : i.st === prodStatusSel));
   items.sort((a,b)=>{
     if(a.cob == null && b.cob == null) return b.total - a.total;
     if(a.cob == null) return 1;
@@ -2695,10 +2948,11 @@ function renderCobertura(){
     else if(i.cob <= 4){ badge = '<span class="badge cob-warn">🟡 atenção</span>'; bar = '#eab308'; barW = Math.min(i.cob/6,1)*100; }
     else { badge = '<span class="badge cob-ok">🟢 ok</span>'; bar = '#22c55e'; barW = Math.min(i.cob/6,1)*100; }
     const cobTxt = i.cob == null ? '—' : (i.cob >= 99 ? '99+ meses' : i.cob.toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' meses');
+    const abaixoMin = i.min > 0 && i.total < i.min;
     return `<div class="card p-4">
       <div class="flex items-start justify-between gap-2 mb-1">
         <div class="font-bold text-sm leading-snug">${esc(i.p.nome)}</div>
-        <div class="shrink-0">${badge}</div>
+        <div class="shrink-0 flex flex-col items-end gap-1">${badge}${abaixoMin?'<span class="badge urg-30">⚠️ abaixo do mínimo</span>':''}</div>
       </div>
       <div class="text-xs text-gray-500 mb-2">🧪 ${esc(i.p.linha || '—')}</div>
       <div class="flex items-end justify-between mb-1 gap-2">
@@ -2707,8 +2961,23 @@ function renderCobertura(){
       </div>
       <div class="cobbar mb-2"><div style="width:${barW.toFixed(0)}%;background:${bar}"></div></div>
       <div class="text-xs border-t pt-2 mt-1">📦 <b>${fmtQtd(i.total)}</b> un em estoque <span class="text-gray-400">•</span> 📍 Fortaleza <b>${fmtQtd(i.Fortaleza)}</b> <span class="text-gray-400">•</span> 📍 Piauí <b>${fmtQtd(i.Piaui)}</b></div>
+      <div class="text-xs pt-1.5 text-gray-500 flex items-center gap-1.5">🔔 Est. mín:
+        <input type="number" min="0" step="any" value="${i.min||''}" placeholder="0"
+          class="inp !w-20 !py-1 !px-2 text-xs text-right tabular-nums inline-block"
+          onchange="salvarEstMin('${i.p.id}', this.value)" title="Estoque mínimo em unidades"> un</div>
     </div>`;
   }).join('');
+}
+async function salvarEstMin(prodId, val){
+  const v = Math.max(0, Number(val)||0);
+  try{
+    await apiPATCH('produtos', `id=eq.${prodId}`, { estoque_minimo: v });
+    const pr = PROD_COB.prods.find(p=>p.id===prodId);
+    if(pr) pr.estoque_minimo = v;
+    toast('Estoque mínimo atualizado. ✓','ok');
+    renderCobertura();
+    carregarDashboard();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ================= PEDIDOS AO ESTOQUE ================= */
