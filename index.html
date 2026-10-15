@@ -228,12 +228,6 @@
 
       <!-- ===== INÍCIO / DASHBOARD ===== -->
       <section id="aba-inicio">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div class="card p-4"><div class="text-2xl font-black" id="kpiProdutos">–</div><div class="text-xs text-gray-500 font-semibold">Produtos ativos</div></div>
-          <div class="card p-4"><div class="text-2xl font-black" id="kpiLotes">–</div><div class="text-xs text-gray-500 font-semibold">Lotes com saldo</div></div>
-          <div class="card p-4"><div class="text-2xl font-black brand" id="kpiVencendo">–</div><div class="text-xs text-gray-500 font-semibold">Vencendo em 90 dias</div></div>
-          <div class="card p-4"><div class="text-2xl font-black" id="kpiEmprestimos">–</div><div class="text-xs text-gray-500 font-semibold">Empréstimos em aberto</div></div>
-        </div>
         <div class="card p-4 mb-4">
           <div class="font-bold mb-2">⚠️ Lotes vencendo</div>
           <div id="listaVencendo" class="text-sm text-gray-500">Carregando…</div>
@@ -244,27 +238,26 @@
         </div>
         <div class="card p-4">
           <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
-            <div class="font-bold">Estoque atual</div>
+            <div class="font-bold">📦 Estoque atual</div>
             <div class="flex gap-2">
               <select id="filtroLocal" class="inp !w-auto !py-1.5 text-sm" onchange="renderEstoque()">
                 <option value="">📍 Todos os locais</option>
                 <option value="Fortaleza">📍 Fortaleza</option>
                 <option value="Piauí">📍 Piauí</option>
               </select>
-              <select id="filtroLinha" class="inp !w-auto !py-1.5 text-sm" onchange="renderEstoque()">
-                <option value="">🧪 Todas as linhas</option>
-                <option>Coagulação</option><option>Gasometria</option><option>Hematologia</option><option>Bioquímica</option>
-              </select>
               <input id="buscaEstoque" class="inp !w-40 !py-1.5 text-sm" placeholder="🔎 Buscar produto…" oninput="renderEstoque()">
             </div>
           </div>
+          <div id="estLinhas" class="flex flex-wrap gap-2 mb-3"></div>
           <div id="totaisLocal" class="text-xs text-gray-500 mb-2"></div>
           <div class="overflow-x-auto -mx-4 px-4">
             <table class="w-full text-sm">
               <thead><tr class="text-left text-xs text-gray-500 uppercase">
-                <th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th><th class="py-2 pr-2">Local</th><th class="py-2 pr-2">Lote</th><th class="py-2 pr-2">Validade</th><th class="py-2 text-right">Qtd</th>
+                <th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th>
+                <th class="py-2 pr-2 text-right">📍 Fortaleza</th><th class="py-2 pr-2 text-right">📍 Piauí</th>
+                <th class="py-2 text-right">Total</th>
               </tr></thead>
-              <tbody id="tbodyEstoque"><tr><td colspan="6" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+              <tbody id="tbodyEstoque"><tr><td colspan="5" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1258,20 +1251,14 @@ async function carregarDashboard(){
     let prods;
     try{ prods = await apiGET('produtos?ativo=eq.true&select=id,nome,estoque_minimo'); }
     catch(e){ prods = await apiGET('produtos?ativo=eq.true&select=id,nome'); /* coluna ainda não criada */ }
-    const [lotesSaldo, vencendo, saidasEmp, devolucoes, estoque] = await Promise.all([
-      apiGET('lotes?quantidade_atual=gt.0&select=id'),
+    const [vencendo, estoque] = await Promise.all([
       apiGET('lotes_vencendo_90d?select=*'),
-      apiGET('movimentacoes?tipo=eq.emprestimo_saida&select=id'),
-      apiGET('movimentacoes?tipo=eq.emprestimo_devolucao&select=observacao'),
       apiGET('estoque_atual?select=*&order=linha.asc,produto.asc'),
     ]);
-    document.getElementById('kpiProdutos').textContent = prods.length;
-    document.getElementById('kpiLotes').textContent = lotesSaldo.length;
-    document.getElementById('kpiVencendo').textContent = vencendo.length;
-    document.getElementById('kpiEmprestimos').textContent = contarEmprestimosAbertos(saidasEmp, devolucoes);
     renderVencendo(vencendo);
     renderAbaixoMin(prods, estoque);
     cacheEstoque = estoque;
+    renderEstLinhas();
     renderEstoque();
   }catch(e){ toast('Erro ao carregar dashboard: '+e.message,'erro'); }
 }
@@ -1469,34 +1456,41 @@ async function carregarKardex(){
   }catch(e){ loading.classList.add('hidden'); toast('Erro no kardex: '+e.message,'erro'); }
 }
 
+let estLinhaSel = '';
+function renderEstLinhas(){
+  const box = document.getElementById('estLinhas');
+  if(!box) return;
+  const ops = ['', ...LINHAS];
+  box.innerHTML = ops.map(l=>`<button class="btn-ghost linhabtn !w-auto !py-1.5 text-sm${estLinhaSel===l?' active':''}" onclick="setEstLinha('${esc(l)}')">${l===''?'Todas as linhas':'🧪 '+esc(l)}</button>`).join('');
+}
+function setEstLinha(l){ estLinhaSel = l; renderEstLinhas(); renderEstoque(); }
+
 function renderEstoque(){
   const tb = document.getElementById('tbodyEstoque');
   const f = (document.getElementById('buscaEstoque').value||'').toLowerCase();
   const loc = document.getElementById('filtroLocal').value;
-  const lin = document.getElementById('filtroLinha').value;
-  const rows = cacheEstoque.filter(r => (!f || r.produto.toLowerCase().includes(f)) && (!loc || r.local===loc) && (!lin || r.linha===lin));
+  const agg = {};
+  cacheEstoque.forEach(r=>{
+    if(f && !(r.produto||'').toLowerCase().includes(f)) return;
+    if(estLinhaSel && r.linha !== estLinhaSel) return;
+    const e = agg[r.produto] || (agg[r.produto] = { produto:r.produto, linha:r.linha, fort:0, piaui:0 });
+    const q = Number(r.quantidade)||0;
+    if(r.local==='Piauí') e.piaui += q; else e.fort += q;
+  });
+  let rows = Object.values(agg);
+  if(loc) rows = rows.filter(e => loc==='Piauí' ? e.piaui>0 : e.fort>0);
+  rows.sort((a,b)=>((b.fort+b.piaui)-(a.fort+a.piaui)) || a.produto.localeCompare(b.produto));
   const totFor = cacheEstoque.filter(r=>r.local==='Fortaleza').reduce((s,r)=>s+Number(r.quantidade||0),0);
   const totPi = cacheEstoque.filter(r=>r.local==='Piauí').reduce((s,r)=>s+Number(r.quantidade||0),0);
   document.getElementById('totaisLocal').innerHTML =
-    `Total geral: <b>${fmtQtd(totFor+totPi)} un</b> &nbsp;·&nbsp; 📍 Fortaleza: <b>${fmtQtd(totFor)} un</b> &nbsp;·&nbsp; 📍 Piauí: <b>${fmtQtd(totPi)} un</b>`;
-  if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" class="py-4 text-gray-400">Nenhum item.</td></tr>'; return; }
-  tb.innerHTML = rows.slice(0,300).map(r=>`<tr class="rowline">
-    <td class="py-2 pr-2 font-medium">${esc(r.produto)}</td>
-    <td class="py-2 pr-2 text-gray-500 text-xs">${esc(r.linha)}</td>
-    <td class="py-2 pr-2 text-xs">${r.local==='Piauí'?'📍 <b>Piauí</b>':'📍 Fortaleza'}</td>
-    <td class="py-2 pr-2">${esc(r.lote)}</td>
-    <td class="py-2 pr-2">${fmtData(r.validade)}</td>
-    <td class="py-2 text-right font-bold">${fmtQtd(r.quantidade)}</td></tr>`).join('')
-    + (rows.length>300 ? `<tr><td colspan="6" class="py-2 text-xs text-gray-400">Mostrando 300 de ${rows.length}…</td></tr>` : '');
-}
-
-function contarEmprestimosAbertos(saidas, devolucoes){
-  const refs = new Set();
-  (devolucoes||[]).forEach(d=>{
-    const m = String(d.observacao||'').match(/\[devolucao de ([0-9a-f-]{36})\]/i);
-    if(m) refs.add(m[1].toLowerCase());
-  });
-  return saidas.filter(s=>!refs.has(String(s.id).toLowerCase())).length;
+    `Total geral: <b>${fmtQtd(totFor+totPi)} un</b> &nbsp;·&nbsp; 📍 Fortaleza: <b>${fmtQtd(totFor)} un</b> &nbsp;·&nbsp; 📍 Piauí: <b>${fmtQtd(totPi)} un</b> &nbsp;·&nbsp; ${rows.length} produto(s)`;
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum produto.</td></tr>'; return; }
+  tb.innerHTML = rows.map(e=>`<tr class="rowline">
+    <td class="py-2 pr-2 font-medium">${esc(e.produto)}</td>
+    <td class="py-2 pr-2 text-gray-500 text-xs">${esc(e.linha||'')}</td>
+    <td class="py-2 pr-2 text-right tabular-nums">${fmtQtd(e.fort)}</td>
+    <td class="py-2 pr-2 text-right tabular-nums">${fmtQtd(e.piaui)}</td>
+    <td class="py-2 text-right font-bold tabular-nums">${fmtQtd(e.fort+e.piaui)}</td></tr>`).join('');
 }
 
 /* ================= FORM: NOVA MOVIMENTAÇÃO ================= */
