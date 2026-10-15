@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>NEW LIFE • Estoque</title>
+  <link rel="icon" type="image/png" href="logo.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
@@ -157,6 +158,7 @@
 <div id="telaLogin" class="min-h-screen flex items-center justify-center p-6 bg-gray-100">
   <div class="card w-full max-w-sm p-6">
     <div class="text-center mb-5">
+      <img src="logo.png" alt="NEW LIFE" class="w-20 h-20 mx-auto mb-2">
       <div class="text-2xl font-black tracking-tight">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
       <div class="text-xs text-gray-500 mt-1">Sistema de controle de estoque do laboratório</div>
     </div>
@@ -174,7 +176,10 @@
   <!-- TOPO -->
   <header class="bg-white border-b sticky top-0 z-40">
     <div class="w-full px-4 md:px-8 py-3 flex items-center justify-between">
-      <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
+      <div class="flex items-center gap-2.5">
+        <img src="logo.png" alt="NEW LIFE" class="w-9 h-9">
+        <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
+      </div>
       <div class="flex items-center gap-2">
         <select id="selTema" class="inp !w-auto !py-1.5 !px-2 !text-xs" onchange="aplicarTema(this.value)" title="Tema do sistema">
           <option value="claro">☀️ Claro</option>
