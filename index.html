@@ -96,6 +96,19 @@
   .urg-30{ background:#fecaca; color:#7f1d1d; border:1px solid #fca5a5; }
   .urg-60{ background:#ffedd5; color:#9a3412; border:1px solid #fdba74; }
   .urg-90{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }
+  /* badges de cobertura (módulo Produtos) */
+  .cob-ok{ background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  .cob-warn{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }
+  .cob-crit{ background:#fecaca; color:#7f1d1d; border:1px solid #fca5a5; }
+  .cob-none{ background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; }
+  [data-theme="escuro"] .cob-ok{ background:rgba(34,197,94,.14); color:#86efac; border-color:rgba(34,197,94,.45); }
+  [data-theme="escuro"] .cob-warn{ background:rgba(250,204,21,.12); color:#fde047; border-color:rgba(250,204,21,.45); }
+  [data-theme="escuro"] .cob-crit{ background:rgba(239,68,68,.14); color:#fca5a5; border-color:rgba(239,68,68,.45); }
+  [data-theme="escuro"] .cob-none{ background:rgba(148,163,184,.12); color:#94a3b8; border-color:rgba(148,163,184,.4); }
+  .cobbar{ height:.5rem; border-radius:999px; background:#e5e7eb; overflow:hidden; }
+  [data-theme="escuro"] .cobbar{ background:#1f2937; }
+  .cobbar > div{ height:100%; border-radius:999px; transition:width .3s; }
+  .linhabtn.active{ background:var(--brand); color:#fff; border-color:var(--brand); }
   details > summary{ cursor:pointer; list-style:none; }
   details > summary::-webkit-details-marker{ display:none; }
   .rowline{ border-bottom:1px solid var(--border-soft); }
@@ -201,6 +214,7 @@
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Arquivo Consumo</button>
+      <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🏷️ Produtos</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
@@ -535,6 +549,25 @@
             </table>
           </div>
         </div>
+      </section>
+
+      <!-- ===== PRODUTOS / COBERTURA ===== -->
+      <section id="aba-produtos" class="hidden">
+        <div class="card p-4 mb-4">
+          <div class="font-bold text-lg mb-1">🏷️ Produtos — cobertura de estoque</div>
+          <div class="text-xs text-gray-500 mb-3">Quanto tempo cada produto dura no estoque, com base no consumo médio mensal de <b>jan–out/2026</b>.<br>🔴 menos de 2 meses &nbsp; 🟡 2 a 4 meses &nbsp; 🟢 mais de 4 meses &nbsp; ⚪ sem consumo em 2026</div>
+          <div id="prodLinhas" class="flex flex-wrap gap-2 mb-3"></div>
+          <div><label class="lbl">Buscar produto</label><input id="prodBusca" class="inp text-sm" placeholder="Digite para buscar…" oninput="renderCobertura()"></div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="card p-4"><div class="text-2xl font-black brand" id="pcKpiProds">–</div><div class="text-xs text-gray-500 font-semibold">Produtos</div></div>
+          <div class="card p-4"><div class="text-2xl font-black text-red-600" id="pcKpiCrit">–</div><div class="text-xs text-gray-500 font-semibold">Em estado crítico</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="pcKpiEstoque">–</div><div class="text-xs text-gray-500 font-semibold">Unidades em estoque</div></div>
+        </div>
+
+        <div id="prodLoading" class="card p-4 text-sm text-gray-500 mb-4">Carregando…</div>
+        <div id="prodCards" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
       </section>
 
       <!-- ===== PEDIDOS AO ESTOQUE ===== -->
@@ -957,6 +990,7 @@
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Arquivo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏷️</span>Prods<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1082,7 +1116,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','pedidos','contratos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','pedidos','contratos','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -1095,6 +1129,7 @@ function mostrarAba(aba){
   if(aba==='emprestimos') carregarEmprestimos();
   if(aba==='consumo') carregarConsumo();
   if(aba==='arquivo') carregarArquivo();
+  if(aba==='produtos') carregarProdutos();
   if(aba==='pedidos') carregarPedidos();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
@@ -2525,6 +2560,95 @@ async function lancarConsumo(){
     CONSUMO_CACHE=null;
     carregarConsumo();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= PRODUTOS / COBERTURA ================= */
+let PROD_COB = null, prodLinhaSel = '';
+const COB_MESES_BASE = 10; /* jan–out/2026 */
+
+async function carregarProdutos(){
+  renderProdLinhas();
+  const loadEl = document.getElementById('prodLoading');
+  try{
+    if(!PROD_COB){
+      loadEl.classList.remove('hidden');
+      loadEl.textContent = 'Carregando…';
+      const [prods, cons] = await Promise.all([
+        apiGET('produtos?ativo=eq.true&select=id,nome,linha&order=linha.asc,nome.asc'),
+        (async()=>{ const a=[]; let off=0; for(;;){ const pg=await apiGET(`consumo?ano=eq.2026&select=produto_id,quantidade&limit=1000&offset=${off}`); a.push(...pg); if(pg.length<1000) break; off+=1000; } return a; })(),
+      ]);
+      const est=[]; let off=0;
+      for(;;){ const pg=await apiGET(`estoque_atual?select=produto,linha,quantidade,local&limit=1000&offset=${off}`); est.push(...pg); if(pg.length<1000) break; off+=1000; }
+      PROD_COB = { prods, cons, est };
+    }
+    loadEl.classList.add('hidden');
+    renderCobertura();
+  }catch(e){ loadEl.classList.remove('hidden'); loadEl.textContent = 'Erro ao carregar: '+e.message; toast('Erro ao carregar produtos: '+e.message,'erro'); }
+}
+
+function renderProdLinhas(){
+  const box = document.getElementById('prodLinhas');
+  if(!box) return;
+  const ops = ['', ...LINHAS];
+  box.innerHTML = ops.map(l=>`<button class="btn-ghost linhabtn !w-auto !py-1.5 text-sm${prodLinhaSel===l?' active':''}" onclick="setProdLinha('${esc(l)}')">${l===''?'Todas as linhas':'🧪 '+esc(l)}</button>`).join('');
+}
+
+function setProdLinha(l){ prodLinhaSel = l; renderProdLinhas(); renderCobertura(); }
+
+function renderCobertura(){
+  if(!PROD_COB) return;
+  const buscaEl = document.getElementById('prodBusca');
+  const busca = ((buscaEl && buscaEl.value) || '').toLowerCase();
+  const consPorId = {};
+  PROD_COB.cons.forEach(r=>{ consPorId[r.produto_id] = (consPorId[r.produto_id]||0) + (Number(r.quantidade)||0); });
+  const estPorNome = {};
+  PROD_COB.est.forEach(r=>{
+    const e = estPorNome[r.produto] || (estPorNome[r.produto] = { total:0, Fortaleza:0, Piaui:0 });
+    const q = Number(r.quantidade)||0;
+    e.total += q;
+    if(r.local === 'Piauí') e.Piaui += q; else e.Fortaleza += q;
+  });
+  const items = PROD_COB.prods
+    .filter(p => (!prodLinhaSel || p.linha === prodLinhaSel) && (!busca || (p.nome||'').toLowerCase().includes(busca)))
+    .map(p=>{
+      const totCons = consPorId[p.id] || 0;
+      const media = totCons / COB_MESES_BASE;
+      const e = estPorNome[p.nome] || { total:0, Fortaleza:0, Piaui:0 };
+      const cob = media > 0 ? e.total / media : null;
+      return { p, totCons, media, total:e.total, Fortaleza:e.Fortaleza, Piaui:e.Piaui, cob };
+    });
+  items.sort((a,b)=>{
+    if(a.cob == null && b.cob == null) return b.total - a.total;
+    if(a.cob == null) return 1;
+    if(b.cob == null) return -1;
+    return a.cob - b.cob;
+  });
+  document.getElementById('pcKpiProds').textContent = items.length;
+  document.getElementById('pcKpiCrit').textContent = items.filter(i=>i.cob!=null && i.cob<2).length;
+  document.getElementById('pcKpiEstoque').textContent = items.reduce((s,i)=>s+i.total,0).toLocaleString('pt-BR');
+  const box = document.getElementById('prodCards');
+  if(!items.length){ box.innerHTML = '<div class="card p-6 text-center text-gray-400 md:col-span-2 xl:col-span-3">Nenhum produto encontrado.</div>'; return; }
+  box.innerHTML = items.map(i=>{
+    let badge, bar, barW;
+    if(i.cob == null){ badge = '<span class="badge cob-none">⚪ sem consumo em 2026</span>'; bar = '#94a3b8'; barW = 0; }
+    else if(i.cob < 2){ badge = '<span class="badge cob-crit">🔴 crítico</span>'; bar = '#ef4444'; barW = Math.min(i.cob/6,1)*100; }
+    else if(i.cob <= 4){ badge = '<span class="badge cob-warn">🟡 atenção</span>'; bar = '#eab308'; barW = Math.min(i.cob/6,1)*100; }
+    else { badge = '<span class="badge cob-ok">🟢 ok</span>'; bar = '#22c55e'; barW = Math.min(i.cob/6,1)*100; }
+    const cobTxt = i.cob == null ? '—' : (i.cob >= 99 ? '99+ meses' : i.cob.toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' meses');
+    return `<div class="card p-4">
+      <div class="flex items-start justify-between gap-2 mb-1">
+        <div class="font-bold text-sm leading-snug">${esc(i.p.nome)}</div>
+        <div class="shrink-0">${badge}</div>
+      </div>
+      <div class="text-xs text-gray-500 mb-2">🧪 ${esc(i.p.linha || '—')}</div>
+      <div class="flex items-end justify-between mb-1 gap-2">
+        <div><span class="text-2xl font-black">${cobTxt}</span><div class="text-[11px] text-gray-500 font-semibold">de cobertura</div></div>
+        <div class="text-right text-xs text-gray-500">média <b>${fmtQtd(i.media)}</b> un/mês<br>consumo 2026 <b>${fmtQtd(i.totCons)}</b> un</div>
+      </div>
+      <div class="cobbar mb-2"><div style="width:${barW.toFixed(0)}%;background:${bar}"></div></div>
+      <div class="text-xs border-t pt-2 mt-1">📦 <b>${fmtQtd(i.total)}</b> un em estoque <span class="text-gray-400">•</span> 📍 Fortaleza <b>${fmtQtd(i.Fortaleza)}</b> <span class="text-gray-400">•</span> 📍 Piauí <b>${fmtQtd(i.Piaui)}</b></div>
+    </div>`;
+  }).join('');
 }
 
 /* ================= PEDIDOS AO ESTOQUE ================= */
