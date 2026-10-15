@@ -1460,10 +1460,9 @@ let estLinhaSel = '';
 function renderEstLinhas(){
   const box = document.getElementById('estLinhas');
   if(!box) return;
-  const ops = ['', ...LINHAS];
-  box.innerHTML = ops.map(l=>`<button class="btn-ghost linhabtn !w-auto !py-1.5 text-sm${estLinhaSel===l?' active':''}" onclick="setEstLinha('${esc(l)}')">${l===''?'Todas as linhas':'🧪 '+esc(l)}</button>`).join('');
+  box.innerHTML = LINHAS.map(l=>`<button class="btn-ghost linhabtn !w-auto !py-1.5 text-sm${estLinhaSel===l?' active':''}" onclick="setEstLinha('${esc(l)}')">🧪 ${esc(l)}</button>`).join('');
 }
-function setEstLinha(l){ estLinhaSel = l; renderEstLinhas(); renderEstoque(); }
+function setEstLinha(l){ estLinhaSel = (estLinhaSel===l) ? '' : l; renderEstLinhas(); renderEstoque(); }
 
 function renderEstoque(){
   const tb = document.getElementById('tbodyEstoque');
