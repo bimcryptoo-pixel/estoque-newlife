@@ -195,6 +195,7 @@
       <button data-aba="rastreio"    onclick="mostrarAba('rastreio')"    class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔍 Rastreio de lote</button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🤝 Empréstimos</button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
+      <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Arquivo Consumo</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
@@ -466,6 +467,68 @@
             </table>
           </div>
           <div id="consumoMais" class="text-xs text-gray-400 mt-2"></div>
+        </div>
+      </section>
+
+      <!-- ===== ARQUIVO CONSUMO ===== -->
+      <section id="aba-arquivo" class="hidden">
+        <div id="arqLoading" class="hidden mb-4 card p-4 flex items-center gap-3 text-sm text-gray-500">
+          <span class="inline-block w-5 h-5 border-2 border-gray-300 rounded-full animate-spin" style="border-top-color:var(--brand)"></span>
+          Carregando dados do arquivo…
+        </div>
+        <div class="card p-4 mb-4">
+          <div class="mb-3">
+            <div class="font-bold text-lg">🗂️ Arquivo Consumo</div>
+            <div class="text-xs text-gray-500">Histórico de consumo por ano — linhas, clientes e produtos.</div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div class="col-span-2 md:col-span-5">
+              <label class="lbl">Anos</label>
+              <div id="arqAnos" class="flex flex-wrap gap-2 pt-1"><span class="text-sm text-gray-400">Carregando…</span></div>
+            </div>
+            <div><label class="lbl">Linha</label><select id="arqLinha" class="inp text-sm" onchange="carregarArquivo()"><option value="">Todas</option></select></div>
+            <div><label class="lbl">Cliente</label><select id="arqCliente" class="inp text-sm" onchange="carregarArquivo()"><option value="">Todos</option></select></div>
+            <div><label class="lbl">Produto</label><input id="arqProduto" class="inp text-sm" list="dlProdutos" placeholder="Digite para buscar…" autocomplete="off" onchange="carregarArquivo()"></div>
+            <div><label class="lbl">Tipo</label><select id="arqTipo" class="inp text-sm" onchange="carregarArquivo()"><option value="">Todos</option><option value="cliente">clientes</option><option value="interno">interno</option><option value="perda">perdas</option></select></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div class="card p-4"><div class="text-2xl font-black brand" id="arqKpiTotal">–</div><div class="text-xs text-gray-500 font-semibold">Unidades no filtro</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="arqKpiMedia">–</div><div class="text-xs text-gray-500 font-semibold">Média mensal</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="arqKpiAnos">–</div><div class="text-xs text-gray-500 font-semibold">Anos cobertos</div></div>
+          <div class="card p-4"><div class="text-2xl font-black" id="arqKpiClientes">–</div><div class="text-xs text-gray-500 font-semibold">Clientes distintos</div></div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+          <div class="card p-4">
+            <div class="font-bold mb-2">📈 Evolução anual <span class="text-xs font-normal text-gray-400">(comparativo ano a ano)</span></div>
+            <div class="relative h-64"><canvas id="arqChAno"></canvas></div>
+          </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">🗓️ Sazonalidade <span class="text-xs font-normal text-gray-400">(média mensal jan–dez entre os anos)</span></div>
+            <div class="relative h-64"><canvas id="arqChSaz"></canvas></div>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+          <div class="card p-4">
+            <div class="font-bold mb-2">👥 Top clientes <span class="text-xs font-normal text-gray-400">(top 10)</span></div>
+            <div class="relative h-72"><canvas id="arqChCli"></canvas></div>
+          </div>
+          <div class="card p-4">
+            <div class="font-bold mb-2">🧪 Top produtos <span class="text-xs font-normal text-gray-400">(top 10)</span></div>
+            <div class="relative h-72"><canvas id="arqChProd"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card p-4">
+          <div class="font-bold mb-2">📊 Por linha x ano</div>
+          <div class="overflow-x-auto -mx-4 px-4">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs text-gray-500 uppercase" id="arqTheadLinhaAno"></tr></thead>
+              <tbody id="arqTbodyLinhaAno"><tr><td class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -888,6 +951,7 @@
       <button data-aba="rastreio" onclick="mostrarAba('rastreio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔍</span>Lotes<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Arquivo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1013,7 +1077,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','pedidos','contratos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','pedidos','contratos','cadastros','admin'];
 function mostrarAba(aba){
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
@@ -1025,6 +1089,7 @@ function mostrarAba(aba){
   if(aba==='movs') carregarMovs();
   if(aba==='emprestimos') carregarEmprestimos();
   if(aba==='consumo') carregarConsumo();
+  if(aba==='arquivo') carregarArquivo();
   if(aba==='pedidos') carregarPedidos();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
@@ -2169,24 +2234,51 @@ async function criarCliente(){
 function rotuloMes(ym){ const [a,m]=ym.split('-'); return MESES_PT[+m-1]+'/'+a.slice(2); }
 function topEntries(obj,n){ return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n); }
 
+function graficoMostrar(id){
+  const el = document.getElementById(id);
+  if(el) el.style.display='';
+  const ph = document.getElementById(id+'-vazio');
+  if(ph) ph.style.display='none';
+}
+
+function graficoVazio(id, msg){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(CH[id]){ CH[id].destroy(); CH[id]=null; }
+  el.style.display='none';
+  let ph = document.getElementById(id+'-vazio');
+  if(!ph){
+    ph = document.createElement('div');
+    ph.id = id+'-vazio';
+    ph.className = 'flex items-center justify-center text-sm text-gray-400 text-center px-4';
+    ph.style.minHeight = '120px';
+    el.parentElement.appendChild(ph);
+  }
+  ph.style.display='flex';
+  ph.textContent = msg;
+}
+
 function desenharBarras(id, entries, horizontal, ehMes){
   const el = document.getElementById(id);
   if(!el) return;
+  graficoMostrar(id);
   if(CH[id]){ CH[id].destroy(); CH[id]=null; }
   if(typeof Chart==='undefined'){
     el.parentElement.innerHTML='<div class="text-sm text-gray-400 py-8 text-center">Gráfico indisponível (sem conexão).</div>';
     return;
   }
+  const fmtTick = v => Number(v).toLocaleString('pt-BR');
   CH[id] = new Chart(el, {
     type:'bar',
     data:{ labels: entries.map(e=> ehMes ? rotuloMes(e[0]) : e[0]),
            datasets:[{ data: entries.map(e=>e[1]),
              backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:4 }]},
     options:{ indexAxis: horizontal?'y':'x', responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false} },
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: c => ' ' + Number(horizontal ? c.parsed.x : c.parsed.y).toLocaleString('pt-BR') + ' un' } } },
       scales: horizontal
-        ? { x:{ beginAtZero:true, ticks:{ precision:0 } }, y:{ ticks:{ autoSkip:false } } }
-        : { y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+        ? { x:{ beginAtZero:true, ticks:{ precision:0, callback:fmtTick } }, y:{ ticks:{ autoSkip:false } } }
+        : { y:{ beginAtZero:true, ticks:{ precision:0, callback:fmtTick } } } }
   });
 }
 
@@ -2243,6 +2335,155 @@ async function carregarConsumo(){
     document.getElementById('consumoMais').textContent =
       rows.length>150 ? `Mostrando 150 de ${rows.length.toLocaleString('pt-BR')} registros.` : `${rows.length} registros.`;
   }catch(e){ toast('Erro ao carregar consumo: '+e.message,'erro'); }
+}
+
+function desenharLinha(id, labels, data){
+  const el = document.getElementById(id);
+  if(!el) return;
+  graficoMostrar(id);
+  if(CH[id]){ CH[id].destroy(); CH[id]=null; }
+  if(typeof Chart==='undefined'){
+    el.parentElement.innerHTML='<div class="text-sm text-gray-400 py-8 text-center">Gráfico indisponível (sem conexão).</div>';
+    return;
+  }
+  CH[id] = new Chart(el, {
+    type:'line',
+    data:{ labels, datasets:[{ data, borderColor:corMarca(), backgroundColor:corMarca(),
+      tension:.3, fill:false, pointRadius:3, pointHoverRadius:5 }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: c => ' ' + Number(c.parsed.y).toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' un/mês' } } },
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0, callback: v => Number(v).toLocaleString('pt-BR') } } } }
+  });
+}
+
+/* ================= ARQUIVO CONSUMO ================= */
+let arqInit = false;
+
+async function carregarArquivo(){
+  const loadingEl = document.getElementById('arqLoading');
+  try{
+    loadingEl.classList.remove('hidden');
+    ['arqKpiTotal','arqKpiMedia','arqKpiAnos','arqKpiClientes'].forEach(id=>{ document.getElementById(id).textContent='…'; });
+    document.getElementById('arqTbodyLinhaAno').innerHTML =
+      '<tr><td class="py-8 text-center text-gray-400">Carregando dados do arquivo…</td></tr>';
+    if(!CONSUMO_CACHE){
+      CONSUMO_CACHE = [];
+      let off = 0;
+      for(;;){
+        const pg = await apiGET(`consumo?select=*,clientes(id,nome,tipo),produtos(id,nome,linha)&order=ano.desc,mes.desc&limit=1000&offset=${off}`);
+        CONSUMO_CACHE.push(...pg);
+        if(pg.length<1000) break;
+        off += 1000;
+      }
+    }
+    if(!CLIENTES.length){ await carregarClientesCache(); }
+    // cores dos gráficos conforme o tema atual
+    if(typeof Chart!=='undefined'){
+      const escuro = document.documentElement.getAttribute('data-theme')==='escuro';
+      Chart.defaults.color = escuro ? '#a1a1aa' : '#6b7280';
+      Chart.defaults.borderColor = escuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    }
+    const boxAnos = document.getElementById('arqAnos');
+    if(!arqInit){
+      const anos = [...new Set(CONSUMO_CACHE.map(r=>r.ano))].sort((a,b)=>b-a);
+      boxAnos.innerHTML = anos.map(a=>
+        `<label class="inline-flex items-center gap-1.5 text-sm font-semibold bg-gray-100 rounded-lg px-2.5 py-1.5 cursor-pointer">
+          <input type="checkbox" value="${a}" checked onchange="carregarArquivo()"> ${a}
+        </label>`).join('') || '<span class="text-sm text-gray-400">Sem dados no arquivo.</span>';
+      const linhas = [...new Set(CONSUMO_CACHE.filter(r=>r.produtos).map(r=>r.produtos.linha))].sort();
+      document.getElementById('arqLinha').innerHTML = '<option value="">Todas</option>' + linhas.map(l=>`<option>${esc(l)}</option>`).join('');
+      document.getElementById('arqCliente').innerHTML = '<option value="">Todos</option>' +
+        CLIENTES.filter(c=>c.ativo).map(c=>`<option value="${c.id}">${esc(c.nome)}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
+      arqInit = true;
+    }
+    const anosSel = new Set([...boxAnos.querySelectorAll('input[type=checkbox]:checked')].map(i=>Number(i.value)));
+    const fLinha = document.getElementById('arqLinha').value;
+    const fCli = document.getElementById('arqCliente').value;
+    const fTipo = document.getElementById('arqTipo').value;
+    const txtProd = document.getElementById('arqProduto').value.trim();
+    const prod = txtProd ? resolverProduto(txtProd) : null;
+    const fProdId = prod ? prod.id : null;
+    const rows = CONSUMO_CACHE.filter(r=>{
+      if(!r.clientes || !r.produtos) return false;
+      if(!anosSel.has(r.ano)) return false;
+      if(fLinha && r.produtos.linha!==fLinha) return false;
+      if(fCli && r.cliente_id!==fCli) return false;
+      if(fTipo && r.clientes.tipo!==fTipo) return false;
+      if(txtProd && !fProdId) return false;
+      if(fProdId && r.produto_id!==fProdId) return false;
+      return true;
+    });
+    if(!rows.length){
+      ['arqKpiTotal','arqKpiMedia','arqKpiAnos','arqKpiClientes'].forEach(id=>{ document.getElementById(id).textContent='–'; });
+      const msgVazio = 'Nenhum registro para os filtros selecionados.';
+      ['arqChAno','arqChSaz','arqChCli','arqChProd'].forEach(id=>graficoVazio(id, msgVazio));
+      document.getElementById('arqTheadLinhaAno').innerHTML = '';
+      document.getElementById('arqTbodyLinhaAno').innerHTML =
+        `<tr><td class="py-8 text-center text-gray-400">${msgVazio}<br><span class="text-xs">Ajuste os anos, a linha, o cliente ou o produto.</span></td></tr>`;
+      return;
+    }
+    const total = rows.reduce((s,r)=>s+r.quantidade,0);
+    const mesesDist = new Set(rows.map(r=>r.ano*12+r.mes));
+    const anosDist = [...new Set(rows.map(r=>r.ano))].sort((a,b)=>a-b);
+    document.getElementById('arqKpiTotal').textContent = total.toLocaleString('pt-BR');
+    document.getElementById('arqKpiMedia').textContent =
+      (total/mesesDist.size).toLocaleString('pt-BR',{maximumFractionDigits:1});
+    document.getElementById('arqKpiAnos').textContent = anosDist.length;
+    document.getElementById('arqKpiClientes').textContent = new Set(rows.map(r=>r.cliente_id)).size;
+    // evolução anual
+    const porAno = {};
+    rows.forEach(r=>{ porAno[r.ano]=(porAno[r.ano]||0)+r.quantidade; });
+    desenharBarras('arqChAno', Object.entries(porAno).sort((a,b)=>a[0]-b[0]), false, false);
+    // sazonalidade: média por mês (denominador = anos com dado naquele mês)
+    const somaMes = {}, anosMes = {};
+    rows.forEach(r=>{
+      somaMes[r.mes]=(somaMes[r.mes]||0)+r.quantidade;
+      (anosMes[r.mes] = anosMes[r.mes] || new Set()).add(r.ano);
+    });
+    desenharLinha('arqChSaz', MESES_PT,
+      MESES_PT.map((_,i)=>{ const m=i+1; return anosMes[m] ? somaMes[m]/anosMes[m].size : 0; }));
+    // tops
+    const porCli={}, porProd={};
+    rows.forEach(r=>{
+      porCli[r.clientes.nome]=(porCli[r.clientes.nome]||0)+r.quantidade;
+      porProd[r.produtos.nome]=(porProd[r.produtos.nome]||0)+r.quantidade;
+    });
+    desenharBarras('arqChCli', topEntries(porCli,10), true, false);
+    desenharBarras('arqChProd', topEntries(porProd,10), true, false);
+    // tabela linha x ano
+    const anosCols = [...anosSel].sort((a,b)=>a-b);
+    const linhasOrd = [...new Set(rows.map(r=>r.produtos.linha))]
+      .sort((a,b)=>{ const ia=LINHAS.indexOf(a), ib=LINHAS.indexOf(b);
+        return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b); });
+    const cel = {};
+    rows.forEach(r=>{
+      const k = r.produtos.linha+'|'+r.ano;
+      cel[k]=(cel[k]||0)+r.quantidade;
+    });
+    const fmtC = v => v ? v.toLocaleString('pt-BR') : '<span class="text-gray-300">–</span>';
+    document.getElementById('arqTheadLinhaAno').innerHTML =
+      `<th class="py-2 pr-2">Linha</th>` + anosCols.map(a=>`<th class="py-2 pr-2 text-right">${a}</th>`).join('') +
+      `<th class="py-2 text-right">Total</th>`;
+    const totAno = {};
+    let totGeral = 0;
+    const bodyRows = linhasOrd.map(l=>{
+      let totL = 0;
+      const tds = anosCols.map(a=>{
+        const v = cel[l+'|'+a]||0; totL+=v; totAno[a]=(totAno[a]||0)+v; return v;
+      });
+      totGeral += totL;
+      return `<tr class="rowline"><td class="py-2 pr-2 font-medium">${esc(l)}</td>` +
+        tds.map(v=>`<td class="py-2 pr-2 text-right">${fmtC(v)}</td>`).join('') +
+        `<td class="py-2 text-right font-bold">${fmtC(totL)}</td></tr>`;
+    }).join('');
+    const totRow =
+      `<tr class="rowline" style="background:var(--surface2); border-top:2px solid var(--border)"><td class="py-2 pr-2 font-bold">TOTAL</td>` +
+      anosCols.map(a=>`<td class="py-2 pr-2 text-right font-bold">${fmtC(totAno[a]||0)}</td>`).join('') +
+      `<td class="py-2 text-right font-black brand">${fmtC(totGeral)}</td></tr>`;
+    document.getElementById('arqTbodyLinhaAno').innerHTML = bodyRows + totRow;
+  }catch(e){ toast('Erro ao carregar arquivo: '+e.message,'erro'); }
+  finally{ loadingEl.classList.add('hidden'); }
 }
 
 async function lancarConsumo(){
