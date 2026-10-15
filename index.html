@@ -557,6 +557,8 @@
           <div class="font-bold text-lg mb-1">🏷️ Produtos — cobertura de estoque</div>
           <div class="text-xs text-gray-500 mb-3">Quanto tempo cada produto dura no estoque, com base no consumo médio mensal de <b>jan–out/2026</b>.<br>🔴 menos de 2 meses &nbsp; 🟡 2 a 4 meses &nbsp; 🟢 mais de 4 meses &nbsp; ⚪ sem consumo em 2026</div>
           <div id="prodLinhas" class="flex flex-wrap gap-2 mb-3"></div>
+          <div class="text-xs font-bold text-gray-500 uppercase mb-1">Situação</div>
+          <div id="prodStatus" class="flex flex-wrap gap-2 mb-3"></div>
           <div><label class="lbl">Buscar produto</label><input id="prodBusca" class="inp text-sm" placeholder="Digite para buscar…" oninput="renderCobertura()"></div>
         </div>
 
@@ -2563,11 +2565,12 @@ async function lancarConsumo(){
 }
 
 /* ================= PRODUTOS / COBERTURA ================= */
-let PROD_COB = null, prodLinhaSel = '';
+let PROD_COB = null, prodLinhaSel = '', prodStatusSel = '';
 const COB_MESES_BASE = 10; /* jan–out/2026 */
 
 async function carregarProdutos(){
   renderProdLinhas();
+  renderProdStatus();
   const loadEl = document.getElementById('prodLoading');
   try{
     if(!PROD_COB){
@@ -2595,6 +2598,21 @@ function renderProdLinhas(){
 
 function setProdLinha(l){ prodLinhaSel = l; renderProdLinhas(); renderCobertura(); }
 
+const PROD_STATUS_OPS = [
+  ['', 'Todas as situações'],
+  ['crit', '🔴 Crítico'],
+  ['warn', '🟡 Atenção'],
+  ['ok', '🟢 OK'],
+  ['none', '⚪ Sem consumo'],
+];
+function renderProdStatus(){
+  const box = document.getElementById('prodStatus');
+  if(!box) return;
+  box.innerHTML = PROD_STATUS_OPS.map(([v,rot])=>`<button class="btn-ghost linhabtn !w-auto !py-1.5 text-sm${prodStatusSel===v?' active':''}" onclick="setProdStatus('${v}')">${rot}</button>`).join('');
+}
+function setProdStatus(s){ prodStatusSel = s; renderProdStatus(); renderCobertura(); }
+function cobStatus(cob){ return cob == null ? 'none' : cob < 2 ? 'crit' : cob <= 4 ? 'warn' : 'ok'; }
+
 function renderCobertura(){
   if(!PROD_COB) return;
   const buscaEl = document.getElementById('prodBusca');
@@ -2615,8 +2633,9 @@ function renderCobertura(){
       const media = totCons / COB_MESES_BASE;
       const e = estPorNome[p.nome] || { total:0, Fortaleza:0, Piaui:0 };
       const cob = media > 0 ? e.total / media : null;
-      return { p, totCons, media, total:e.total, Fortaleza:e.Fortaleza, Piaui:e.Piaui, cob };
-    });
+      return { p, totCons, media, total:e.total, Fortaleza:e.Fortaleza, Piaui:e.Piaui, cob, st: cobStatus(cob) };
+    })
+    .filter(i => !prodStatusSel || i.st === prodStatusSel);
   items.sort((a,b)=>{
     if(a.cob == null && b.cob == null) return b.total - a.total;
     if(a.cob == null) return 1;
