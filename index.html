@@ -5613,7 +5613,7 @@ async function carregarPainelTecnico(){
     document.getElementById('tecNome').textContent = 'Técnico: ' + tnome;
     const atvs = await apiGET(
       'os_atividades?tecnico=ilike.*'+encodeURIComponent(tnome)+'*&status=not.in.(concluida,cancelada)' +
-      '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,telefone),equipamentos(nome,numero_serie))' +
+      '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))' +
       '&order=data.asc,created_at.asc&limit=200'
     );
     renderPainelTecnico(atvs||[]);
@@ -5653,7 +5653,7 @@ function renderPainelTecnico(atvs){
       </div>
       <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
-      ${cli.telefone?`<div class="text-xs text-gray-500">📞 ${esc(cli.telefone)}</div>`:''}
+      ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
       ${eq.nome?`<div class="text-xs text-gray-500">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
       <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
