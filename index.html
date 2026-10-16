@@ -167,6 +167,35 @@
   </div>
 </div>
 
+<!-- ============ MODAL EDITAR PRODUTO ============ -->
+<div id="modalProduto" class="fixed inset-0 z-[95] flex items-center justify-center p-4" style="display:none;background:rgba(0,0,0,.5)" onclick="fecharEditorProduto()">
+  <div class="card p-5 w-full max-w-sm" onclick="event.stopPropagation()">
+    <div class="font-bold mb-3">✏️ Editar produto</div>
+    <label class="lbl">Nome</label>
+    <input id="epNome" class="inp text-sm mb-2">
+    <label class="lbl">Código do fornecedor</label>
+    <input id="epCodigo" class="inp text-sm mb-2" placeholder="Ex: 20302400">
+    <label class="lbl">Linha</label>
+    <select id="epLinha" class="inp text-sm mb-2">
+      <option>Coagulação</option><option>Gasometria</option><option>Hematologia</option><option>Bioquímica</option>
+    </select>
+    <label class="lbl">Unidade</label>
+    <input id="epUnidade" class="inp text-sm mb-2">
+    <div class="text-xs font-bold text-gray-500 uppercase mb-1 mt-1">🧾 Dados fiscais <span class="font-normal normal-case">(exigidos na NF-e)</span></div>
+    <div class="grid grid-cols-3 gap-2 mb-2">
+      <div><label class="lbl">NCM</label><input id="epNcm" class="inp text-sm" inputmode="numeric" maxlength="8" placeholder="8 dígitos"></div>
+      <div><label class="lbl">CFOP</label><input id="epCfop" class="inp text-sm" inputmode="numeric" maxlength="4" placeholder="Ex: 5102"></div>
+      <div><label class="lbl">CST/CSOSN</label><input id="epCst" class="inp text-sm" inputmode="numeric" maxlength="3" placeholder="Ex: 102"></div>
+    </div>
+    <label class="lbl">Alíquota ICMS % (regime normal)</label>
+    <input id="epAliqIcms" class="inp text-sm mb-3" inputmode="decimal" placeholder="Ex: 18">
+    <div class="flex gap-2 mt-1">
+      <button class="btn-ghost flex-1" onclick="fecharEditorProduto()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="salvarProduto()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ LOGIN ============ -->
 <div id="telaLogin" class="min-h-screen flex items-center justify-center p-6 bg-gray-100">
   <div class="card w-full max-w-sm p-6">
@@ -1063,10 +1092,18 @@
             <div class="border-t pt-3 grid gap-2">
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo produto</div>
               <input id="pNome" class="inp text-sm" placeholder="Nome do produto">
+            <input id="pCodigo" class="inp text-sm" placeholder="Código do fornecedor (opcional)">
               <select id="pLinha" class="inp text-sm">
                 <option>Coagulação</option><option>Gasometria</option><option>Hematologia</option><option>Bioquímica</option>
               </select>
               <input id="pUnidade" class="inp text-sm" placeholder="Unidade (padrão: un)" value="un">
+              <div class="text-xs font-bold text-gray-500 uppercase mt-1">🧾 Dados fiscais <span class="font-normal normal-case">(opcional — exigidos na NF-e)</span></div>
+              <div class="grid grid-cols-3 gap-2">
+                <input id="pNcm" class="inp text-sm" placeholder="NCM" inputmode="numeric" maxlength="8">
+                <input id="pCfop" class="inp text-sm" placeholder="CFOP" inputmode="numeric" maxlength="4">
+                <input id="pCst" class="inp text-sm" placeholder="CST/CSOSN" inputmode="numeric" maxlength="3">
+              </div>
+              <input id="pAliqIcms" class="inp text-sm" placeholder="Alíquota ICMS % (ex: 18) — regime normal" inputmode="decimal">
               <button class="btn-brand !py-2 text-sm" onclick="criarProduto()">Cadastrar produto</button>
             </div>
           </div>
@@ -1107,6 +1144,20 @@
                 <option value="interno">interno (NEW LIFE)</option>
                 <option value="perda">perda (vencidos etc.)</option>
               </select>
+              <div class="text-xs font-bold text-gray-500 uppercase mt-1">🧾 Dados fiscais <span class="font-normal normal-case">(exigidos na NF-e)</span></div>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="cliIe" class="inp text-sm" placeholder="Inscrição Estadual" inputmode="numeric">
+                <input id="cliCep" class="inp text-sm" placeholder="CEP" inputmode="numeric">
+              </div>
+              <input id="cliEndereco" class="inp text-sm" placeholder="Endereço (rua/av)">
+              <div class="grid grid-cols-3 gap-2">
+                <input id="cliNumero" class="inp text-sm" placeholder="Número">
+                <input id="cliBairro" class="inp text-sm col-span-2" placeholder="Bairro">
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <input id="cliCidade" class="inp text-sm col-span-2" placeholder="Cidade">
+                <input id="cliUf" class="inp text-sm" placeholder="UF" maxlength="2" value="CE">
+              </div>
               <button class="btn-brand !py-2 text-sm" onclick="criarCliente()">Cadastrar cliente</button>
             </div>
           </div>
@@ -1126,6 +1177,34 @@
             <select id="uPerfil" class="inp text-sm"><option value="operador">operador (equipe)</option><option value="admin">admin</option></select>
             <button class="btn-brand !py-2 text-sm" onclick="criarUsuario()">Criar usuário</button>
           </div>
+        </div>
+        <div class="card p-4 max-w-6xl mt-4">
+          <div class="font-bold mb-1">🧾 Dados fiscais da empresa <span class="text-xs font-normal text-gray-400">(emitente da NF-e — só o admin edita)</span></div>
+          <div id="efStatus" class="text-xs text-gray-500 mb-3">Carregando…</div>
+          <div class="grid md:grid-cols-3 gap-2">
+            <div class="md:col-span-2"><label class="lbl">Razão social *</label><input id="efRazao" class="inp text-sm"></div>
+            <div><label class="lbl">CNPJ *</label><input id="efCnpj" class="inp text-sm" inputmode="numeric" placeholder="somente números"></div>
+            <div><label class="lbl">Nome fantasia</label><input id="efFantasia" class="inp text-sm"></div>
+            <div><label class="lbl">Inscrição Estadual *</label><input id="efIe" class="inp text-sm" inputmode="numeric"></div>
+            <div><label class="lbl">Regime tributário *</label>
+              <select id="efRegime" class="inp text-sm">
+                <option value="simples">Simples Nacional</option>
+                <option value="presumido">Lucro Presumido</option>
+                <option value="real">Lucro Real</option>
+              </select>
+            </div>
+            <div class="md:col-span-2"><label class="lbl">Endereço *</label><input id="efEndereco" class="inp text-sm"></div>
+            <div><label class="lbl">Número</label><input id="efNumero" class="inp text-sm"></div>
+            <div><label class="lbl">Bairro</label><input id="efBairro" class="inp text-sm"></div>
+            <div><label class="lbl">Cidade *</label><input id="efCidade" class="inp text-sm"></div>
+            <div><label class="lbl">Cód. IBGE do município *</label><input id="efCodMun" class="inp text-sm" inputmode="numeric" placeholder="Ex: 2304400"></div>
+            <div><label class="lbl">UF *</label><input id="efUf" class="inp text-sm" maxlength="2" value="CE"></div>
+            <div><label class="lbl">CEP</label><input id="efCep" class="inp text-sm" inputmode="numeric"></div>
+            <div><label class="lbl">Série da NF-e</label><input id="efSerie" class="inp text-sm" type="number" min="1" value="1"></div>
+            <div><label class="lbl">Último número emitido</label><input id="efUltNum" class="inp text-sm" type="number" min="0" value="0" title="Ajuste manual do contador da numeração"></div>
+          </div>
+          <button class="btn-brand !py-2 !px-6 text-sm mt-3 !w-auto" onclick="salvarEmpresaFiscal()">Salvar dados fiscais</button>
+          <div class="text-xs text-gray-400 mt-2">💡 Os campos com * são obrigatórios para emitir NF-e. Confirme NCM/CFOP/CST com a contabilidade.</div>
         </div>
       </section>
 
@@ -1154,6 +1233,11 @@
   </nav>
 </div>
 
+<script type="module">
+  /* Biblioteca NF-e compartilhada com a Edge Function e os testes */
+  import * as NFeXml from './supabase/functions/_shared/nfe-xml.js';
+  window.NFeXml = NFeXml;
+</script>
 <script>
 /* ================= CONFIG ================= */
 const SUPA_URL = 'https://srenhrjrprufixoiqvlz.supabase.co';
@@ -1602,7 +1686,7 @@ function renderEstoque(){
 
 /* ================= FORM: NOVA MOVIMENTAÇÃO ================= */
 async function carregarProdutosCache(){
-  cacheProdutos = await apiGET('produtos?ativo=eq.true&select=id,nome,linha,unidade&order=nome.asc');
+  cacheProdutos = await apiGET('produtos?ativo=eq.true&select=id,nome,linha,unidade,codigo&order=nome.asc');
 }
 function preencherDatalistProdutos(){
   document.getElementById('dlProdutos').innerHTML =
@@ -2458,6 +2542,7 @@ async function carregarAdmin(){
         </div>
         <div id="permBox-${u.id}" class="hidden mt-2 border rounded-xl p-3 bg-gray-50"></div>
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
+    carregarEmpresaFiscal(); /* dados fiscais da empresa (NF-e) */
   }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
 }
 function togglePermissoes(id){
@@ -2554,13 +2639,21 @@ async function salvarNovaSenha(){
 async function criarProduto(){
   const nome=document.getElementById('pNome').value.trim(),
         linha=document.getElementById('pLinha').value,
-        unidade=document.getElementById('pUnidade').value.trim()||'un';
+        unidade=document.getElementById('pUnidade').value.trim()||'un',
+        codigo=document.getElementById('pCodigo').value.trim()||null,
+        ncm=document.getElementById('pNcm').value.replace(/\D/g,'')||null,
+        cfop=document.getElementById('pCfop').value.replace(/\D/g,'')||null,
+        cst=document.getElementById('pCst').value.replace(/\D/g,'')||null,
+        aliqRaw=document.getElementById('pAliqIcms').value.replace(',','.').trim(),
+        aliquota_icms=aliqRaw===''?null:parseFloat(aliqRaw);
   if(!nome){ toast('Informe o nome do produto.','erro'); return; }
   if(duplicado('produtos', nome, 'Produto')) return;
   try{
-    await apiPOST('produtos',{nome,linha,unidade,ativo:true});
+    await apiPOST('produtos',{nome,linha,unidade,codigo,ncm,cfop,cst,aliquota_icms,ativo:true});
     toast('Produto cadastrado. ✓','ok');
-    document.getElementById('pNome').value='';
+    document.getElementById('pNome').value=''; document.getElementById('pCodigo').value='';
+    document.getElementById('pNcm').value=''; document.getElementById('pCfop').value='';
+    document.getElementById('pCst').value=''; document.getElementById('pAliqIcms').value='';
     await carregarProdutosCache(); preencherDatalistProdutos(); carregarCadastros();
   }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Produto já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
 }
@@ -2568,17 +2661,19 @@ async function criarProduto(){
 /* ================= CADASTROS (todos os perfis: produtos, fornecedores, transportadoras) ================= */
 let CAD = { produtos:[], fornecedores:[], transportadoras:[] };
 function linhaCadastro(item, tabela, detalhe){
+  const btnEditar = tabela==='produtos'
+    ? `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorProduto('${item.id}')">✏️ editar</button>` : '';
   return `<div class="flex items-center justify-between py-1.5 rowline">
     <div class="min-w-0"><b>${esc(item.nome)}</b> <span class="text-xs text-gray-500">${detalhe}</span>
     ${item.ativo?'':' <span class="badge bg-gray-200 text-gray-500">inativo</span>'}</div>
-    <button class="text-xs font-bold underline shrink-0 ${item.ativo?'text-red-600':'text-green-700'}"
-      onclick="toggleCadastro('${tabela}','${item.id}',${!item.ativo})">${item.ativo?'desativar':'reativar'}</button>
+    <div class="shrink-0">${btnEditar}<button class="text-xs font-bold underline ${item.ativo?'text-red-600':'text-green-700'}"
+      onclick="toggleCadastro('${tabela}','${item.id}',${!item.ativo})">${item.ativo?'desativar':'reativar'}</button></div>
   </div>`;
 }
 async function carregarCadastros(){
   try{
     const [prods, forns, trans, clis] = await Promise.all([
-      apiGET('produtos?select=id,nome,linha,unidade,ativo&order=nome.asc'),
+      apiGET('produtos?select=id,nome,linha,unidade,codigo,ncm,cfop,cst,aliquota_icms,ativo&order=nome.asc'),
       apiGET('fornecedores?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
       apiGET('transportadoras?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
       apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc'),
@@ -2591,7 +2686,7 @@ function fonteCad(tipo){
   return tipo==='clientes' ? CLIENTES : (CAD[tipo]||[]);
 }
 function detalheCad(tipo, item){
-  if(tipo==='produtos') return `· ${esc(item.linha)} · ${esc(item.unidade)}`;
+  if(tipo==='produtos') return `· ${esc(item.linha)} · ${esc(item.unidade)}${item.codigo?` · <b>cód. ${esc(item.codigo)}</b>`:''}`;
   const extras = [];
   if(tipo==='clientes') extras.push(esc(item.tipo));
   if(item.cnpj) extras.push('CNPJ '+esc(item.cnpj));
@@ -2612,7 +2707,7 @@ function renderBuscaCad(tipo){
     return;
   }
   const achados = fonteCad(tipo)
-    .filter(x=>normNome(x.nome).includes(termo))
+    .filter(x=>normNome(x.nome).includes(termo) || (tipo==='produtos' && normNome(x.codigo).includes(termo)))
     .slice(0,30);
   box.innerHTML = achados.length
     ? achados.map(x=>linhaCadastro(x, tipo, detalheCad(tipo,x))).join('')
@@ -2635,6 +2730,47 @@ async function toggleCadastro(tabela, id, novoAtivo){
     toast(novoAtivo?'Reativado. ✓':'Desativado.','ok');
     carregarCadastros();
     if(tabela==='produtos'){ await carregarProdutosCache(); preencherDatalistProdutos(); }
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+let EP_ID = null;
+function abrirEditorProduto(id){
+  const p = (CAD.produtos||[]).find(x=>x.id===id);
+  if(!p){ toast('Produto não encontrado.','erro'); return; }
+  EP_ID = id;
+  document.getElementById('epNome').value = p.nome||'';
+  document.getElementById('epCodigo').value = p.codigo||'';
+  document.getElementById('epLinha').value = p.linha||'Coagulação';
+  document.getElementById('epUnidade').value = p.unidade||'un';
+  document.getElementById('epNcm').value = p.ncm||'';
+  document.getElementById('epCfop').value = p.cfop||'';
+  document.getElementById('epCst').value = p.cst||'';
+  document.getElementById('epAliqIcms').value = (p.aliquota_icms===null||p.aliquota_icms===undefined)?'':p.aliquota_icms;
+  document.getElementById('modalProduto').style.display = 'flex';
+}
+function fecharEditorProduto(){
+  EP_ID = null;
+  document.getElementById('modalProduto').style.display = 'none';
+}
+async function salvarProduto(){
+  if(!EP_ID) return;
+  const nome = document.getElementById('epNome').value.trim();
+  if(!nome){ toast('Informe o nome do produto.','erro'); return; }
+  const aliqRaw = document.getElementById('epAliqIcms').value.replace(',','.').trim();
+  const dados = {
+    nome,
+    codigo: document.getElementById('epCodigo').value.trim()||null,
+    linha: document.getElementById('epLinha').value,
+    unidade: document.getElementById('epUnidade').value.trim()||'un',
+    ncm: document.getElementById('epNcm').value.replace(/\D/g,'')||null,
+    cfop: document.getElementById('epCfop').value.replace(/\D/g,'')||null,
+    cst: document.getElementById('epCst').value.replace(/\D/g,'')||null,
+    aliquota_icms: aliqRaw===''?null:parseFloat(aliqRaw)
+  };
+  try{
+    await apiPATCH('produtos', `id=eq.${EP_ID}`, dados);
+    toast('Produto atualizado. ✓','ok');
+    fecharEditorProduto();
+    await carregarProdutosCache(); preencherDatalistProdutos(); carregarCadastros();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function criarFornecedor(){
@@ -2699,12 +2835,24 @@ async function criarCliente(){
   const nome=document.getElementById('cliNome').value.trim();
   const tipo=document.getElementById('cliTipo').value;
   const cnpj=document.getElementById('cliCnpj').value.trim()||null;
+  const fisc = {
+    cnpj_cpf: cnpj,
+    inscricao_estadual: document.getElementById('cliIe').value.replace(/\D/g,'')||null,
+    endereco: document.getElementById('cliEndereco').value.trim()||null,
+    numero: document.getElementById('cliNumero').value.trim()||null,
+    bairro: document.getElementById('cliBairro').value.trim()||null,
+    cidade: document.getElementById('cliCidade').value.trim()||null,
+    uf: (document.getElementById('cliUf').value.trim()||'CE').toUpperCase(),
+    cep: document.getElementById('cliCep').value.replace(/\D/g,'')||null,
+  };
   if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
   if(duplicado('clientes', nome, 'Cliente')) return;
   try{
-    await apiPOST('clientes',{nome,tipo,cnpj,ativo:true});
+    await apiPOST('clientes',{nome,tipo,cnpj,ativo:true,...fisc});
     toast('Cliente cadastrado. ✓','ok');
     document.getElementById('cliNome').value=''; document.getElementById('cliCnpj').value='';
+    ['cliIe','cliCep','cliEndereco','cliNumero','cliBairro','cliCidade'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('cliUf').value='CE';
     await carregarClientesCache();
     carregarCadastros();
   }catch(e){ toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Cliente já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro'); }
@@ -3424,10 +3572,12 @@ async function verPedido(id){
         </table>
       </div>
       ${acoes?`<div class="flex gap-2 flex-wrap mt-2">${acoes}</div>`:''}
+      <div id="nfeBox" class="mt-2"></div>
       <div class="text-xs text-gray-400 mt-4">💡 Ao <b>faturar</b>, o sistema dá baixa automática no estoque (lote escolhido no item, ou o mais próximo do vencimento) e registra o consumo (módulos Consumo e Contratos). Se precisar corrigir depois, use <b>↩️ Desfazer faturamento</b>.</div>`;
     document.getElementById('pedListaWrap').classList.add('hidden');
     document.getElementById('pedFormWrap').classList.add('hidden');
     document.getElementById('pedDetalheWrap').classList.remove('hidden');
+    renderNfeBox(p.id);
     window.scrollTo({top:0});
   }catch(e){ toast('Erro ao abrir pedido: '+e.message,'erro'); }
 }
@@ -3831,18 +3981,19 @@ function calcularCompras(){
     html += `<div class="card p-4 mb-3" data-linha="${esc(g)}"><div class="font-bold mb-2">🧪 ${esc(g)} <span class="text-xs font-semibold text-gray-400">· sugestão total: ${fmtQtd(totSug)}</span></div>
     <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500 border-b">
     <th class="py-1.5 pr-2"><input type="checkbox" checked onchange="cpMarcarTodos(this)" class="accent-red-700" title="Marcar/desmarcar todos"></th>
-    <th class="py-1.5 pr-2">Produto</th><th class="py-1.5 pr-2 text-right">Un</th>
+    <th class="py-1.5 pr-2">Produto</th><th class="py-1.5 pr-2">Cód.</th><th class="py-1.5 pr-2 text-right">Un</th>
     <th class="py-1.5 pr-2 text-right">Consumo</th><th class="py-1.5 pr-2 text-right">Média/mês</th>
     <th class="py-1.5 pr-2 text-right">Estoque</th><th class="py-1.5 pr-2 text-right">Sugestão</th></tr></thead><tbody>`;
     rows.forEach(r=>{
       html += `<tr class="border-b border-gray-100">
         <td class="py-1.5 pr-2"><input type="checkbox" ${r.sug>0?'checked':''} class="accent-red-700"></td>
         <td class="py-1.5 pr-2 font-medium cursor-pointer hover:text-red-700 hover:underline" title="Ver gráfico do produto" onclick="cpFocarProduto('${r.p.id}')">${esc(r.p.nome)}</td>
+        <td class="py-1.5 pr-2 text-gray-500">${esc(r.p.codigo||'—')}</td>
         <td class="py-1.5 pr-2 text-right text-gray-500">${esc(r.p.unidade||'un')}</td>
         <td class="py-1.5 pr-2 text-right">${fmtQtd(r.total)}</td>
         <td class="py-1.5 pr-2 text-right">${r.media.toFixed(1)}</td>
         <td class="py-1.5 pr-2 text-right">${fmtQtd(r.est)}</td>
-        <td class="py-1.5 pr-2 text-right"><input type="number" min="0" value="${r.sug}" class="inp !w-24 !py-1 text-sm text-right font-bold" data-cp-item="${esc(r.p.nome)}|${esc(r.p.unidade||'un')}"></td>
+        <td class="py-1.5 pr-2 text-right"><input type="number" min="0" value="${r.sug}" class="inp !w-24 !py-1 text-sm text-right font-bold" data-cp-item="${esc(r.p.nome)}|${esc(r.p.unidade||'un')}|${esc(r.p.codigo||'')}"></td>
       </tr>`;
     });
     html += `</tbody></table></div></div>`;
@@ -3936,8 +4087,8 @@ function imprimirPedidoCompra(){
       const inp = tr.querySelector('input[data-cp-item]');
       const qtd = parseFloat(String(inp.value).replace(',','.'))||0;
       if(chk && chk.checked && qtd>0){
-        const [nome, un] = inp.dataset.cpItem.split('|');
-        itens.push({linha, nome, un, qtd});
+        const [nome, un, codigo] = inp.dataset.cpItem.split('|');
+        itens.push({linha, nome, un, codigo:codigo||'', qtd});
       }
     });
   });
@@ -3954,9 +4105,9 @@ function imprimirPedidoCompra(){
   let corpo='';
   let linhaAtual=null;
   itens.forEach(it=>{
-    if(it.linha!==linhaAtual){ linhaAtual=it.linha; corpo+=`<tr class="gl"><td colspan="4">🧪 ${esc(linhaAtual)}</td></tr>`; }
+    if(it.linha!==linhaAtual){ linhaAtual=it.linha; corpo+=`<tr class="gl"><td colspan="5">🧪 ${esc(linhaAtual)}</td></tr>`; }
     n++; tq+=it.qtd;
-    corpo+=`<tr><td class="c">${n}</td><td><b>${esc(it.nome)}</b></td><td class="c">${esc(it.un)}</td><td class="r"><b>${fmtQtd(it.qtd)}</b></td></tr>`;
+    corpo+=`<tr><td class="c">${n}</td><td><b>${esc(it.nome)}</b></td><td>${esc(it.codigo||'—')}</td><td class="c">${esc(it.un)}</td><td class="r"><b>${fmtQtd(it.qtd)}</b></td></tr>`;
   });
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido de compra ${esc(numero)}</title>
   <style>
@@ -4000,7 +4151,7 @@ function imprimirPedidoCompra(){
     <div class="fld"><span>Fornecedor</span><b>${esc(fornNome)}</b></div>
     <div class="fld"><span>Itens</span>${n} &nbsp;&nbsp;<span>Quantidade total</span>${fmtQtd(tq)}</div>
   </div>
-  <table><thead><tr><th class="c" style="width:36px">#</th><th>Produto</th><th class="c">Un</th><th class="r">Qtd</th></tr></thead>
+  <table><thead><tr><th class="c" style="width:36px">#</th><th>Produto</th><th>Código</th><th class="c">Un</th><th class="r">Qtd</th></tr></thead>
   <tbody>${corpo}</tbody>
   <tfoot><tr><td colspan="3" class="r">TOTAL</td><td class="r">${fmtQtd(tq)}</td></tr></tfoot></table>
   ${obs?`<div class="obs"><span>Observações</span><br>${esc(obs)}</div>`:''}
@@ -4579,6 +4730,250 @@ async function excluirContratoAtual(){
     CT_DETALHE_ID = null;
     voltarListaContratos();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= NF-e — NOTA FISCAL ELETRÔNICA (modelo 55) =================
+   Emissão direta na SEFAZ (sem API paga), via Edge Function emitir-nfe.
+   A baixa de estoque do faturamento NÃO muda: continua como é hoje. */
+let EF_ID = null;
+
+async function carregarEmpresaFiscal(){
+  const st = document.getElementById('efStatus');
+  try{
+    const rows = await apiGET('empresa_fiscal?select=*&limit=1');
+    const e = rows[0];
+    if(!e){ if(st) st.textContent = 'Nenhum dado cadastrado — preencha e salve.'; return; }
+    EF_ID = e.id;
+    const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value = (v===null||v===undefined)?'':v; };
+    set('efRazao',e.razao_social); set('efCnpj',e.cnpj); set('efFantasia',e.nome_fantasia);
+    set('efIe',e.ie); set('efRegime',e.regime_tributario); set('efEndereco',e.endereco);
+    set('efNumero',e.numero); set('efBairro',e.bairro); set('efCidade',e.cidade);
+    set('efCodMun',e.codigo_municipio); set('efUf',e.uf); set('efCep',e.cep);
+    set('efSerie',e.serie_nfe); set('efUltNum',e.ultimo_numero_nfe);
+    if(st) st.textContent = '✓ Dados carregados.';
+  }catch(e){ if(st) st.textContent = 'Tabela empresa_fiscal ainda não criada — rode a migration 001-nfe.sql no Supabase.'; }
+}
+
+async function salvarEmpresaFiscal(){
+  if(sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
+  const get = id => document.getElementById(id).value.trim();
+  const dados = {
+    razao_social: get('efRazao'), cnpj: get('efCnpj').replace(/\D/g,''),
+    nome_fantasia: get('efFantasia')||null, ie: get('efIe').replace(/\D/g,''),
+    regime_tributario: document.getElementById('efRegime').value,
+    endereco: get('efEndereco'), numero: get('efNumero')||null, bairro: get('efBairro')||null,
+    cidade: get('efCidade'), codigo_municipio: get('efCodMun').replace(/\D/g,''),
+    uf: (get('efUf')||'CE').toUpperCase(), cep: get('efCep').replace(/\D/g,'')||null,
+    serie_nfe: parseInt(get('efSerie'))||1, ultimo_numero_nfe: parseInt(get('efUltNum'))||0,
+    updated_at: new Date().toISOString()
+  };
+  const faltam = [];
+  if(!dados.razao_social) faltam.push('razão social');
+  if(dados.cnpj.length!==14) faltam.push('CNPJ (14 dígitos)');
+  if(!dados.ie) faltam.push('inscrição estadual');
+  if(!dados.endereco) faltam.push('endereço');
+  if(!dados.cidade) faltam.push('cidade');
+  if(!dados.codigo_municipio) faltam.push('código IBGE do município');
+  if(faltam.length){ toast('Preencha: '+faltam.join(', ')+'.','erro'); return; }
+  try{
+    if(EF_ID) await apiPATCH('empresa_fiscal', `id=eq.${EF_ID}`, dados);
+    else { const row = await apiPOST('empresa_fiscal', dados); EF_ID = row.id; }
+    toast('Dados fiscais salvos. ✓','ok');
+    carregarEmpresaFiscal();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* chamada à Edge Function (substituível nos testes via window.__nfeEdgeMock) */
+async function nfeEdgeCall(acao, body){
+  if(typeof window.__nfeEdgeMock === 'function') return window.__nfeEdgeMock(acao, body);
+  const r = await fetch(`${SUPA_URL}/functions/v1/emitir-nfe`, {
+    method:'POST', headers:{...HJSON}, body: JSON.stringify({ acao, ...body })
+  });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.erro || `Edge Function retornou ${r.status}`);
+  return j;
+}
+
+function badgeNfe(s){
+  return s==='autorizada' ? '<span class="badge bg-green-100 text-green-800">autorizada</span>'
+    : s==='rejeitada' ? '<span class="badge bg-red-100 text-red-800">rejeitada</span>'
+    : s==='cancelada' ? '<span class="badge bg-gray-200 text-gray-600">cancelada</span>'
+    : '<span class="badge bg-amber-100 text-amber-800">pendente</span>';
+}
+
+async function renderNfeBox(pedidoId){
+  const box = document.getElementById('nfeBox');
+  if(!box) return;
+  try{
+    const p = PED_DETALHE_ATUAL && PED_DETALHE_ATUAL.pedido;
+    let notas = [];
+    try{ notas = await apiGET(`notas_fiscais?pedido_id=eq.${pedidoId}&select=*&order=created_at.desc`); }
+    catch(e){ notas = []; }
+    const podeEmitir = p && p.tipo==='cliente' && ['faturado','concluido'].includes(p.status);
+    const linhas = notas.map(n=>`
+      <div class="border rounded-xl p-3 mb-2 bg-gray-50 text-sm">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div><b>NF-e ${String(n.numero).padStart(9,'0')}/${String(n.serie).padStart(3,'0')}</b> ${badgeNfe(n.status)}</div>
+          <div class="flex gap-2 flex-wrap">
+            ${n.status==='autorizada'?`<button class="btn-ghost !py-1.5 !px-3 text-xs" onclick="imprimirDanfe('${n.id}')">🖨️ DANFE</button>`:''}
+            ${n.status==='autorizada'?`<button class="btn-ghost !py-1.5 !px-3 text-xs !text-red-700 !border-red-300" onclick="cancelarNfe('${n.id}')">❌ Cancelar NF-e</button>`:''}
+            ${n.status==='pendente'?`<button class="btn-ghost !py-1.5 !px-3 text-xs" onclick="consultarNfe('${n.id}')">🔄 Consultar SEFAZ</button>`:''}
+          </div>
+        </div>
+        ${n.chave?`<div class="text-xs text-gray-500 mt-1">Chave: <span class="font-mono">${esc(n.chave)}</span></div>`:''}
+        ${n.protocolo?`<div class="text-xs text-gray-500">Protocolo: ${esc(n.protocolo)}</div>`:''}
+        ${n.motivo?`<div class="text-xs mt-1 ${n.status==='rejeitada'?'text-red-700':'text-gray-500'}">${esc(n.motivo)}</div>`:''}
+      </div>`).join('');
+    box.innerHTML = `
+      <div class="border-t pt-3">
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <div class="font-bold">🧾 Nota Fiscal Eletrônica</div>
+          ${podeEmitir?`<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="emitirNfe('${pedidoId}')">🧾 Emitir NF-e</button>`:''}
+        </div>
+        ${linhas || '<div class="text-xs text-gray-400">Nenhuma NF-e emitida para este pedido.</div>'}
+        ${!podeEmitir && !notas.length ? '<div class="text-xs text-gray-400 mt-1">A emissão fica disponível após faturar o pedido (tipo cliente).</div>' : ''}
+      </div>`;
+  }catch(e){ box.innerHTML = '<div class="text-xs text-red-600">Erro ao carregar NF-e: '+esc(e.message)+'</div>'; }
+}
+
+async function emitirNfe(pedidoId){
+  if(!confirm('Emitir NF-e deste pedido?\nA nota será transmitida à SEFAZ em HOMOLOGAÇÃO (sem validade fiscal).')) return;
+  try{
+    let emp = null;
+    try{ emp = (await apiGET('empresa_fiscal?select=*&limit=1'))[0] || null; }catch(e){ emp = null; }
+    if(!emp){ toast('Cadastre os dados fiscais da empresa em Admin → Dados fiscais da empresa.','erro'); return; }
+    if(!window.NFeXml){ toast('Biblioteca NF-e ainda carregando — aguarde um instante e tente de novo.','erro'); return; }
+    const pr = await apiGET(`pedidos?id=eq.${pedidoId}&select=*,clientes(*)`);
+    const ped = pr[0];
+    if(!ped){ toast('Pedido não encontrado.','erro'); return; }
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${pedidoId}&select=quantidade,valor_unitario,produtos(id,nome,codigo,ncm,cfop,cst,aliquota_icms,unidade)&order=created_at.asc`);
+    const dados = {
+      empresa: { cnpj:emp.cnpj, razao_social:emp.razao_social, nome_fantasia:emp.nome_fantasia,
+        ie:emp.ie, regime_tributario:emp.regime_tributario, endereco:emp.endereco, numero:emp.numero,
+        bairro:emp.bairro, cidade:emp.cidade, codigo_municipio:emp.codigo_municipio,
+        uf:emp.uf, cep:emp.cep, serie_nfe:emp.serie_nfe },
+      cliente: { nome:ped.clientes&&ped.clientes.nome, cnpj_cpf:(ped.clientes&&(ped.clientes.cnpj_cpf||ped.clientes.cnpj))||null,
+        inscricao_estadual:ped.clientes&&ped.clientes.inscricao_estadual, endereco:ped.clientes&&ped.clientes.endereco,
+        numero:ped.clientes&&ped.clientes.numero, bairro:ped.clientes&&ped.clientes.bairro,
+        cidade:ped.clientes&&ped.clientes.cidade, uf:ped.clientes&&ped.clientes.uf, cep:ped.clientes&&ped.clientes.cep },
+      pedido: { numero:ped.numero, condicao_pagamento:ped.condicao_pagamento },
+      itens: itens.map(it=>({ produto:{ id:it.produtos&&it.produtos.id, nome:it.produtos&&it.produtos.nome,
+        codigo:it.produtos&&it.produtos.codigo, ncm:it.produtos&&it.produtos.ncm, cfop:it.produtos&&it.produtos.cfop,
+        cst:it.produtos&&it.produtos.cst, aliquota_icms:it.produtos&&it.produtos.aliquota_icms,
+        unidade:it.produtos&&it.produtos.unidade }, quantidade:it.quantidade, valorUnitario:it.valor_unitario })),
+      numero: (Number(emp.ultimo_numero_nfe)||0)+1, serie: Number(emp.serie_nfe)||1, ambiente:'homologacao'
+    };
+    const erros = window.NFeXml.validarDadosNfe(dados);
+    if(erros.length){
+      toast('🧾 NF-e bloqueada: '+erros[0]+(erros.length>1?` (+${erros.length-1} pendência(s))`:''),'erro');
+      return;
+    }
+    const nota = await apiPOST('notas_fiscais', { pedido_id:pedidoId, numero:dados.numero, serie:dados.serie, status:'pendente' });
+    toast('Transmitindo NF-e à SEFAZ…','ok');
+    const res = await nfeEdgeCall('emitir', { nota_fiscal_id: nota.id });
+    if(res && res.ok && res.status==='autorizada') toast(`NF-e ${dados.numero} autorizada ✓ (prot. ${res.protocolo||'—'})`,'ok');
+    else if(res && res.ok) toast('NF-e em processamento na SEFAZ — consulte em instantes.','alerta');
+    else toast('NF-e rejeitada: '+((res&&res.motivo)||'erro desconhecido'),'erro');
+    await renderNfeBox(pedidoId);
+  }catch(e){ toast('Erro na NF-e: '+e.message,'erro'); }
+}
+
+async function cancelarNfe(notaId){
+  const just = prompt('Justificativa do cancelamento (mínimo 15 caracteres):');
+  if(just===null) return;
+  if(!window.NFeXml || !window.NFeXml.validarJustificativa(just)){ toast('A justificativa deve ter no mínimo 15 caracteres.','erro'); return; }
+  if(!confirm('Confirmar o CANCELAMENTO desta NF-e na SEFAZ?')) return;
+  try{
+    const res = await nfeEdgeCall('cancelar', { nota_fiscal_id: notaId, justificativa: just.trim() });
+    toast(res && res.ok ? 'NF-e cancelada na SEFAZ. ✓' : 'Falha no cancelamento: '+((res&&res.erro)||'erro desconhecido'), res && res.ok ? 'ok' : 'erro');
+    if(PED_DETALHE_ATUAL && PED_DETALHE_ATUAL.pedido) await renderNfeBox(PED_DETALHE_ATUAL.pedido.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+async function consultarNfe(notaId){
+  try{
+    const rows = await apiGET(`notas_fiscais?id=eq.${notaId}&select=chave`);
+    const chave = rows[0] && rows[0].chave;
+    if(!chave){ toast('Nota sem chave de acesso.','erro'); return; }
+    const res = await nfeEdgeCall('consultar', { chave });
+    toast(`SEFAZ: ${res.cStat||'?'} — ${res.xMotivo||'sem motivo'}`,'ok');
+    if(PED_DETALHE_ATUAL && PED_DETALHE_ATUAL.pedido) await renderNfeBox(PED_DETALHE_ATUAL.pedido.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- DANFE (documento auxiliar, impressão) ---------- */
+function nfeBarcodeHtml(chave){
+  try{
+    const w = window.NFeXml.code128c(chave);
+    const barras = w.map((m,i)=>`<div style="width:${m*1.6}px;background:${i%2===0?'#000':'#fff'};height:44px"></div>`).join('');
+    return `<div style="display:flex;align-items:stretch">${barras}</div>
+      <div style="font-family:monospace;font-size:10px;letter-spacing:1px;margin-top:2px">${esc(chave.replace(/(\d{4})(?=\d)/g,'$1 '))}</div>`;
+  }catch(e){ return `<div style="font-family:monospace;font-size:11px">${esc(chave)}</div>`; }
+}
+
+async function imprimirDanfe(notaId){
+  try{
+    const nr = await apiGET(`notas_fiscais?id=eq.${notaId}&select=*`);
+    const n = nr[0];
+    if(!n || n.status!=='autorizada'){ toast('DANFE disponível apenas para nota autorizada.','erro'); return; }
+    const pr = await apiGET(`pedidos?id=eq.${n.pedido_id}&select=*,clientes(*)`);
+    const ped = pr[0]||{};
+    const cli = ped.clientes||{};
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${n.pedido_id}&select=quantidade,valor_unitario,produtos(nome,codigo,ncm,cfop,unidade)&order=created_at.asc`);
+    const er = await apiGET('empresa_fiscal?select=*&limit=1');
+    const emp = er[0]||{};
+    const soD = s=>String(s||'').replace(/\D/g,'');
+    const fmtDoc = d=>{ d=soD(d); return d.length===14?d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5'):d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); };
+    let vTot=0;
+    const linhas = itens.map((it,i)=>{
+      const q=Number(it.quantidade)||0, vu=Number(it.valor_unitario)||0, sub=q*vu; vTot+=sub;
+      const p=it.produtos||{};
+      return `<tr><td>${esc(p.codigo||String(i+1))}</td><td>${esc(p.nome||'—')}</td><td class="c">${esc(p.ncm||'')}</td>`+
+        `<td class="c">${esc(p.cfop||'')}</td><td class="c">${esc(p.unidade||'UN')}</td>`+
+        `<td class="r">${fmtQtd(q)}</td><td class="r">${fmtReais(vu)}</td><td class="r"><b>${fmtReais(sub)}</b></td></tr>`;
+    }).join('');
+    const end = (e)=>[e.endereco,e.numero?('nº '+e.numero):'',e.bairro,e.cidade,e.uf,e.cep].filter(Boolean).join(' — ');
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>DANFE NF-e ${esc(String(n.numero))}</title>
+    <style>
+      *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11px;margin:0;padding:16px;}
+      table{width:100%;border-collapse:collapse} td,th{border:1px solid #333;padding:4px 6px;vertical-align:top}
+      th{background:#eee;font-size:9px;text-transform:uppercase} .c{text-align:center} .r{text-align:right;white-space:nowrap}
+      .t{font-size:9px;color:#555;text-transform:uppercase;font-weight:bold} .big{font-size:15px;font-weight:900}
+      .chave{font-family:monospace;font-size:10px} h1{font-size:17px;margin:0}
+      @media print{ body{padding:0} .noprint{display:none} }
+    </style></head><body>
+    <table><tr>
+      <td style="width:38%"><span class="t">Emitente</span><div class="big">${esc(emp.razao_social||'')}</div>
+        <div>${esc(emp.nome_fantasia||'')}</div><div>${esc(end(emp))}</div>
+        <div>CNPJ ${esc(fmtDoc(emp.cnpj))} · IE ${esc(emp.ie||'')}</div></td>
+      <td style="width:24%" class="c"><h1>DANFE</h1><div class="t">Documento Auxiliar da<br>Nota Fiscal Eletrônica</div>
+        <div style="margin:4px 0"><span style="border:1px solid #333;padding:1px 6px">0-Entrada</span>
+        <span style="border:1px solid #333;padding:1px 6px;background:#333;color:#fff">1-Saída</span></div>
+        <div><b>Nº ${esc(String(n.numero).padStart(9,'0'))}</b> — Série ${esc(String(n.serie))}</div></td>
+      <td style="width:38%"><span class="t">Controle do Fisco</span>${nfeBarcodeHtml(n.chave)}
+        <div style="margin-top:4px"><span class="t">Chave de acesso</span><div class="chave">${esc(n.chave)}</div></div>
+        <div style="margin-top:4px"><span class="t">Protocolo de autorização</span><div>${esc(n.protocolo||'—')}</div></div></td>
+    </tr></table>
+    <table style="margin-top:6px"><tr>
+      <td><span class="t">Destinatário</span><div><b>${esc(cli.nome||'—')}</b></div><div>${esc(end(cli))}</div>
+        <div>${soD(cli.cnpj_cpf||cli.cnpj).length===11?'CPF':'CNPJ'} ${esc(fmtDoc(cli.cnpj_cpf||cli.cnpj))}${cli.inscricao_estadual?' · IE '+esc(cli.inscricao_estadual):''}</div></td>
+      <td style="width:28%"><span class="t">Pedido</span><div><b>${esc(ped.numero||'—')}</b></div>
+        <div>Emissão: ${fmtData((n.created_at||'').slice(0,10))}</div></td>
+    </tr></table>
+    <div class="t" style="margin:8px 0 2px">Produtos / Serviços</div>
+    <table><thead><tr><th>Cód.</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th>Un</th><th>Qtd</th><th>V. unit</th><th>V. total</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr><td colspan="7" class="r"><b>VALOR TOTAL DA NOTA</b></td><td class="r"><b>${fmtReais(vTot)}</b></td></tr></tfoot></table>
+    <table style="margin-top:6px"><tr><td><span class="t">Informações complementares</span>
+      <div>Pedido ${esc(ped.numero||'—')} — NEW LIFE · Documento emitido em homologação (sem validade fiscal) quando em ambiente de testes.</div></td></tr></table>
+    <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
+    </body></html>`;
+    let f = document.getElementById('printFrameDanfe');
+    if(!f){ f = document.createElement('iframe'); f.id='printFrameDanfe'; f.style.display='none'; document.body.appendChild(f); }
+    const doc = f.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    setTimeout(()=>f.contentWindow.print(), 600);
+  }catch(e){ toast('Erro ao gerar DANFE: '+e.message,'erro'); }
 }
 
 /* ================= INIT ================= */
