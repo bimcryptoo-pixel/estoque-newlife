@@ -5060,6 +5060,7 @@ const OS_STATUS = {
   cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
 };
 let OS_CACHE = [];
+let OS_LIMITE = 300, OS_FILTRO_SIG = '';
 let OS_DETALHE = null;
 let TEC_LIST = []; /* técnicos vinculados (usuarios.tecnico_nome) */
 let OS_ASS_ID = null; /* OS alvo da assinatura em coleta */
@@ -5103,11 +5104,12 @@ async function carregarOSClientes(){
   document.getElementById('osDetalheBox').classList.add('hidden');
   document.getElementById('osEquipBox').classList.add('hidden');
   try{
-    OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)&order=created_at.desc&limit=500');
+    OS_CACHE = await apiGETall('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)&order=created_at.desc');
   }catch(e){
-    try{ OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc&limit=500'); }
+    try{ OS_CACHE = await apiGETall('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc'); }
     catch(e2){ OS_CACHE = []; toast('Erro ao carregar OS: '+e2.message,'erro'); }
   }
+  OS_LIMITE = 300; OS_FILTRO_SIG = '';
   renderOSLista();
 }
 
@@ -5117,6 +5119,8 @@ function renderOSLista(){
   const fs = document.getElementById('osFiltroStatus').value;
   const fc = document.getElementById('osFiltroCliente').value;
   const ft = (document.getElementById('osFiltroTipo')||{}).value||'';
+  const sig = q+'|'+fs+'|'+fc+'|'+ft;
+  if(sig !== OS_FILTRO_SIG){ OS_FILTRO_SIG = sig; OS_LIMITE = 300; }
   const rows = (OS_CACHE||[]).filter(o=>{
     if(fs && o.status!==fs) return false;
     if(fc && o.cliente_id!==fc) return false;
@@ -5128,7 +5132,9 @@ function renderOSLista(){
     return true;
   });
   if(!rows.length){ box.innerHTML = '<span class="text-gray-400 text-sm">Nenhuma OS encontrada.</span>'; return; }
-  box.innerHTML = rows.map(o=>`
+  const vis = rows.slice(0, OS_LIMITE);
+  box.innerHTML = `<div class="text-xs text-gray-500 mb-1">Exibindo ${vis.length} de ${rows.length} OS${rows.length===1?'':'s'}</div>` +
+    vis.map(o=>`
     <div class="border rounded-xl p-3 flex items-center gap-3 flex-wrap hover:bg-gray-50 cursor-pointer" onclick="verOS('${o.id}')">
       <div class="font-bold text-brand">${esc(o.numero)}</div>
       <div class="flex-1 min-w-[180px]">
@@ -5139,7 +5145,8 @@ function renderOSLista(){
       <div class="text-xs text-gray-500 max-w-[260px] truncate">${esc(o.descricao_servico||'')}</div>
       ${osPrazoBadge(o)}
       ${osStatusBadge(o.status)}
-    </div>`).join('');
+    </div>`).join('') +
+    (rows.length > OS_LIMITE ? `<button class="btn-ghost text-sm mt-1" onclick="OS_LIMITE+=500;renderOSLista()">Mostrar mais (${rows.length-OS_LIMITE} restantes)</button>` : '');
 }
 
 /* ---------- nova OS ---------- */
