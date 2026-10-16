@@ -1091,7 +1091,7 @@
             <div class="font-bold text-lg">🔧 OS Clientes</div>
             <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
             <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="renderOSLista()">
             <select id="osFiltroStatus" class="inp text-sm" onchange="renderOSLista()">
               <option value="">Todos os status</option>
@@ -1101,7 +1101,11 @@
               <option value="cancelada">⚫ Cancelada</option>
             </select>
             <select id="osFiltroCliente" class="inp text-sm" onchange="renderOSLista()"><option value="">Todos os clientes</option></select>
-            <button class="btn-ghost text-sm" onclick="osTelaEquipamentos()">⚙️ Equipamentos</button>
+            <select id="osFiltroTipo" class="inp text-sm" onchange="renderOSLista()"><option value="">Todos os tipos</option></select>
+            <div class="flex gap-2">
+              <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">⚙️ Tipos</button>
+              <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">⚙️ Equip.</button>
+            </div>
           </div>
           <div id="osLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
         </div>
@@ -1318,6 +1322,7 @@ let movDeb = null;
 function esc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function hojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtData(iso){ if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; }
+function fmtDataHora(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
 function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigits:2}); }
 
 /* ================= TEMAS ================= */
@@ -5075,24 +5080,33 @@ function osStatusBadge(st){
 function osTotal(d){
   const vs = Number(d.os.valor_servicos)||0;
   const vp = (d.produtos||[]).reduce((s,p)=>s + (Number(p.quantidade)||0)*(Number(p.valor_unitario)||0), 0);
-  return { vs, vp, total: vs+vp };
+  const vserv = (d.servicos||[]).reduce((s,x)=>s + (Number(x.valor)||0), 0);
+  const vdesp = (d.despesas||[]).reduce((s,x)=>s + (Number(x.valor)||0), 0);
+  return { vs, vp, vserv, vdesp, total: vs+vp+vserv };
 }
 
 async function carregarOSClientes(){
   carregarTecnicos();
+  carregarTiposOS();
   try{
     const sel = document.getElementById('osFiltroCliente');
     if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
       sel.innerHTML = '<option value="">Todos os clientes</option>' +
         CLIENTES.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
     }
+    const st = document.getElementById('osFiltroTipo');
+    if(st) st.innerHTML = '<option value="">Todos os tipos</option>' +
+      (TIPOS_OS||[]).map(t=>`<option value="${t.id}">${esc(t.descricao)}</option>`).join('');
   }catch(e){}
   document.getElementById('osListaBox').classList.remove('hidden');
   document.getElementById('osDetalheBox').classList.add('hidden');
   document.getElementById('osEquipBox').classList.add('hidden');
   try{
-    OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc&limit=500');
-  }catch(e){ OS_CACHE = []; toast('Erro ao carregar OS: '+e.message,'erro'); }
+    OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)&order=created_at.desc&limit=500');
+  }catch(e){
+    try{ OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc&limit=500'); }
+    catch(e2){ OS_CACHE = []; toast('Erro ao carregar OS: '+e2.message,'erro'); }
+  }
   renderOSLista();
 }
 
@@ -5101,11 +5115,13 @@ function renderOSLista(){
   const q = (document.getElementById('osBusca').value||'').toLowerCase();
   const fs = document.getElementById('osFiltroStatus').value;
   const fc = document.getElementById('osFiltroCliente').value;
+  const ft = (document.getElementById('osFiltroTipo')||{}).value||'';
   const rows = (OS_CACHE||[]).filter(o=>{
     if(fs && o.status!==fs) return false;
     if(fc && o.cliente_id!==fc) return false;
+    if(ft && o.tipo_os_id!==ft) return false;
     if(q){
-      const hay = `${o.numero} ${o.clientes?o.clientes.nome:''} ${o.equipamentos?o.equipamentos.nome:''} ${o.descricao_servico||''}`.toLowerCase();
+      const hay = `${o.numero} ${o.clientes?o.clientes.nome:''} ${o.equipamentos?o.equipamentos.nome:''} ${o.descricao_servico||''} ${(o.etiquetas||[]).join(' ')}`.toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -5116,9 +5132,11 @@ function renderOSLista(){
       <div class="font-bold text-brand">${esc(o.numero)}</div>
       <div class="flex-1 min-w-[180px]">
         <div class="font-semibold text-sm">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
-        <div class="text-xs text-gray-500">${esc(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento')} · ${fmtData((o.created_at||'').slice(0,10))}</div>
+        <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
+        ${(o.etiquetas&&o.etiquetas.length)?`<div class="mt-1 flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
       </div>
       <div class="text-xs text-gray-500 max-w-[260px] truncate">${esc(o.descricao_servico||'')}</div>
+      ${osPrazoBadge(o)}
       ${osStatusBadge(o.status)}
     </div>`).join('');
 }
@@ -5135,10 +5153,16 @@ async function proximoNumeroOS(){
 function novaOS(){
   const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
     .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+  const tipoOpts = (TIPOS_OS||[]).map(t=>`<option value="${t.id}" data-dur="${t.duracao_min||''}" data-pr="${t.prazo_resposta_h||''}" data-ps="${t.prazo_solucao_h||''}">${esc(t.descricao)}${t.duracao_min?` (${t.duracao_min} min)`:''}</option>`).join('');
   openOsModal(`
     <div class="font-bold mb-3">🔧 Nova ordem de serviço</div>
     <label class="lbl">Cliente *</label>
     <select id="nosCliente" class="inp text-sm mb-2" onchange="osCarregarEquips()"><option value="">— selecione —</option>${cliOpts}</select>
+    <label class="lbl">Tipo de OS</label>
+    <select id="nosTipo" class="inp text-sm mb-2" onchange="osTipoChanged()"><option value="">— selecione —</option>${tipoOpts}</select>
+    <label class="lbl">Etiquetas (separadas por vírgula)</label>
+    <input id="nosEtiq" class="inp text-sm mb-2" list="dlEtiq" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO">
+    <datalist id="dlEtiq">${ETIQUETAS_SUGERIDAS.map(e=>`<option value="${e}">`).join('')}</datalist>
     <label class="lbl">Equipamento</label>
     <select id="nosEquip" class="inp text-sm mb-2"><option value="">— nenhum —</option></select>
     <div class="mb-2"><button class="text-xs text-brand font-bold" onclick="document.getElementById('nosNovoEq').classList.toggle('hidden')">＋ Cadastrar equipamento</button></div>
@@ -5149,6 +5173,10 @@ function novaOS(){
         <select id="nosEqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
       </div>
     </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="lbl">Prazo de resposta</label><input id="nosPrzResp" type="datetime-local" class="inp text-sm mb-2"></div>
+      <div><label class="lbl">Prazo de solução</label><input id="nosPrzSol" type="datetime-local" class="inp text-sm mb-2"></div>
+    </div>
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="nosDesc" class="inp text-sm mb-2" rows="3" placeholder="Descreva o chamado…"></textarea>
     <label class="lbl">Valor dos serviços (R$)</label>
@@ -5157,6 +5185,17 @@ function novaOS(){
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
       <button class="btn-brand flex-1 !w-auto" onclick="salvarOS()">Criar OS</button>
     </div>`);
+}
+function osTipoChanged(){
+  const sel = document.getElementById('nosTipo');
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt || !opt.dataset) return;
+  const agora = new Date();
+  const fmt = d => { const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  if(opt.dataset.pr && !document.getElementById('nosPrzResp').value)
+    document.getElementById('nosPrzResp').value = fmt(new Date(agora.getTime() + Number(opt.dataset.pr)*36e5));
+  if(opt.dataset.ps && !document.getElementById('nosPrzSol').value)
+    document.getElementById('nosPrzSol').value = fmt(new Date(agora.getTime() + Number(opt.dataset.ps)*36e5));
 }
 
 async function osCarregarEquips(){
@@ -5188,10 +5227,21 @@ async function salvarOS(){
     const numero = await proximoNumeroOS();
     const vs = parseFloat(String(document.getElementById('nosValor').value).replace(/\./g,'').replace(',','.'))||0;
     const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
-    const os = await apiPOST('os_clientes', {
+    const tipo_os_id = document.getElementById('nosTipo').value||null;
+    const etiquetas = String(document.getElementById('nosEtiq').value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const pr = document.getElementById('nosPrzResp').value||null;
+    const ps = document.getElementById('nosPrzSol').value||null;
+    const body = {
       numero, cliente_id, equipamento_id, descricao_servico: descricao,
       status:'aberta', valor_servicos: vs, created_by: uid
-    });
+    };
+    if(OS_FIELD_PARIDADE){
+      body.tipo_os_id = tipo_os_id; body.etiquetas = etiquetas;
+      body.prazo_resposta = pr?new Date(pr).toISOString():null;
+      body.prazo_solucao = ps?new Date(ps).toISOString():null;
+    }
+    const os = await apiPOST('os_clientes', body);
+    await osLog(os.id, `criou a OS ${numero}`);
     closeOsModal();
     OS_CACHE = null;
     toast(`OS ${numero} criada. ✓`,'ok');
@@ -5216,30 +5266,85 @@ function openOsModal(html){
 }
 function closeOsModal(){ const m = document.getElementById('modalOS'); if(m) m.style.display='none'; }
 
-/* ---------- detalhe ---------- */
+/* ================= OS — ABAS (paridade Field Control) ================= */
+const ETIQUETAS_SUGERIDAS = ['TROCA DE CARTUCHO','CHAMADO TÉCNICO','TREINAMENTO OPER.','INSTALAÇÃO','CHAMADO CIENTÍFICO','ERRO OPERACIONAL','MUDANÇA BANCADA','VIA TELEFONE','VISITA SEMANAL','TROCA DE BATERIA','M. PREVENTIVA ANUAL','M. PREV SEMESTRAL','TROCA DE LED ACLTOP','OSMOSE','DESINSTALAÇÃO','LEVANTAMENTO EQUIP'];
+const OS_ABAS = [
+  ['geral','📋 Geral'],['atividades','🛠️ Atividades'],['equipamentos','⚙️ Equipamentos'],
+  ['produtos','📦 Produtos'],['servicos','🧰 Serviços'],['despesas','💸 Despesas'],
+  ['orcamentos','💰 Orçamentos'],['anexos','📎 Anexos'],['comentarios','💬 Comentários'],
+  ['historico','🕘 Histórico'],
+];
+let TIPOS_OS = [];
+let OS_FIELD_PARIDADE = false; /* true quando a migration 005 já rodou */
+async function carregarTiposOS(){
+  try{
+    TIPOS_OS = await apiGET("tipos_os?ativo=eq.true&select=id,descricao,duracao_min,prazo_resposta_h,prazo_solucao_h&order=descricao.asc");
+    OS_FIELD_PARIDADE = true;
+  }
+  catch(e){ TIPOS_OS = []; OS_FIELD_PARIDADE = false; }
+  try{
+    const st = document.getElementById('osFiltroTipo');
+    if(st) st.innerHTML = '<option value="">Todos os tipos</option>' +
+      (TIPOS_OS||[]).map(t=>`<option value="${t.id}">${esc(t.descricao)}</option>`).join('');
+  }catch(e){}
+}
+async function apiGETsafe(path){
+  try{ return await apiGET(path); }catch(e){ return []; }
+}
+async function osLog(osId, evento){
+  try{
+    const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+    await apiPOST('os_historico', { os_id: osId, evento, usuario_id: uid });
+  }catch(e){}
+}
+function osPrazoInfo(o){
+  if(!o || o.status==='concluida' || o.status==='cancelada' || !o.prazo_solucao) return null;
+  const diffH = (new Date(o.prazo_solucao) - new Date())/36e5;
+  if(diffH < 0) return { label:'⏰ Expirado', badge:'background:#fee2e2;color:#991b1b' };
+  if(diffH < 24) return { label:'⚠️ Em risco', badge:'background:#ffedd5;color:#9a3412' };
+  return { label:'🟢 No prazo', badge:'background:#dcfce7;color:#166534' };
+}
+function osPrazoBadge(o){
+  const p = osPrazoInfo(o); if(!p) return '';
+  return `<span style="${p.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${p.label}</span>`;
+}
+function osEtiquetasChips(etqs){
+  return (etqs||[]).map(e=>`<span class="text-[11px] font-bold bg-indigo-100 text-indigo-800 rounded-full px-2.5 py-0.5">${esc(e)}</span>`).join(' ');
+}
+
 async function verOS(id){
   try{
     await carregarTecnicos();
-    const [os] = await apiGET(`os_clientes?id=eq.${id}&select=*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)`);
+    const selBase = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
+    const selFull = selBase + ',tipos_os(id,descricao,duracao_min)';
+    let os = null;
+    try{ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${OS_FIELD_PARIDADE?selFull:selBase}`); }
+    catch(e){ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${selBase}`); }
     if(!os) throw new Error('OS não encontrada.');
-    const [atividades, produtos, anexos] = await Promise.all([
+    const [atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico] = await Promise.all([
       apiGET(`os_atividades?os_id=eq.${id}&select=*&order=data.asc,created_at.asc`),
       apiGET(`os_produtos?os_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade)&order=created_at.asc`),
       apiGET(`os_anexos?os_id=eq.${id}&select=*&order=created_at.asc`),
+      apiGETsafe(`os_equipamentos?os_id=eq.${id}&select=*,equipamentos(id,nome,numero_serie,tipo)&order=created_at.asc`),
+      apiGETsafe(`os_servicos?os_id=eq.${id}&select=*&order=created_at.asc`),
+      apiGETsafe(`os_despesas?os_id=eq.${id}&select=*&order=created_at.asc`),
+      apiGETsafe(`os_orcamentos?os_id=eq.${id}&select=*&order=created_at.asc`),
+      apiGETsafe(`os_comentarios?os_id=eq.${id}&select=*,usuarios(nome)&order=created_at.asc`),
+      apiGETsafe(`os_historico?os_id=eq.${id}&select=*,usuarios(nome)&order=created_at.desc&limit=120`),
     ]);
-    OS_DETALHE = { os, atividades, produtos, anexos };
+    OS_DETALHE = { os, atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico, aba:(OS_DETALHE&&OS_DETALHE.os&&OS_DETALHE.os.id===id&&OS_DETALHE.aba)||'geral' };
     renderOSDetalhe();
   }catch(e){ toast('Erro ao abrir OS: '+e.message,'erro'); }
 }
 
+function osAba(aba){
+  if(OS_DETALHE){ OS_DETALHE.aba = aba; renderOSDetalhe(); }
+}
+
 function renderOSDetalhe(){
   const d = OS_DETALHE; if(!d) return;
-  const o = d.os, tot = osTotal(d);
+  const o = d.os;
   const st = OS_STATUS[o.status]||OS_STATUS.aberta;
-  const cli = o.clientes||{}, eq = o.equipamentos||null;
-  const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
-  const atvPend = d.atividades.filter(a=>a.status!=='concluida').length;
-
   let acoes = '';
   if(o.status==='aberta') acoes += `<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osTrocarStatus('em_atendimento')">▶️ Iniciar atendimento</button>`;
   if(o.status==='em_atendimento') acoes += `<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osConcluir()">✅ Concluir</button>`;
@@ -5247,21 +5352,171 @@ function renderOSDetalhe(){
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osEnviarEmail()">📧 Enviar por e-mail</button>`;
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="imprimirOS()">🖨️ Imprimir</button>`;
 
-  const atvHtml = d.atividades.length ? d.atividades.map((a,i)=>`
+  const tabs = OS_ABAS.map(([id,rot])=>{
+    const n = { atividades:d.atividades.length, produtos:d.produtos.length, anexos:d.anexos.length,
+      equipamentos:(d.equips||[]).length, servicos:(d.servicos||[]).length, despesas:(d.despesas||[]).length,
+      orcamentos:(d.orcamentos||[]).length, comentarios:(d.comentarios||[]).length }[id];
+    const ativo = (d.aba||'geral')===id;
+    return `<button onclick="osAba('${id}')" class="px-3 py-2 text-sm font-bold whitespace-nowrap rounded-lg ${ativo?'bg-brand text-white':'text-gray-600 hover:bg-gray-100'}">${rot}${n?` <span class="text-[11px] opacity-80">(${n})</span>`:''}</button>`;
+  }).join('');
+
+  document.getElementById('osListaBox').classList.add('hidden');
+  const box = document.getElementById('osDetalheBox');
+  box.classList.remove('hidden');
+  box.innerHTML = `
+  <div class="card p-4 md:p-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
+      <div class="flex gap-2 flex-wrap">${acoes}</div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap mb-2">
+      <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
+      ${osStatusBadge(o.status)}
+      ${osPrazoBadge(o)}
+      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
+    </div>
+    ${o.etiquetas&&o.etiquetas.length?`<div class="flex gap-1.5 flex-wrap mb-3">${osEtiquetasChips(o.etiquetas)}</div>`:''}
+    <div class="flex gap-1 overflow-x-auto border-b mb-4 pb-1">${tabs}</div>
+    <div id="osAbaBox">${renderOSAba()}</div>
+  </div>`;
+  window.scrollTo({top:0});
+  if((OS_DETALHE.aba||'geral')==='equipamentos') osCarregarVincEquips();
+}
+
+function renderOSAba(){
+  const d = OS_DETALHE; if(!d) return '';
+  const aba = d.aba||'geral';
+  if(aba==='atividades') return osAbaAtividades(d);
+  if(aba==='equipamentos') return osAbaEquipamentos(d);
+  if(aba==='produtos') return osAbaProdutos(d);
+  if(aba==='servicos') return osAbaServicos(d);
+  if(aba==='despesas') return osAbaDespesas(d);
+  if(aba==='orcamentos') return osAbaOrcamentos(d);
+  if(aba==='anexos') return osAbaAnexos(d);
+  if(aba==='comentarios') return osAbaComentarios(d);
+  if(aba==='historico') return osAbaHistorico(d);
+  return osAbaGeral(d);
+}
+
+function osAbaGeral(d){
+  const o = d.os, cli = o.clientes||{}, eq = o.equipamentos||null;
+  const tot = osTotal(d);
+  const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  return `
+  <div class="grid md:grid-cols-2 gap-3 mb-4">
+    <div class="border rounded-xl p-3">
+      <div class="text-xs font-bold text-gray-500 uppercase mb-1">Cliente</div>
+      <div class="font-bold">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}</div>
+      <div class="text-xs text-gray-500">${esc(endCli||'—')}</div>
+      ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
+    </div>
+    <div class="border rounded-xl p-3">
+      <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
+      ${eq?`<div class="font-bold">${esc(eq.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eq.numero_serie||'—')} · ${esc(eq.tipo||'—')}</div>`
+        :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
+      <div class="text-xs font-bold text-gray-500 uppercase mt-2 mb-1">Tipo de OS</div>
+      <div class="text-sm">${esc(o.tipos_os?o.tipos_os.descricao:'—')}${o.tipos_os&&o.tipos_os.duracao_min?` <span class="text-xs text-gray-500">(${o.tipos_os.duracao_min} min)</span>`:''}</div>
+    </div>
+  </div>
+  <div class="border rounded-xl p-3 mb-4">
+    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Descrição do serviço</div>
+    <div class="text-sm whitespace-pre-wrap">${esc(o.descricao_servico||'—')}</div>
+    <div class="grid md:grid-cols-2 gap-2 mt-3">
+      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de resposta:</span> ${o.prazo_resposta?fmtDataHora(o.prazo_resposta):'—'}</div>
+      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de solução:</span> ${o.prazo_solucao?fmtDataHora(o.prazo_solucao):'—'}</div>
+    </div>
+    ${editavel?`<button class="text-xs text-brand font-bold mt-2" onclick="osEditarPrazos()">✏️ Ajustar prazos</button>`:''}
+  </div>
+  <div class="font-bold mb-2">✍️ Assinatura</div>
+  <div class="border rounded-xl p-3 mb-4">
+    ${o.assinatura_url
+      ? `<a href="${esc(o.assinatura_url)}" target="_blank"><img src="${esc(o.assinatura_url)}" class="h-20 border rounded bg-white"></a>
+         <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div>
+         ${editavel?`<button class="text-xs text-brand font-bold mt-1" onclick="osAbrirAssinatura()">🔄 Assinar novamente</button>`:''}`
+      : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')}
+  </div>
+  <div class="border-t mt-2 pt-3 flex justify-end gap-6 text-sm flex-wrap">
+    <div>Serviços: <b>${fmtReais(tot.vs)}</b></div>
+    <div>Produtos: <b>${fmtReais(tot.vp)}</b></div>
+    <div>Avulsos: <b>${fmtReais(tot.vserv)}</b></div>
+    <div class="text-base">Total: <b class="text-brand">${fmtReais(tot.total)}</b></div>
+  </div>
+  ${tot.vdesp?`<div class="flex justify-end text-xs text-gray-500 mt-1">Despesas: ${fmtReais(tot.vdesp)} (custo)</div>`:''}`;
+}
+
+function osAbaAtividades(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const atvHtml = d.atividades.length ? d.atividades.map((a,i)=>{
+    const st = ATV_TEC_STATUS[a.status]||ATV_TEC_STATUS.pendente;
+    return `
     <div class="border rounded-lg p-2.5 text-sm">
       <div class="flex items-center justify-between flex-wrap gap-1">
         <b>Atividade ${i+1} — ${esc(a.tecnico)}</b>
-        <span class="text-xs">${a.status==='concluida'?'✅ Concluída':'⏳ Pendente'}</span>
+        <span style="${st.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${st.label}</span>
       </div>
-      <div class="text-xs text-gray-500">${fmtData(a.data)}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+      <div class="text-xs text-gray-500">${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
       ${a.descricao_conclusao?`<div class="text-xs mt-1">${esc(a.descricao_conclusao)}</div>`:''}
-      <div class="mt-1 flex gap-2">
+      ${editavel?`<div class="mt-1 flex gap-2 flex-wrap">
         <button class="text-xs text-brand font-bold" onclick="osEditarAtividade('${a.id}')">✏️ Editar</button>
-        ${a.status!=='concluida'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button>`:''}
+        ${a.status!=='concluida'&&a.status!=='cancelada'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button>`:''}
         <button class="text-xs text-red-700 font-bold" onclick="osExcluirAtividade('${a.id}')">🗑️</button>
-      </div>
-    </div>`).join('') : '<span class="text-gray-400 text-xs">Nenhuma atividade registrada.</span>';
+      </div>`:''}
+    </div>`;
+  }).join('') : '<span class="text-gray-400 text-xs">Nenhuma atividade registrada.</span>';
+  return `
+  <div class="text-xs text-gray-500 mb-2">${d.atividades.length}/20 atividades</div>
+  <div class="grid gap-2 mb-3">${atvHtml}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-2">
+    <input type="hidden" id="osAtvId" value="">
+    <div class="md:col-span-2 text-xs font-bold text-gray-500 uppercase" id="osAtvTitulo">＋ Nova atividade</div>
+    <div><label class="lbl">Técnico *</label>${TEC_LIST.length?`<select id="osAtvTec" class="inp text-sm">${tecOptions('')}</select>`:`<input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico">`}</div>
+    <div><label class="lbl">Data *</label><input id="osAtvData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
+    <div><label class="lbl">Início</label><input id="osAtvIni" type="time" class="inp text-sm"></div>
+    <div><label class="lbl">Fim</label><input id="osAtvFim" type="time" class="inp text-sm"></div>
+    <div class="md:col-span-2"><label class="lbl">Descrição da conclusão</label><textarea id="osAtvDesc" class="inp text-sm" rows="2"></textarea></div>
+    <div class="md:col-span-2 flex gap-2">
+      <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarAtividade()">Salvar atividade</button>
+      <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osLimparAtividade()">Limpar</button>
+    </div>
+  </div>`:''}`;
+}
 
+function osAbaEquipamentos(d){
+  const o = d.os, eqP = o.equipamentos||null;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const vinc = (d.equips||[]).filter(e=>!eqP || e.equipamento_id!==eqP.id);
+  return `
+  <div class="border rounded-xl p-3 mb-3">
+    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
+    ${eqP?`<div class="font-bold text-sm">${esc(eqP.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eqP.numero_serie||'—')} · ${esc(eqP.tipo||'—')}</div>`
+      :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
+  </div>
+  <div class="font-bold text-sm mb-2">Vínculos adicionais</div>
+  <div class="grid gap-2 mb-3">
+    ${vinc.length?vinc.map(e=>`
+      <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2">
+        <div><b>${esc(e.equipamentos?e.equipamentos.nome:'—')}</b>
+        <div class="text-xs text-gray-500">SN: ${esc(e.equipamentos?e.equipamentos.numero_serie||'—':'—')} · ${esc(e.equipamentos?e.equipamentos.tipo||'—':'—')}</div></div>
+        ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osDesvincularEquip('${e.id}')">🗑️</button>`:''}
+      </div>`).join(''):'<span class="text-gray-400 text-xs">Sem vínculos adicionais.</span>'}
+  </div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 grid gap-2">
+    <div class="text-xs font-bold text-gray-500 uppercase">＋ Vincular equipamento do cliente</div>
+    <div class="flex gap-2">
+      <select id="osVincEqSel" class="inp text-sm flex-1"><option value="">— selecione —</option></select>
+      <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osVincularEquip()">Vincular</button>
+    </div>
+  </div>`:''}`;
+}
+
+function osAbaProdutos(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
   const prodHtml = d.produtos.length ? `
     <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500 uppercase">
       <th class="py-1 pr-2">Produto</th><th class="py-1 pr-2">Lote</th>
@@ -5274,98 +5529,319 @@ function renderOSDetalhe(){
         <td class="py-1.5 pr-2 text-right">${fmtQtd(p.quantidade)} ${esc(p.produtos?p.produtos.unidade||'un':'un')}</td>
         <td class="py-1.5 pr-2 text-right">${fmtReais(p.valor_unitario)}</td>
         <td class="py-1.5 text-right font-semibold">${fmtReais(sub)}</td>
-        <td class="py-1.5 text-right">${o.status!=='concluida'&&o.status!=='cancelada'?`<button class="text-xs text-red-700 font-bold" onclick="osRemoverProduto('${p.id}')" title="Remover e estornar baixa">🗑️</button>`:''}</td></tr>`;
+        <td class="py-1.5 text-right">${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osRemoverProduto('${p.id}')" title="Remover e estornar baixa">🗑️</button>`:''}</td></tr>`;
     }).join('')}
     </tbody></table>` : '<span class="text-gray-400 text-xs">Nenhum produto utilizado.</span>';
+  const prodOpts = (cacheProdutos||[]).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+  return `
+  <div class="mb-3">${prodHtml}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-4">
+    <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Adicionar produto (baixa automática do estoque)</div>
+    <div><label class="lbl">Produto *</label><select id="osProdSel" class="inp text-sm" onchange="osCarregarLotes()"><option value="">— selecione —</option>${prodOpts}</select></div>
+    <div><label class="lbl">Lote (FEFO sugerido) *</label><select id="osLoteSel" class="inp text-sm"><option value="">— escolha o produto —</option></select></div>
+    <div><label class="lbl">Qtd *</label><input id="osProdQtd" type="number" min="1" step="1" class="inp text-sm"></div>
+    <div><label class="lbl">V. unit (R$)</label><input id="osProdVu" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
+    <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAdicionarProduto()">Adicionar e baixar estoque</button></div>
+  </div>`:''}`;
+}
 
+function osAbaServicos(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const rows = (d.servicos||[]).map(s=>`
+    <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2">
+      <div class="flex-1">${esc(s.descricao)}<div class="text-xs text-gray-500">${fmtReais(s.valor)}</div></div>
+      ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osDelServico('${s.id}')">🗑️</button>`:''}
+    </div>`).join('');
+  return `
+  <div class="grid gap-2 mb-3">${rows||'<span class="text-gray-400 text-xs">Nenhum serviço avulso.</span>'}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-3">
+    <div class="md:col-span-3 text-xs font-bold text-gray-500 uppercase">＋ Adicionar serviço</div>
+    <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osServDesc" class="inp text-sm" placeholder="Ex: mão de obra, deslocamento…"></div>
+    <div><label class="lbl">Valor (R$)</label><input id="osServValor" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
+    <div class="md:col-span-3"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddServico()">Adicionar</button></div>
+  </div>`:''}`;
+}
+async function osAddServico(){
+  const d = OS_DETALHE; if(!d) return;
+  const descricao = document.getElementById('osServDesc').value.trim();
+  if(!descricao){ toast('Descreva o serviço.','erro'); return; }
+  const valor = parseFloat(String(document.getElementById('osServValor').value).replace(/\./g,'').replace(',','.'))||0;
+  try{
+    await apiPOST('os_servicos', { os_id:d.os.id, descricao, valor });
+    await osLog(d.os.id, `adicionou o serviço "${descricao}" (${fmtReais(valor)})`);
+    toast('Serviço adicionado. ✓','ok'); await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDelServico(id){
+  if(!confirm('Excluir este serviço?')) return;
+  try{ await apiDELETE('os_servicos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um serviço avulso'); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+function osAbaDespesas(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const rows = (d.despesas||[]).map(x=>`
+    <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2">
+      <div class="flex-1">${esc(x.descricao)}<div class="text-xs text-gray-500">${fmtReais(x.valor)}${x.data?' · '+fmtData(x.data):''}</div></div>
+      ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osDelDespesa('${x.id}')">🗑️</button>`:''}
+    </div>`).join('');
+  return `
+  <div class="grid gap-2 mb-3">${rows||'<span class="text-gray-400 text-xs">Nenhuma despesa.</span>'}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4">
+    <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Adicionar despesa</div>
+    <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osDespDesc" class="inp text-sm" placeholder="Ex: pedágio, combustível…"></div>
+    <div><label class="lbl">Valor (R$) *</label><input id="osDespValor" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
+    <div><label class="lbl">Data</label><input id="osDespData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
+    <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddDespesa()">Adicionar</button></div>
+  </div>`:''}`;
+}
+async function osAddDespesa(){
+  const d = OS_DETALHE; if(!d) return;
+  const descricao = document.getElementById('osDespDesc').value.trim();
+  const valor = parseFloat(String(document.getElementById('osDespValor').value).replace(/\./g,'').replace(',','.'))||0;
+  if(!descricao){ toast('Descreva a despesa.','erro'); return; }
+  if(!(valor>0)){ toast('Informe o valor.','erro'); return; }
+  try{
+    await apiPOST('os_despesas', { os_id:d.os.id, descricao, valor, data:document.getElementById('osDespData').value||null });
+    await osLog(d.os.id, `lançou a despesa "${descricao}" (${fmtReais(valor)})`);
+    toast('Despesa adicionada. ✓','ok'); await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDelDespesa(id){
+  if(!confirm('Excluir esta despesa?')) return;
+  try{ await apiDELETE('os_despesas', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu uma despesa'); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+function osAbaOrcamentos(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const stBadge = s => s==='aprovado'
+    ? '<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px">🟢 Aprovado</span>'
+    : s==='rejeitado'
+    ? '<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px">🔴 Rejeitado</span>'
+    : '<span style="background:#fef9c3;color:#854d0e;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px">🟡 Pendente</span>';
+  const rows = (d.orcamentos||[]).map(x=>`
+    <div class="border rounded-lg p-2.5 text-sm">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <b>${esc(x.descricao)}</b>${stBadge(x.status)}
+      </div>
+      <div class="text-xs text-gray-500">${fmtReais(x.valor)} · ${fmtData((x.created_at||'').slice(0,10))}</div>
+      ${editavel?`<div class="mt-1 flex gap-2">
+        ${x.status!=='aprovado'?`<button class="text-xs text-green-700 font-bold" onclick="osOrcStatus('${x.id}','aprovado')">✅ Aprovar</button>`:''}
+        ${x.status!=='rejeitado'?`<button class="text-xs text-amber-700 font-bold" onclick="osOrcStatus('${x.id}','rejeitado')">🚫 Rejeitar</button>`:''}
+        <button class="text-xs text-red-700 font-bold" onclick="osDelOrcamento('${x.id}')">🗑️</button>
+      </div>`:''}
+    </div>`).join('');
+  return `
+  <div class="grid gap-2 mb-3">${rows||'<span class="text-gray-400 text-xs">Nenhum orçamento.</span>'}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-3">
+    <div class="md:col-span-3 text-xs font-bold text-gray-500 uppercase">＋ Novo orçamento</div>
+    <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osOrcDesc" class="inp text-sm"></div>
+    <div><label class="lbl">Valor (R$) *</label><input id="osOrcValor" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
+    <div class="md:col-span-3"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddOrcamento()">Adicionar</button></div>
+  </div>`:''}`;
+}
+async function osAddOrcamento(){
+  const d = OS_DETALHE; if(!d) return;
+  const descricao = document.getElementById('osOrcDesc').value.trim();
+  const valor = parseFloat(String(document.getElementById('osOrcValor').value).replace(/\./g,'').replace(',','.'))||0;
+  if(!descricao || !(valor>0)){ toast('Informe descrição e valor.','erro'); return; }
+  try{
+    await apiPOST('os_orcamentos', { os_id:d.os.id, descricao, valor });
+    await osLog(d.os.id, `criou o orçamento "${descricao}" (${fmtReais(valor)})`);
+    toast('Orçamento adicionado. ✓','ok'); await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osOrcStatus(id, st){
+  try{
+    await apiPATCH('os_orcamentos', `id=eq.${id}`, { status:st });
+    await osLog(OS_DETALHE.os.id, `${st==='aprovado'?'aprovou':'rejeitou'} um orçamento`);
+    await verOS(OS_DETALHE.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDelOrcamento(id){
+  if(!confirm('Excluir este orçamento?')) return;
+  try{ await apiDELETE('os_orcamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um orçamento'); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+function osAbaAnexos(d){
+  const o = d.os;
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
   const anexHtml = d.anexos.length ? d.anexos.map(a=>`
     <div class="flex items-center gap-2 text-sm border rounded-lg px-2 py-1.5">
       <a href="${esc(a.url)}" target="_blank" class="text-brand font-semibold truncate flex-1">📎 ${esc(a.nome||'anexo')}</a>
-      ${o.status!=='concluida'&&o.status!=='cancelada'?`<button class="text-xs text-red-700 font-bold" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
+      ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
     </div>`).join('') : '<span class="text-gray-400 text-xs">Sem anexos.</span>';
+  return `
+  <div class="grid gap-2 mb-3">${anexHtml}</div>
+  ${editavel?`<label class="btn-ghost !w-auto !py-2 !px-4 text-sm inline-block cursor-pointer">＋ Anexar arquivo<input type="file" class="hidden" onchange="osUploadAnexo(this)"></label>`:''}`;
+}
 
+function osAbaComentarios(d){
+  const o = d.os;
   const editavel = o.status!=='concluida' && o.status!=='cancelada';
-  const prodOpts = (cacheProdutos||[]).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+  const rows = (d.comentarios||[]).map(c=>`
+    <div class="border rounded-lg p-2.5 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <b>${esc(c.usuarios?c.usuarios.nome:'—')}</b>
+        <span class="text-xs text-gray-500">${new Date(c.created_at).toLocaleString('pt-BR')}</span>
+      </div>
+      <div class="text-sm mt-1 whitespace-pre-wrap">${esc(c.texto)}</div>
+      ${editavel?`<button class="text-xs text-red-700 font-bold mt-1" onclick="osDelComentario('${c.id}')">🗑️ Excluir</button>`:''}
+    </div>`).join('');
+  return `
+  <div class="grid gap-2 mb-3">${rows||'<span class="text-gray-400 text-xs">Nenhum comentário.</span>'}</div>
+  ${editavel?`
+  <div class="border rounded-xl p-3 grid gap-2">
+    <div class="text-xs font-bold text-gray-500 uppercase">＋ Comentar</div>
+    <textarea id="osComTexto" class="inp text-sm" rows="2" placeholder="Digite aqui…"></textarea>
+    <div><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddComentario()">Responder</button></div>
+  </div>`:''}`;
+}
+async function osAddComentario(){
+  const d = OS_DETALHE; if(!d) return;
+  const texto = document.getElementById('osComTexto').value.trim();
+  if(!texto){ toast('Digite o comentário.','erro'); return; }
+  try{
+    const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+    await apiPOST('os_comentarios', { os_id:d.os.id, usuario_id:uid, texto });
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDelComentario(id){
+  if(!confirm('Excluir este comentário?')) return;
+  try{ await apiDELETE('os_comentarios', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
 
+function osAbaHistorico(d){
+  const rows = (d.historico||[]).map(h=>`
+    <div class="border-b py-2 text-sm">
+      <div>${esc(h.evento)}</div>
+      <div class="text-xs text-gray-500">${esc(h.usuarios?h.usuarios.nome:'sistema')} · ${new Date(h.created_at).toLocaleString('pt-BR')}</div>
+    </div>`).join('');
+  return rows || '<span class="text-gray-400 text-xs">Sem eventos registrados.</span>';
+}
+
+/* ---------- vínculos de equipamentos ---------- */
+async function osCarregarVincEquips(){
+  const d = OS_DETALHE; if(!d) return;
+  const sel = document.getElementById('osVincEqSel'); if(!sel) return;
+  try{
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie&order=nome.asc`);
+    const ja = new Set((d.equips||[]).map(e=>e.equipamento_id));
+    if(d.os.equipamento_id) ja.add(d.os.equipamento_id);
+    sel.innerHTML = '<option value="">— selecione —</option>' +
+      eqs.filter(e=>!ja.has(e.id)).map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
+  }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
+}
+async function osVincularEquip(){
+  const d = OS_DETALHE; if(!d) return;
+  const eid = document.getElementById('osVincEqSel').value;
+  if(!eid){ toast('Escolha o equipamento.','erro'); return; }
+  try{
+    await apiPOST('os_equipamentos', { os_id:d.os.id, equipamento_id:eid });
+    await osLog(d.os.id, 'vinculou um equipamento à OS');
+    toast('Equipamento vinculado. ✓','ok'); await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDesvincularEquip(id){
+  if(!confirm('Desvincular este equipamento?')) return;
+  try{ await apiDELETE('os_equipamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'desvinculou um equipamento da OS'); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- prazos ---------- */
+function osEditarPrazos(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  const dtl = v => v ? String(v).slice(0,16) : '';
+  openOsModal(`
+    <div class="font-bold mb-3">⏰ Prazos da ${esc(o.numero)}</div>
+    <label class="lbl">Prazo de resposta</label>
+    <input id="osPrzResp" type="datetime-local" class="inp text-sm mb-2" value="${dtl(o.prazo_resposta)}">
+    <label class="lbl">Prazo de solução</label>
+    <input id="osPrzSol" type="datetime-local" class="inp text-sm mb-3" value="${dtl(o.prazo_solucao)}">
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="osSalvarPrazos()">Salvar</button>
+    </div>`);
+}
+async function osSalvarPrazos(){
+  const d = OS_DETALHE; if(!d) return;
+  const pr = document.getElementById('osPrzResp').value||null;
+  const ps = document.getElementById('osPrzSol').value||null;
+  try{
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, {
+      prazo_resposta: pr?new Date(pr).toISOString():null,
+      prazo_solucao: ps?new Date(ps).toISOString():null,
+      updated_at:new Date().toISOString()
+    });
+    await osLog(d.os.id, 'ajustou os prazos da OS');
+    closeOsModal(); toast('Prazos salvos. ✓','ok'); await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- tipos de OS (cadastro) ---------- */
+function osTelaTipos(){
   document.getElementById('osListaBox').classList.add('hidden');
-  const box = document.getElementById('osDetalheBox');
+  document.getElementById('osDetalheBox').classList.add('hidden');
+  const box = document.getElementById('osEquipBox');
   box.classList.remove('hidden');
   box.innerHTML = `
-  <div class="card p-4 md:p-6">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
-      <div class="flex gap-2 flex-wrap">${acoes}</div>
+      <div class="font-bold">⚙️ Tipos de OS</div><div></div>
     </div>
-    <div class="flex items-center gap-3 flex-wrap mb-4">
-      <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
-      ${osStatusBadge(o.status)}
-      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
-    </div>
-    <div class="grid md:grid-cols-2 gap-3 mb-4">
-      <div class="border rounded-xl p-3">
-        <div class="text-xs font-bold text-gray-500 uppercase mb-1">Cliente</div>
-        <div class="font-bold">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
-        <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}</div>
-        <div class="text-xs text-gray-500">${esc(endCli||'—')}</div>
-      </div>
-      <div class="border rounded-xl p-3">
-        <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento</div>
-        ${eq?`<div class="font-bold">${esc(eq.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eq.numero_serie||'—')} · ${esc(eq.tipo||'—')}</div>`
-          :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
-        <div class="text-xs font-bold text-gray-500 uppercase mt-2 mb-1">Serviço</div>
-        <div class="text-sm">${esc(o.descricao_servico)}</div>
-      </div>
-    </div>
-
-    <div class="font-bold mb-2">🛠️ Atividades ${atvPend?`<span class="text-xs text-amber-600">(${atvPend} pendente${atvPend>1?'s':''})</span>`:''}</div>
-    <div class="grid gap-2 mb-3">${atvHtml}</div>
-    ${editavel?`
-    <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-2">
-      <input type="hidden" id="osAtvId" value="">
-      <div class="md:col-span-2 text-xs font-bold text-gray-500 uppercase" id="osAtvTitulo">＋ Nova atividade</div>
-      <div><label class="lbl">Técnico *</label>${TEC_LIST.length?`<select id="osAtvTec" class="inp text-sm">${tecOptions('')}</select>`:`<input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico">`}</div>
-      <div><label class="lbl">Data *</label><input id="osAtvData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
-      <div><label class="lbl">Início</label><input id="osAtvIni" type="time" class="inp text-sm"></div>
-      <div><label class="lbl">Fim</label><input id="osAtvFim" type="time" class="inp text-sm"></div>
-      <div class="md:col-span-2"><label class="lbl">Descrição da conclusão</label><textarea id="osAtvDesc" class="inp text-sm" rows="2"></textarea></div>
-      <div class="md:col-span-2 flex gap-2">
-        <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarAtividade()">Salvar atividade</button>
-        <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osLimparAtividade()">Limpar</button>
-      </div>
-    </div>`:''}
-
-    <div class="font-bold mb-2">📦 Produtos utilizados</div>
-    <div class="mb-3">${prodHtml}</div>
-    ${editavel?`
-    <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-4">
-      <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Adicionar produto (baixa automática do estoque)</div>
-      <div><label class="lbl">Produto *</label><select id="osProdSel" class="inp text-sm" onchange="osCarregarLotes()"><option value="">— selecione —</option>${prodOpts}</select></div>
-      <div><label class="lbl">Lote (FEFO sugerido) *</label><select id="osLoteSel" class="inp text-sm"><option value="">— escolha o produto —</option></select></div>
-      <div><label class="lbl">Qtd *</label><input id="osProdQtd" type="number" min="1" step="1" class="inp text-sm"></div>
-      <div><label class="lbl">V. unit (R$)</label><input id="osProdVu" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
-      <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAdicionarProduto()">Adicionar e baixar estoque</button></div>
-    </div>`:''}
-
-    <div class="font-bold mb-2">✍️ Assinatura</div>
-    <div class="border rounded-xl p-3 mb-4">
-      ${o.assinatura_url
-        ? `<a href="${esc(o.assinatura_url)}" target="_blank"><img src="${esc(o.assinatura_url)}" class="h-20 border rounded bg-white"></a>
-           <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div>
-           ${editavel?`<button class="text-xs text-brand font-bold mt-1" onclick="osAbrirAssinatura()">🔄 Assinar novamente</button>`:''}`
-        : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')}
-    </div>
-
-    <div class="font-bold mb-2">📎 Anexos</div>
-    <div class="grid gap-2 mb-3">${anexHtml}</div>
-    ${editavel?`<label class="btn-ghost !w-auto !py-2 !px-4 text-sm inline-block cursor-pointer">＋ Anexar arquivo<input type="file" class="hidden" onchange="osUploadAnexo(this)"></label>`:''}
-
-    <div class="border-t mt-4 pt-3 flex justify-end gap-6 text-sm">
-      <div>Serviços: <b>${fmtReais(tot.vs)}</b></div>
-      <div>Produtos: <b>${fmtReais(tot.vp)}</b></div>
-      <div class="text-base">Total: <b class="text-brand">${fmtReais(tot.total)}</b></div>
-    </div>
-  </div>`;
-  window.scrollTo({top:0});
+    <div id="osTiposLista" class="grid gap-2 mb-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
+    <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4">
+      <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Novo tipo</div>
+      <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osTipoDesc" class="inp text-sm" placeholder="Ex: Instalação de Equipamento"></div>
+      <div><label class="lbl">Duração (min)</label><input id="osTipoDur" type="number" min="0" class="inp text-sm" placeholder="120"></div>
+      <div><label class="lbl">Prazo solução (h)</label><input id="osTipoPrz" type="number" min="0" class="inp text-sm" placeholder="48"></div>
+      <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddTipo()">Adicionar tipo</button></div>
+    </div>`;
+  osListarTipos();
+}
+async function osListarTipos(){
+  const box = document.getElementById('osTiposLista'); if(!box) return;
+  try{
+    const rows = await apiGET('tipos_os?select=*&order=descricao.asc');
+    box.innerHTML = rows.map(t=>`
+      <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2 ${t.ativo?'':'opacity-50'}">
+        <div><b>${esc(t.descricao)}</b>
+        <div class="text-xs text-gray-500">${t.duracao_min?t.duracao_min+' min':''}${t.prazo_solucao_h?' · prazo '+t.prazo_solucao_h+'h':''}${t.ativo?'':' · inativo'}</div></div>
+        <div class="flex gap-2">
+          <button class="text-xs text-brand font-bold" onclick="osToggleTipo('${t.id}',${t.ativo})">${t.ativo?'⏸️ Desativar':'▶️ Ativar'}</button>
+          <button class="text-xs text-red-700 font-bold" onclick="osDelTipo('${t.id}')">🗑️</button>
+        </div>
+      </div>`).join('') || '<span class="text-gray-400 text-xs">Nenhum tipo.</span>';
+  }catch(e){ box.innerHTML = `<span class="text-red-600 text-xs">Erro: ${esc(e.message)}</span>`; }
+}
+async function osAddTipo(){
+  const descricao = document.getElementById('osTipoDesc').value.trim();
+  if(!descricao){ toast('Informe a descrição.','erro'); return; }
+  try{
+    await apiPOST('tipos_os', { descricao, duracao_min:Number(document.getElementById('osTipoDur').value)||null, prazo_solucao_h:Number(document.getElementById('osTipoPrz').value)||null });
+    toast('Tipo adicionado. ✓','ok'); osListarTipos(); carregarTiposOS();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osToggleTipo(id, ativo){
+  try{ await apiPATCH('tipos_os', `id=eq.${id}`, { ativo:!ativo }); osListarTipos(); carregarTiposOS(); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osDelTipo(id){
+  if(!confirm('Excluir este tipo de OS?')) return;
+  try{ await apiDELETE('tipos_os', `id=eq.${id}`); osListarTipos(); carregarTiposOS(); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ---------- atividades ---------- */
@@ -5388,8 +5864,8 @@ async function osSalvarAtividade(){
     descricao_conclusao: document.getElementById('osAtvDesc').value.trim()||null,
   };
   try{
-    if(id) await apiPATCH('os_atividades', `id=eq.${id}`, body);
-    else await apiPOST('os_atividades', { os_id:d.os.id, status:'pendente', ...body });
+    if(id){ await apiPATCH('os_atividades', `id=eq.${id}`, body); await osLog(d.os.id, `editou a atividade de ${tecnico}`); }
+    else{ await apiPOST('os_atividades', { os_id:d.os.id, status:'pendente', ...body }); await osLog(d.os.id, `agendou atividade para ${tecnico} em ${fmtData(data)}`); }
     toast('Atividade salva. ✓','ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
@@ -5412,6 +5888,7 @@ function osEditarAtividade(id){
 async function osToggleAtividade(id){
   try{
     await apiPATCH('os_atividades', `id=eq.${id}`, { status:'concluida' });
+    await osLog(OS_DETALHE.os.id, 'concluiu uma atividade');
     await verOS(OS_DETALHE.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -5457,6 +5934,7 @@ async function osAdicionarProduto(){
     });
     await apiPATCH('lotes', `id=eq.${lote_id}`, { quantidade_atual: saldo - qtd });
     await apiPOST('os_produtos', { os_id:d.os.id, produto_id, lote_id, quantidade:qtd, valor_unitario:vu });
+    await osLog(d.os.id, `adicionou produto à OS (${fmtQtd(qtd)} un, baixa do estoque)`);
     toast('Produto adicionado e estoque baixado. ✓','ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
@@ -5476,6 +5954,7 @@ async function osRemoverProduto(id){
   try{
     await osEstornarProdutoOS(it, d.os.numero);
     await apiDELETE('os_produtos', `id=eq.${id}`);
+    await osLog(d.os.id, `removeu produto da OS (estoque estornado)`);
     toast('Produto removido e baixa estornada. ✓','ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
@@ -5486,6 +5965,7 @@ async function osTrocarStatus(st){
   const d = OS_DETALHE; if(!d) return;
   try{
     await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:st, updated_at:new Date().toISOString() });
+    await osLog(d.os.id, st==='concluida' ? 'concluiu a OS' : st==='em_atendimento' ? 'iniciou o atendimento da OS' : `alterou o status da OS para ${st}`);
     toast(`OS ${st==='em_atendimento'?'em atendimento':'atualizada'}. ✓`,'ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
@@ -5503,6 +5983,7 @@ async function osCancelar(){
     for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, d.os.numero);
     await apiDELETE('os_produtos', `os_id=eq.${d.os.id}`);
     await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:'cancelada', updated_at:new Date().toISOString() });
+    await osLog(d.os.id, 'cancelou a OS (estoque estornado)');
     toast('OS cancelada e estoque estornado. ✓','ok');
     OS_CACHE = null;
     await carregarOSClientes();
@@ -5555,6 +6036,7 @@ async function osSalvarAssinatura(){
     const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
     const agora = new Date().toISOString();
     await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url:url, assinatura_em:agora });
+    await osLog(osId, 'coletou a assinatura do cliente');
     closeOsModal();
     toast('Assinatura salva. ✓','ok');
     OS_ASS_ID = null;
@@ -5773,6 +6255,7 @@ async function osEnviarEmail(){
     const j = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(j.erro || j.message || ('HTTP '+r.status));
     d.os.email_enviado_em = j.email_enviado_em || new Date().toISOString();
+    await osLog(d.os.id, `enviou a OS por e-mail para ${email}`);
     toast(`OS enviada para ${email}. ✓`,'ok');
     renderOSDetalhe();
   }catch(e){ toast('Erro ao enviar: '+e.message,'erro'); }
