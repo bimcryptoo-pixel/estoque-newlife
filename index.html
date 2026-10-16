@@ -1193,9 +1193,11 @@ async function fazerLogin(){
   box.classList.add('hidden');
   if(!login || !senha){ box.textContent='Informe usuário e senha.'; box.classList.remove('hidden'); return; }
   try{
-    const rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil`);
+    let rows;
+    try{ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,permissoes`); }
+    catch(e){ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil`); }
     if(!rows.length || rows[0].senha !== senha){ box.textContent='Usuário ou senha inválidos.'; box.classList.remove('hidden'); return; }
-    sessao = { id: rows[0].id, nome: rows[0].nome, perfil: rows[0].perfil };
+    sessao = { id: rows[0].id, nome: rows[0].nome, perfil: rows[0].perfil, permissoes: rows[0].permissoes || null };
     salvarSessao();
     entrarApp();
   }catch(e){ box.textContent='Falha de conexão: '+e.message; box.classList.remove('hidden'); }
@@ -1206,11 +1208,7 @@ function entrarApp(){
   document.getElementById('telaLogin').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
-  const ehAdmin = sessao.perfil==='admin';
-  document.getElementById('navAdminDesk').style.display = ehAdmin ? '' : 'none';
-  document.getElementById('navAdminMob').style.display = ehAdmin ? '' : 'none';
-  document.getElementById('navInvDesk').style.display = ehAdmin ? '' : 'none';
-  document.getElementById('navInvMob').style.display = ehAdmin ? '' : 'none';
+  aplicarPermissoesNav();
   // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
   document.getElementById('fData').value = hojeISO();
   carregarProdutosCache().then(()=>{
@@ -1223,7 +1221,34 @@ document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key=
 
 /* ================= NAVEGAÇÃO ================= */
 const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','cadastros','admin'];
+/* ================= PERMISSÕES POR MÓDULO ================= */
+const MODULOS = [
+  ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
+  ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
+  ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
+  ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
+  ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
+];
+function modulosPermitidos(){
+  if(sessao?.perfil==='admin') return MODULOS.map(m=>m[0]);
+  const p = sessao?.permissoes;
+  if(Array.isArray(p) && p.length) return p.filter(a=>a!=='admin' && a!=='inventario');
+  return MODULOS.map(m=>m[0]).filter(a=>a!=='admin' && a!=='inventario'); /* padrão: tudo, menos admin/inventário */
+}
+function podeAba(aba){
+  if(sessao?.perfil==='admin') return true;
+  if(aba==='admin' || aba==='inventario') return false;
+  return modulosPermitidos().includes(aba);
+}
+function aplicarPermissoesNav(){
+  const ok = new Set(modulosPermitidos());
+  MODULOS.forEach(([id])=>{
+    document.querySelectorAll(`[data-aba="${id}"]`).forEach(b=>{ b.style.display = ok.has(id) ? '' : 'none'; });
+  });
+}
+
 function mostrarAba(aba){
+  if(!podeAba(aba)){ toast('Módulo não liberado para o seu usuário.','erro'); return; }
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
   ABAS.forEach(a=>{
     document.getElementById('aba-'+a).classList.toggle('hidden', a!==aba);
@@ -2345,15 +2370,47 @@ async function iniciarDevolucao(saidaId){
 /* ================= ADMIN (só gestão de usuários; restrito ao admin) ================= */
 async function carregarAdmin(){
   try{
-    const users = await apiGET('usuarios?select=id,nome,login,perfil,ativo&order=nome.asc');
+    let users;
+    try{ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo,permissoes&order=nome.asc'); }
+    catch(e){ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo&order=nome.asc'); }
     document.getElementById('listaUsuarios').innerHTML = (cacheUsuarios = users).map(u=>`
-      <div class="flex items-center justify-between py-1.5 rowline">
-        <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
-          <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
-          ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}</div>
-        ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
+      <div class="py-1.5 rowline">
+        <div class="flex items-center justify-between">
+          <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
+            <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
+            ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}</div>
+          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
+        </div>
+        <div id="permBox-${u.id}" class="hidden mt-2 border rounded-xl p-3 bg-gray-50"></div>
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
   }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
+}
+function togglePermissoes(id){
+  const u = (cacheUsuarios||[]).find(x=>x.id===id);
+  const box = document.getElementById('permBox-'+id);
+  if(!u || !box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  const atual = new Set(Array.isArray(u.permissoes) ? u.permissoes : []);
+  const padrao = atual.size===0; /* sem configuração = todos liberados */
+  box.innerHTML = `<div class="text-xs font-bold text-gray-500 uppercase mb-2">Módulos liberados para ${esc(u.nome)}</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">` +
+    MODULOS.filter(([m])=>m!=='admin'&&m!=='inventario').map(([m,rot])=>
+      `<label class="flex items-center gap-2 text-sm bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer">
+        <input type="checkbox" data-mod="${m}" ${padrao||atual.has(m)?'checked':''} class="accent-red-700"> ${rot}</label>`
+    ).join('') +
+    `</div><div class="text-xs text-gray-400 mb-2">⚙️ Admin e 📋 Inventário são sempre só do administrador.</div>
+    <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="salvarPermissoes('${id}')">Salvar permissões</button>`;
+  box.classList.remove('hidden');
+}
+async function salvarPermissoes(id){
+  const mods = [...document.querySelectorAll(`#permBox-${id} input[data-mod]:checked`)].map(i=>i.dataset.mod);
+  try{
+    await apiPATCH('usuarios', `id=eq.${id}`, { permissoes: mods });
+    const u = (cacheUsuarios||[]).find(x=>x.id===id);
+    if(u) u.permissoes = mods;
+    toast('Permissões salvas. ✓ Valem no próximo login do usuário.','ok');
+    document.getElementById('permBox-'+id).classList.add('hidden');
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function criarUsuario(){
   const nome=document.getElementById('uNome').value.trim(),
