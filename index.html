@@ -3592,12 +3592,13 @@ function imprimirPedido(){
     .doc .num{font-size:16px;font-weight:800;color:#C1272D;margin-top:2px;}
     .doc .meta{font-size:11px;color:#666;margin-top:6px;}
     .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;margin:1px 2px;background:#f3f4f6;color:#333;border:1px solid #e5e7eb;}
-    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:16px 18px;margin-bottom:18px;}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;}
-    .fld span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#888;font-weight:700;margin-bottom:1px;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:10px 16px;margin-bottom:16px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 28px;}
+    .fld{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .fld span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-right:6px;}
     .fld b{font-weight:700;}
     table{width:100%;border-collapse:collapse;margin:0 0 18px;}
-    th{background:#C1272D;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;text-align:left;}
+    th{background:#C1272D;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     td{padding:9px 8px;border-bottom:1px solid #eee;vertical-align:top;}
     tbody tr:nth-child(even) td{background:#fafbfc;}
     .c{text-align:center;} .r{text-align:right;white-space:nowrap;}
