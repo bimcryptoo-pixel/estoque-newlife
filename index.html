@@ -3732,19 +3732,28 @@ async function carregarCompras(){
       }
       let forn = [];
       try{ forn = await apiGET('fornecedores?select=id,nome&order=nome.asc'); }catch(e){}
-      CP_CACHE = { cons, estoque, fornecedores: forn };
+      let mesMax = 0;
+      cons.forEach(c=>{ const m=Number(c.mes)||0; if(m>mesMax) mesMax=m; });
+      if(!mesMax) mesMax = new Date().getMonth()+1;
+      CP_CACHE = { cons, estoque, fornecedores: forn, mesMax };
     }catch(e){ toast('Erro ao carregar dados: '+e.message,'erro'); return; }
   }
   const selF = document.getElementById('cpFornecedor');
   if(selF && selF.options.length<=1)
     selF.innerHTML = '<option value="">—</option>' + (CP_CACHE.fornecedores||[]).map(f=>`<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  /* rótulos da base conforme último mês com dados */
+  const mm = CP_CACHE.mesMax, nm = CP_MES_NOME[mm-1];
+  const selB = document.getElementById('cpBase');
+  selB.options[0].text = `Anual (jan–${nm}/2026)`;
+  selB.options[1].text = `Semestral (últimos 6 meses até ${nm})`;
+  selB.options[2].text = `Trimestral (últimos 3 meses até ${nm})`;
   calcularCompras();
 }
 function cpMontarMeses(){
   const box = document.getElementById('cpMeses');
-  const mesAtual = new Date().getMonth()+1;
+  const mesMax = (CP_CACHE && CP_CACHE.mesMax) || new Date().getMonth()+1;
   box.innerHTML = CP_MES_NOME.map((n,i)=>{
-    const m = i+1, dis = m > mesAtual;
+    const m = i+1, dis = m > mesMax;
     return `<label class="flex items-center gap-1.5 text-sm bg-white border rounded-lg px-2.5 py-1.5 ${dis?'opacity-40':''}">`+
       `<input type="checkbox" data-mes="${m}" ${dis?'disabled':''} class="accent-red-700" onchange="calcularCompras()"> ${n}</label>`;
   }).join('');
@@ -3753,19 +3762,19 @@ function cpTrocarBase(){
   const base = document.getElementById('cpBase').value;
   document.getElementById('cpMesesBox').classList.toggle('hidden', base!=='manual');
   if(base==='manual'){
-    const mesAtual = new Date().getMonth()+1;
-    document.querySelectorAll('#cpMeses input[data-mes]').forEach(c=>{ c.checked = Number(c.dataset.mes) > mesAtual-3; });
+    const mesMax = (CP_CACHE && CP_CACHE.mesMax) || new Date().getMonth()+1;
+    document.querySelectorAll('#cpMeses input[data-mes]').forEach(c=>{ c.checked = Number(c.dataset.mes) > mesMax-3; });
   }
   calcularCompras();
 }
 function cpMesesBase(){
   const base = document.getElementById('cpBase').value;
-  const mesAtual = new Date().getMonth()+1;
-  if(base==='anual') return Array.from({length:mesAtual},(_,i)=>i+1);
-  if(base==='semestral') return Array.from({length:6},(_,i)=>mesAtual-5+i).filter(m=>m>=1);
-  if(base==='trimestral') return Array.from({length:3},(_,i)=>mesAtual-2+i).filter(m=>m>=1);
+  const mesMax = (CP_CACHE && CP_CACHE.mesMax) || new Date().getMonth()+1;
+  if(base==='anual') return Array.from({length:mesMax},(_,i)=>i+1);
+  if(base==='semestral') return Array.from({length:6},(_,i)=>mesMax-5+i).filter(m=>m>=1);
+  if(base==='trimestral') return Array.from({length:3},(_,i)=>mesMax-2+i).filter(m=>m>=1);
   const man = [...document.querySelectorAll('#cpMeses input[data-mes]:checked')].map(c=>Number(c.dataset.mes));
-  return man.length ? man : [mesAtual];
+  return man.length ? man : [mesMax];
 }
 function calcularCompras(){
   const box = document.getElementById('cpResult');
