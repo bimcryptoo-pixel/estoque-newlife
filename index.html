@@ -3348,7 +3348,7 @@ async function verPedido(id){
         </table>
       </div>
       ${acoes?`<div class="flex gap-2 flex-wrap mt-2">${acoes}</div>`:''}
-      <div class="text-xs text-gray-400 mt-4">💡 A baixa no estoque é feita em <b>Lançar</b> após a saída física da mercadoria.</div>`;
+      <div class="text-xs text-gray-400 mt-4">💡 Ao <b>faturar</b>, o sistema dá baixa automática no estoque (lote escolhido no item, ou o mais próximo do vencimento). Se precisar corrigir depois, use <b>↩️ Desfazer faturamento</b>.</div>`;
     document.getElementById('pedListaWrap').classList.add('hidden');
     document.getElementById('pedFormWrap').classList.add('hidden');
     document.getElementById('pedDetalheWrap').classList.remove('hidden');
