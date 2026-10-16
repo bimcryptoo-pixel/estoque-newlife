@@ -3066,7 +3066,7 @@ const PED_PROX = {
   pronto:      [['faturado','🧾 Faturar']],
   faturado:    [['concluido','🏁 Concluir']],
 };
-const PED_CANCELAVEL = ['rascunho','solicitado','aprovado'];
+const PED_CANCELAVEL = ['rascunho','solicitado','aprovado','em_separacao','pronto'];
 let PED_CACHE = null;
 let PED_ITENS = [];
 let PED_LOTES = [];
@@ -3368,9 +3368,13 @@ async function mudarStatusPedido(id, novo){
     PED_CACHE = null;
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
-function cancelarPedido(id){
-  if(!confirm('Cancelar este pedido?')) return;
-  mudarStatusPedidoDireto(id, 'cancelado');
+async function cancelarPedido(id){
+  if(!confirm('Cancelar este pedido?\nSe houver baixa de estoque vinculada, ela será estornada.')) return;
+  try{
+    const n = await estornarBaixaPedido(id); /* segurança: reverte baixa + consumo, se existirem */
+    await mudarStatusPedidoDireto(id, 'cancelado');
+    if(n) toast(`Pedido cancelado e ${n} baixa(s) estornada(s). ✓`,'ok');
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function mudarStatusPedidoDireto(id, novo){
   try{
