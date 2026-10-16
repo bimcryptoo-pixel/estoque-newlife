@@ -215,7 +215,7 @@
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Consumo</button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Arquivo Consumo</button>
       <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🏷️ Produtos</button>
-      <button data-aba="inventario" onclick="mostrarAba('inventario')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📋 Inventário</button>
+      <button data-aba="inventario" id="navInvDesk" onclick="mostrarAba('inventario')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📋 Inventário</button>
       <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📒 Kardex</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
@@ -1076,7 +1076,7 @@
       <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Arquivo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏷️</span>Prods<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="inventario" onclick="mostrarAba('inventario')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Invent.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="inventario" id="navInvMob" onclick="mostrarAba('inventario')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Invent.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📒</span>Kardex<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1209,6 +1209,8 @@ function entrarApp(){
   const ehAdmin = sessao.perfil==='admin';
   document.getElementById('navAdminDesk').style.display = ehAdmin ? '' : 'none';
   document.getElementById('navAdminMob').style.display = ehAdmin ? '' : 'none';
+  document.getElementById('navInvDesk').style.display = ehAdmin ? '' : 'none';
+  document.getElementById('navInvMob').style.display = ehAdmin ? '' : 'none';
   // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
   document.getElementById('fData').value = hojeISO();
   carregarProdutosCache().then(()=>{
@@ -1300,6 +1302,7 @@ function renderAbaixoMin(prods, estoque){
 /* ================= INVENTÁRIO ================= */
 let INV = null; // {local, rows:[{id,nome,linha,sistema}], contados:{id:qtd}}
 async function carregarInventario(){
+  if(sessao?.perfil !== 'admin'){ toast('Inventário restrito ao administrador.','erro'); return; }
   const box = document.getElementById('tbodyInv');
   const loading = document.getElementById('invLoading');
   const wrap = document.getElementById('invResumoWrap');
@@ -1355,6 +1358,7 @@ function invAtualizarDif(id){
   document.getElementById('invResumo').textContent = INV.rows.filter(x=>Number(INV.contados[x.id] ?? x.sistema) - x.sistema !== 0).length;
 }
 async function confirmarInventario(){
+  if(sessao?.perfil !== 'admin'){ toast('Inventário restrito ao administrador.','erro'); return; }
   if(!INV) return;
   const difs = INV.rows
     .map(r=>({ ...r, contado: Number(INV.contados[r.id] ?? r.sistema), dif: Number(INV.contados[r.id] ?? r.sistema) - r.sistema }))
