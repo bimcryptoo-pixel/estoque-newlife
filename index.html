@@ -3565,62 +3565,85 @@ function imprimirPedido(){
     const vu = it.valor_unitario!==null&&it.valor_unitario!==undefined?Number(it.valor_unitario):null;
     const sub = vu!==null?q*vu:null;
     if(sub!==null){ tv+=sub; temV=true; }
-    return `<tr><td>${i+1}</td><td>${esc(it.produtos?it.produtos.nome:'—')}</td>`+
-      `<td>${it.lotes?esc(it.lotes.numero_lote):'—'}${it.lotes&&it.lotes.validade?' ('+fmtData(it.lotes.validade)+')':''}</td>`+
-      `<td style="text-align:right">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>`+
-      `<td style="text-align:right">${vu!==null?fmtReais(vu):'—'}</td>`+
-      `<td style="text-align:right"><b>${sub!==null?fmtReais(sub):'—'}</b></td></tr>`;
+    return `<tr><td class="c">${i+1}</td><td><b>${esc(it.produtos?it.produtos.nome:'—')}</b><div class="sub">${esc(it.produtos&&it.produtos.linha?it.produtos.linha:'')}</div></td>`+
+      `<td>${it.lotes?esc(it.lotes.numero_lote):'<span class="mut">a definir</span>'}${it.lotes&&it.lotes.validade?'<div class="sub">val '+fmtData(it.lotes.validade)+'</div>':''}</td>`+
+      `<td class="r">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>`+
+      `<td class="r">${vu!==null?fmtReais(vu):'—'}</td>`+
+      `<td class="r"><b>${sub!==null?fmtReais(sub):'—'}</b></td></tr>`;
   }).join('');
   const destinoHtml = p.tipo==='cliente'
-    ? `<div><span class="rl">Cliente:</span> <b>${esc(fmtCliNome(p.clientes?p.clientes.nome:'—'))}</b></div>
-       <div><span class="rl">Endereço de entrega:</span> ${esc(p.endereco_entrega||'—')}</div>
-       <div><span class="rl">Condição de pagamento:</span> ${esc(p.condicao_pagamento||'—')}</div>`
-    : `<div><span class="rl">Setor de destino:</span> <b>${esc(p.setor_destino||'—')}</b></div>`;
+    ? `<div class="fld"><span>Cliente</span><b>${esc(fmtCliNome(p.clientes?p.clientes.nome:'—'))}</b></div>
+       <div class="fld"><span>Endereço de entrega</span>${esc(p.endereco_entrega||'—')}</div>
+       <div class="fld"><span>Condição de pagamento</span>${esc(p.condicao_pagamento||'—')}</div>`
+    : `<div class="fld"><span>Setor de destino</span><b>${esc(p.setor_destino||'—')}</b></div>`;
+  const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido ${esc(p.numero)}</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:13px;margin:0;padding:24px;}
-    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C1272D;padding-bottom:12px;margin-bottom:16px;}
-    .marca{font-size:22px;font-weight:900;} .marca span{color:#C1272D;}
-    .num{font-size:18px;font-weight:800;text-align:right;}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:14px;}
-    .rl{color:#666;font-size:11px;text-transform:uppercase;font-weight:700;}
-    table{width:100%;border-collapse:collapse;margin:10px 0 16px;}
-    th{background:#f3f4f6;text-align:left;font-size:11px;text-transform:uppercase;padding:8px;border:1px solid #ddd;}
-    td{padding:8px;border:1px solid #ddd;vertical-align:top;}
-    tfoot td{font-weight:800;background:#fafafa;}
-    .obs{background:#fafafa;border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:16px;}
-    .ass{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:48px;}
-    .ass div{border-top:1px solid #111;padding-top:6px;text-align:center;font-size:12px;color:#555;}
-    .foot{margin-top:24px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:8px;}
-    @media print{ body{padding:0;} }
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;margin:0;padding:32px;line-height:1.45;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
+    .marca{display:flex;align-items:center;gap:14px;}
+    .marca img{height:62px;width:62px;object-fit:contain;}
+    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome span{color:#C1272D;}
+    .marca .end{font-size:11px;color:#777;margin-top:2px;}
+    .doc{text-align:right;}
+    .doc h1{font-size:26px;margin:0;letter-spacing:4px;color:#111;}
+    .doc .num{font-size:16px;font-weight:800;color:#C1272D;margin-top:2px;}
+    .doc .meta{font-size:11px;color:#666;margin-top:6px;}
+    .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;margin:1px 2px;background:#f3f4f6;color:#333;border:1px solid #e5e7eb;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:16px 18px;margin-bottom:18px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;}
+    .fld span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#888;font-weight:700;margin-bottom:1px;}
+    .fld b{font-weight:700;}
+    table{width:100%;border-collapse:collapse;margin:0 0 18px;}
+    th{background:#C1272D;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;text-align:left;}
+    td{padding:9px 8px;border-bottom:1px solid #eee;vertical-align:top;}
+    tbody tr:nth-child(even) td{background:#fafbfc;}
+    .c{text-align:center;} .r{text-align:right;white-space:nowrap;}
+    .sub{font-size:11px;color:#888;}
+    .mut{color:#aaa;font-style:italic;}
+    tfoot td{font-weight:800;background:#f3f4f6;border-top:2px solid #C1272D;font-size:14px;}
+    .obs{background:#fffbeA;border:1px solid #f0e6c8;border-left:4px solid #d4a017;border-radius:6px;padding:10px 14px;margin-bottom:20px;}
+    .obs span{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#92680a;font-weight:700;}
+    .ass{display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;margin-top:56px;}
+    .ass div{border-top:1.5px solid #333;padding-top:8px;text-align:center;font-size:12px;color:#555;}
+    .rodape{margin-top:28px;font-size:10.5px;color:#999;border-top:1px solid #e5e5e5;padding-top:10px;display:flex;justify-content:space-between;}
+    @media print{ body{padding:8px;} .topo{break-inside:avoid;} table{break-inside:auto;} tr{break-inside:avoid;} }
   </style></head><body>
-  <div class="top">
-    <div><div class="marca">NEW LIFE <span>•</span> Estoque</div><div style="font-size:12px;color:#666">Pedido ao estoque — requisição interna (antes da nota fiscal)</div></div>
-    <div class="num">${esc(p.numero)}<div style="font-size:12px;font-weight:400;color:#666">${st.t} • ${esc((PED_PRIOR[p.prioridade]||{}).t||'')}</div></div>
+  <div class="topo">
+    <div class="marca">
+      <img src="logo.png" alt="NEW LIFE" onerror="this.style.display='none'">
+      <div><div class="nome">NEW LIFE <span>•</span> Diagnóstico</div><div class="end">Matriz: Fortaleza/CE &nbsp;•&nbsp; Filial: Piauí</div></div>
+    </div>
+    <div class="doc">
+      <h1>PEDIDO</h1>
+      <div class="num">${esc(p.numero)}</div>
+      <div class="meta"><span class="badge">${esc(st.t)}</span> <span class="badge">${esc((PED_PRIOR[p.prioridade]||{}).t||'')}</span><br>Emitido em ${fmtData(p.data_emissao)}</div>
+    </div>
   </div>
-  <div class="grid">
-    <div><span class="rl">Tipo:</span> ${PED_TIPO[p.tipo]||p.tipo}</div>
-    <div><span class="rl">Emissão:</span> ${fmtData(p.data_emissao)}</div>
-    <div><span class="rl">Solicitante:</span> ${esc(p.solicitante||'—')}</div>
-    <div><span class="rl">Responsável:</span> ${esc(p.responsavel||'—')}</div>
+  <div class="card"><div class="grid2">
+    <div class="fld"><span>Tipo</span>${esc(PED_TIPO[p.tipo]||p.tipo)}</div>
+    <div class="fld"><span>Solicitante</span>${esc(p.solicitante||'—')}</div>
+    <div class="fld"><span>Responsável</span>${esc(p.responsavel||'—')}</div>
+    <div class="fld"><span>Estoque de origem</span>📍 ${esc(p.local_origem||'—')}</div>
     ${destinoHtml}
-    <div><span class="rl">Estoque de origem:</span> ${esc(p.local_origem||'—')}</div>
-    <div><span class="rl">Previsão de entrega:</span> ${fmtData(p.data_prevista)}</div>
-    <div><span class="rl">Transportadora:</span> ${esc(p.transportadora||'—')}</div>
-  </div>
-  <table><thead><tr><th>#</th><th>Produto</th><th>Lote</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+    <div class="fld"><span>Previsão de entrega</span>${fmtData(p.data_prevista)}</div>
+    <div class="fld"><span>Transportadora</span>${esc(p.transportadora||'—')}</div>
+  </div></div>
+  <table><thead><tr><th class="c" style="width:36px">#</th><th>Produto</th><th>Lote</th><th class="r">Qtd</th><th class="r">Valor unit.</th><th class="r">Subtotal</th></tr></thead>
   <tbody>${linhas}</tbody>
-  <tfoot><tr><td colspan="3" style="text-align:right">TOTAL</td><td style="text-align:right">${fmtQtd(tq)}</td><td></td><td style="text-align:right">${temV?fmtReais(tv):'—'}</td></tr></tfoot></table>
-  ${p.observacoes?`<div class="obs"><span class="rl">Observações:</span><br>${esc(p.observacoes)}</div>`:''}
-  <div class="ass"><div>Solicitante<br><br></div><div>Responsável<br><br></div><div>Recebido por / data<br><br></div></div>
-  <div class="foot">Documento de requisição interna — a baixa no estoque é registrada em Lançar após a saída física da mercadoria.</div>
+  <tfoot><tr><td colspan="3" class="r">TOTAL</td><td class="r">${fmtQtd(tq)}</td><td></td><td class="r">${temV?fmtReais(tv):'—'}</td></tr></tfoot></table>
+  ${p.observacoes?`<div class="obs"><span>Observações</span><br>${esc(p.observacoes)}</div>`:''}
+  <div class="ass"><div>Solicitante</div><div>Responsável</div><div>Recebido por / data</div></div>
+  <div class="rodape"><span>Documento de requisição interna — a baixa no estoque é feita automaticamente no faturamento do pedido.</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} por ${esc(sessao? sessao.nome : '')}</span></div>
   </body></html>`;
   let f = document.getElementById('printFramePed');
   if(!f){ f = document.createElement('iframe'); f.id='printFramePed'; f.style.display='none'; document.body.appendChild(f); }
   const doc = f.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
   f.contentWindow.focus();
-  setTimeout(()=>f.contentWindow.print(), 400);
+  setTimeout(()=>f.contentWindow.print(), 500);
 }
 
 /* ================= CONTRATOS DE CLIENTES (07/10/2026) =================
