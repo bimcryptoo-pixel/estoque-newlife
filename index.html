@@ -3348,7 +3348,7 @@ async function verPedido(id){
         </table>
       </div>
       ${acoes?`<div class="flex gap-2 flex-wrap mt-2">${acoes}</div>`:''}
-      <div class="text-xs text-gray-400 mt-4">💡 Ao <b>faturar</b>, o sistema dá baixa automática no estoque (lote escolhido no item, ou o mais próximo do vencimento). Se precisar corrigir depois, use <b>↩️ Desfazer faturamento</b>.</div>`;
+      <div class="text-xs text-gray-400 mt-4">💡 Ao <b>faturar</b>, o sistema dá baixa automática no estoque (lote escolhido no item, ou o mais próximo do vencimento) e registra o consumo (módulos Consumo e Contratos). Se precisar corrigir depois, use <b>↩️ Desfazer faturamento</b>.</div>`;
     document.getElementById('pedListaWrap').classList.add('hidden');
     document.getElementById('pedFormWrap').classList.add('hidden');
     document.getElementById('pedDetalheWrap').classList.remove('hidden');
@@ -3401,6 +3401,10 @@ async function estornarBaixaPedido(id){
     });
     await apiPATCH('movimentacoes', `id=eq.${m.id}`, { observacao: `${m.observacao||''} [estornado em ${hoje}]` });
   }
+  /* remove o consumo automático lançado no faturamento (volta limpo se refaturar) */
+  const obsCons = `[pedido ${ped.numero}] baixa automática`;
+  const consRows = await apiGET(`consumo?observacao=eq.${encodeURIComponent(obsCons)}&select=id`);
+  for(const c of consRows){ await apiDELETE('consumo', `id=eq.${c.id}`); }
   return ativas.length;
 }
 async function desfazerFaturamento(id){
@@ -3458,6 +3462,24 @@ async function baixarEstoquePedido(id){
     });
     const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
     await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) - b.qtd });
+  }
+  /* registra o consumo (alimenta os módulos Consumo e Contratos) — idempotente */
+  if(ped.cliente_id){
+    const obsCons = `[pedido ${ped.numero}] baixa automática`;
+    const jaCons = await apiGET(`consumo?observacao=eq.${encodeURIComponent(obsCons)}&select=id&limit=1`);
+    if(!jaCons.length){
+      const agr = new Date();
+      const porProd = {};
+      for(const b of baixas){ porProd[b.produto_id] = (porProd[b.produto_id]||0) + b.qtd; }
+      for(const pid of Object.keys(porProd)){
+        await apiPOST('consumo', {
+          cliente_id: ped.cliente_id, produto_id: pid,
+          ano: agr.getFullYear(), mes: agr.getMonth()+1, quantidade: porProd[pid],
+          local: ped.local_origem || null, origem: 'lancamento',
+          observacao: obsCons, usuario_id: uid
+        });
+      }
+    }
   }
   toast(`Baixa de estoque do pedido ${ped.numero} concluída. ✓`,'ok');
 }
