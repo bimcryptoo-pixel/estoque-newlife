@@ -2998,14 +2998,15 @@ async function carregarConsumo(){
     if(!document.getElementById('lcMes').value)
       document.getElementById('lcMes').value = new Date().toISOString().slice(0,7);
     if(!CONSUMO_CACHE){
-      CONSUMO_CACHE = [];
+      const tmpCache = [];
       let off = 0;
       for(;;){
         const pg = await apiGET(`consumo?select=*,clientes(id,nome,tipo),produtos(id,nome,linha)&order=ano.desc,mes.desc&limit=1000&offset=${off}`);
-        CONSUMO_CACHE.push(...pg);
+        tmpCache.push(...pg);
         if(pg.length<1000) break;
         off += 1000;
       }
+      CONSUMO_CACHE = tmpCache;
     }
     const [aDe,mDe] = document.getElementById('cDe').value.split('-').map(Number);
     const [aAte,mAte] = document.getElementById('cAte').value.split('-').map(Number);
@@ -3076,14 +3077,15 @@ async function carregarArquivo(){
     document.getElementById('arqTbodyLinhaAno').innerHTML =
       '<tr><td class="py-8 text-center text-gray-400">Carregando dados do arquivo…</td></tr>';
     if(!CONSUMO_CACHE){
-      CONSUMO_CACHE = [];
+      const tmpCache = [];
       let off = 0;
       for(;;){
         const pg = await apiGET(`consumo?select=*,clientes(id,nome,tipo),produtos(id,nome,linha)&order=ano.desc,mes.desc&limit=1000&offset=${off}`);
-        CONSUMO_CACHE.push(...pg);
+        tmpCache.push(...pg);
         if(pg.length<1000) break;
         off += 1000;
       }
+      CONSUMO_CACHE = tmpCache;
     }
     if(!CLIENTES.length){ await carregarClientesCache(); }
     // cores dos gráficos conforme o tema atual
