@@ -1481,8 +1481,13 @@ function renderEstoque(){
   rows.sort((a,b)=>((b.fort+b.piaui)-(a.fort+a.piaui)) || a.produto.localeCompare(b.produto));
   const totFor = cacheEstoque.filter(r=>r.local==='Fortaleza').reduce((s,r)=>s+Number(r.quantidade||0),0);
   const totPi = cacheEstoque.filter(r=>r.local==='Piauí').reduce((s,r)=>s+Number(r.quantidade||0),0);
+  const vazio = !estLinhaSel && !f;
   document.getElementById('totaisLocal').innerHTML =
-    `Total geral: <b>${fmtQtd(totFor+totPi)} un</b> &nbsp;·&nbsp; 📍 Fortaleza: <b>${fmtQtd(totFor)} un</b> &nbsp;·&nbsp; 📍 Piauí: <b>${fmtQtd(totPi)} un</b> &nbsp;·&nbsp; ${rows.length} produto(s)`;
+    `Total geral: <b>${fmtQtd(totFor+totPi)} un</b> &nbsp;·&nbsp; 📍 Fortaleza: <b>${fmtQtd(totFor)} un</b> &nbsp;·&nbsp; 📍 Piauí: <b>${fmtQtd(totPi)} un</b>` + (vazio ? '' : ` &nbsp;·&nbsp; ${rows.length} produto(s)`);
+  if(vazio){
+    tb.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-gray-400">👆 Selecione uma linha acima para ver os produtos.</td></tr>';
+    return;
+  }
   if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum produto.</td></tr>'; return; }
   tb.innerHTML = rows.map(e=>`<tr class="rowline">
     <td class="py-2 pr-2 font-medium">${esc(e.produto)}</td>
