@@ -1215,8 +1215,7 @@ function entrarApp(){
   document.getElementById('fData').value = hojeISO();
   carregarProdutosCache().then(()=>{
     preencherDatalistProdutos();
-    carregarClientesDatalist();
-    carregarClientesCache();
+    carregarClientesCache(); /* preenche selects e datalist da base de clientes */
   });
   mostrarAba('inicio');
 }
@@ -1509,14 +1508,15 @@ function preencherDatalistProdutos(){
   document.getElementById('dlProdutos').innerHTML =
     cacheProdutos.map(p=>`<option value="${esc(p.nome)}">`).join('');
 }
-async function carregarClientesDatalist(){
-  try{
-    const rows = await apiGET('movimentacoes?select=cliente&limit=1000');
-    const set = new Set(['NEW LIFE (interno)']);
-    rows.forEach(r=>{ if(r.cliente) set.add(r.cliente); });
-    document.getElementById('dlClientes').innerHTML = [...set].sort().map(c=>`<option value="${esc(c)}">`).join('');
-  }catch(e){ /* datalist opcional */ }
+/* datalist de clientes do Lançar: sempre a partir da base de clientes (tabela clientes) */
+function preencherDatalistClientes(){
+  const dl = document.getElementById('dlClientes');
+  if(!dl) return;
+  const set = new Set(['NEW LIFE (interno)']);
+  (CLIENTES||[]).filter(c=>c.ativo).forEach(c=>{ if(c.nome) set.add(c.nome); });
+  dl.innerHTML = [...set].sort().map(c=>`<option value="${esc(c)}">`).join('');
 }
+async function carregarClientesDatalist(){ preencherDatalistClientes(); }
 
 function resolverProduto(nomeDigitado){
   const n = (nomeDigitado||'').trim().toLowerCase();
@@ -2559,6 +2559,7 @@ async function carregarClientesCache(){
     const selLinha = document.getElementById('cLinha');
     if(selLinha && selLinha.options.length<=1)
       selLinha.innerHTML = '<option value="">Todas</option>' + LINHAS.map(l=>`<option>${l}</option>`).join('');
+    preencherDatalistClientes(); /* Lançar usa a mesma base */
   }catch(e){ /* opcional */ }
 }
 
@@ -3255,6 +3256,7 @@ async function verPedido(id){
     const acoes = [
       ...prox.map(([nv,rot])=>`<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="mudarStatusPedido('${p.id}','${nv}')">${rot}</button>`),
       ...(PED_CANCELAVEL.includes(p.status)?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-red-700 !border-red-300" onclick="cancelarPedido('${p.id}')">❌ Cancelar pedido</button>`]:[]),
+      ...(['faturado','concluido'].includes(p.status)?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-amber-700 !border-amber-300" onclick="desfazerFaturamento('${p.id}')">↩️ Desfazer faturamento</button>`]:[]),
       ...(p.status==='rascunho'?[`<button class="btn-ghost !py-2 !px-4 text-sm" onclick="excluirPedido('${p.id}')">🗑️ Excluir rascunho</button>`]:[]),
     ].join('');
     document.getElementById('pedDetalhe').innerHTML = `
@@ -3322,14 +3324,48 @@ async function mudarStatusPedidoDireto(id, novo){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
+/* ---------- estorno da baixa automática (correção de erro humano) ---------- */
+async function estornarBaixaPedido(id){
+  const rows = await apiGET(`pedidos?id=eq.${id}&select=id,numero`);
+  const ped = rows[0];
+  if(!ped) throw new Error('Pedido não encontrado.');
+  const movs = await apiGET(`movimentacoes?tipo=eq.saida_pedido&observacao=like.*${encodeURIComponent('[pedido '+ped.numero+']')}*&select=id,produto_id,lote_id,quantidade,observacao`);
+  const ativas = movs.filter(m=>!String(m.observacao||'').includes('[estornado'));
+  if(!ativas.length) return 0;
+  const hoje = hojeISO();
+  for(const m of ativas){
+    const l = await apiGET(`lotes?id=eq.${m.lote_id}&select=quantidade_atual`);
+    const saldo = Number((l[0] && l[0].quantidade_atual) || 0);
+    await apiPATCH('lotes', `id=eq.${m.lote_id}`, { quantidade_atual: saldo + Number(m.quantidade) });
+    await apiPOST('movimentacoes', {
+      tipo:'ajuste_entrada', produto_id:m.produto_id, lote_id:m.lote_id,
+      quantidade:m.quantidade, data:hoje,
+      observacao:`[estorno pedido ${ped.numero}] Estorno da baixa automática de ${fmtData(hoje)}`
+    });
+    await apiPATCH('movimentacoes', `id=eq.${m.id}`, { observacao: `${m.observacao||''} [estornado em ${hoje}]` });
+  }
+  return ativas.length;
+}
+async function desfazerFaturamento(id){
+  if(!confirm('Desfazer o faturamento?\nA baixa de estoque será estornada e o pedido volta para "pronto".')) return;
+  try{
+    const n = await estornarBaixaPedido(id);
+    await apiPATCH('pedidos', `id=eq.${id}`, { status:'pronto', updated_at:new Date().toISOString() });
+    toast(n ? `Faturamento desfeito: ${n} baixa(s) estornada(s). ✓` : 'Pedido voltou para "pronto" (não havia baixa a estornar).', 'ok');
+    PED_CACHE = null;
+    await verPedido(id);
+    PED_CACHE = null;
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
 /* ---------- baixa automática de estoque ao faturar ---------- */
 async function baixarEstoquePedido(id){
   const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
   const ped = rows[0];
   if(!ped) throw new Error('Pedido não encontrado.');
-  /* idempotência: já baixado antes? */
-  const ja = await apiGET(`movimentacoes?observacao=like.*${encodeURIComponent(ped.numero)}*&select=id&limit=1`);
-  if(ja.length) return;
+  /* idempotência: já baixado antes? (ignora baixas estornadas) */
+  const ja = await apiGET(`movimentacoes?tipo=eq.saida_pedido&observacao=like.*${encodeURIComponent(ped.numero)}*&select=id,observacao&limit=20`);
+  if(ja.filter(m=>!String(m.observacao||'').includes('[estornado')).length) return;
   const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
   if(!itens.length) throw new Error('Pedido sem itens para baixar.');
   const nomeCli = ped.clientes ? ped.clientes.nome : (ped.setor_destino || null);
