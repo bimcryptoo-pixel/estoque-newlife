@@ -3315,6 +3315,7 @@ async function verPedido(id){
       ...(PED_CANCELAVEL.includes(p.status)?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-red-700 !border-red-300" onclick="cancelarPedido('${p.id}')">❌ Cancelar pedido</button>`]:[]),
       ...(['faturado','concluido'].includes(p.status)?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-amber-700 !border-amber-300" onclick="desfazerFaturamento('${p.id}')">↩️ Desfazer faturamento</button>`]:[]),
       ...(p.status==='rascunho'?[`<button class="btn-ghost !py-2 !px-4 text-sm" onclick="excluirPedido('${p.id}')">🗑️ Excluir rascunho</button>`]:[]),
+      ...(p.status==='cancelado'?[`<button class="btn-ghost !py-2 !px-4 text-sm !text-red-700 !border-red-300" onclick="excluirPedido('${p.id}')">🗑️ Excluir pedido</button>`]:[]),
     ].join('');
     document.getElementById('pedDetalhe').innerHTML = `
       <div class="flex items-start justify-between flex-wrap gap-2 mb-4">
@@ -3547,11 +3548,12 @@ async function fazerTransferencia(){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function excluirPedido(id){
-  if(!confirm('Excluir este rascunho e todos os seus itens?')) return;
+  if(!confirm('Excluir este pedido permanentemente?\nEle sumirá da lista. Esta ação não pode ser desfeita.')) return;
   try{
+    await estornarBaixaPedido(id); /* segurança: reverte baixa + consumo, se existirem */
     await apiDELETE('pedidos_itens', `pedido_id=eq.${id}`);
     await apiDELETE('pedidos', `id=eq.${id}`);
-    toast('Rascunho excluído.','ok');
+    toast('Pedido excluído.','ok');
     PED_CACHE = null;
     voltarListaPedidos();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
