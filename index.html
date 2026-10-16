@@ -249,6 +249,7 @@
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🛒 Compras</button>
+      <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔧 OS Clientes</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -1082,6 +1083,31 @@
         </div>
       </section>
 
+      <!-- ===== OS CLIENTES (chamados técnicos) ===== -->
+      <section id="aba-osclientes" class="hidden">
+        <div id="osListaBox" class="card p-4 mb-3 max-w-6xl">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div class="font-bold text-lg">🔧 OS Clientes</div>
+            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+            <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="renderOSLista()">
+            <select id="osFiltroStatus" class="inp text-sm" onchange="renderOSLista()">
+              <option value="">Todos os status</option>
+              <option value="aberta">🟡 Aberta</option>
+              <option value="em_atendimento">🔵 Em atendimento</option>
+              <option value="concluida">🟢 Concluída</option>
+              <option value="cancelada">⚫ Cancelada</option>
+            </select>
+            <select id="osFiltroCliente" class="inp text-sm" onchange="renderOSLista()"><option value="">Todos os clientes</option></select>
+            <button class="btn-ghost text-sm" onclick="osTelaEquipamentos()">⚙️ Equipamentos</button>
+          </div>
+          <div id="osLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
+        </div>
+        <div id="osDetalheBox" class="hidden max-w-6xl"></div>
+        <div id="osEquipBox" class="hidden card p-4 max-w-6xl"></div>
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1139,6 +1165,7 @@
               <div class="text-xs font-bold text-gray-500 uppercase">＋ Novo cliente</div>
               <input id="cliNome" class="inp text-sm" placeholder="Nome do cliente">
               <input id="cliCnpj" class="inp text-sm" placeholder="CNPJ (opcional)" inputmode="numeric">
+              <input id="cliEmail" class="inp text-sm" type="email" placeholder="E-mail (para envio da OS)">
               <select id="cliTipo" class="inp text-sm">
                 <option value="cliente">cliente</option>
                 <option value="interno">interno (NEW LIFE)</option>
@@ -1227,6 +1254,7 @@
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🛒</span>Compras<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔧</span>OS<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -1249,6 +1277,7 @@ const TIPOS = {
   entrada_compra:      { label:'📥 Entrada — compra',        sinal:+1 },
   saida_consumo:       { label:'📤 Saída — consumo',         sinal:-1 },
   saida_pedido:        { label:'📤 Saída — pedido',           sinal:-1 },
+  saida_os:            { label:'🔧 Saída — OS cliente',        sinal:-1 },
   transferencia_saida: { label:'🔀 Transferência — saída',   sinal:-1 },
   transferencia_entrada:{ label:'🔀 Transferência — entrada', sinal:+1 },
   devolucao_compra:    { label:'↩️ Devolução de compra',      sinal:-1 },
@@ -1260,7 +1289,7 @@ const TIPOS = {
   emprestimo_devolucao:{ label:'↩️ Empréstimo — devolução',  sinal:+1 },
 };
 const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-const SAIDAS = ['saida_consumo','saida_pedido','transferencia_saida','devolucao_compra','ajuste_saida','perda','descarte_vencimento','emprestimo_saida'];
+const SAIDAS = ['saida_consumo','saida_pedido','saida_os','transferencia_saida','devolucao_compra','ajuste_saida','perda','descarte_vencimento','emprestimo_saida'];
 
 let sessao = null;
 let cacheProdutos = [];   // [{id,nome,linha,unidade}]
@@ -1377,14 +1406,14 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','cadastros','admin'];
 /* ================= PERMISSÕES POR MÓDULO ================= */
 const MODULOS = [
   ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
   ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
-  ['compras','🛒 Compras'],
+  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],
   ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
@@ -1423,6 +1452,7 @@ function mostrarAba(aba){
   if(aba==='kardex') carregarKardexInit();
   if(aba==='pedidos') carregarPedidos();
   if(aba==='compras') carregarCompras();
+  if(aba==='osclientes') carregarOSClientes();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
@@ -2848,9 +2878,10 @@ async function criarCliente(){
   if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
   if(duplicado('clientes', nome, 'Cliente')) return;
   try{
-    await apiPOST('clientes',{nome,tipo,cnpj,ativo:true,...fisc});
+    const emailCli=document.getElementById('cliEmail').value.trim()||null;
+    await apiPOST('clientes',{nome,tipo,cnpj,email:emailCli,ativo:true,...fisc});
     toast('Cliente cadastrado. ✓','ok');
-    document.getElementById('cliNome').value=''; document.getElementById('cliCnpj').value='';
+    document.getElementById('cliNome').value=''; document.getElementById('cliCnpj').value=''; document.getElementById('cliEmail').value='';
     ['cliIe','cliCep','cliEndereco','cliNumero','cliBairro','cliCidade'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('cliUf').value='CE';
     await carregarClientesCache();
@@ -4974,6 +5005,686 @@ async function imprimirDanfe(notaId){
     doc.open(); doc.write(html); doc.close();
     setTimeout(()=>f.contentWindow.print(), 600);
   }catch(e){ toast('Erro ao gerar DANFE: '+e.message,'erro'); }
+}
+
+/* ================= OS CLIENTES (chamados técnicos) ================= */
+const OS_STATUS = {
+  aberta:        { label:'🟡 Aberta',         badge:'background:#fef9c3;color:#854d0e' },
+  em_atendimento:{ label:'🔵 Em atendimento', badge:'background:#dbeafe;color:#1e40af' },
+  concluida:     { label:'🟢 Concluída',       badge:'background:#dcfce7;color:#166534' },
+  cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
+};
+let OS_CACHE = [];
+let OS_DETALHE = null;
+
+function osStatusBadge(st){
+  const s = OS_STATUS[st] || OS_STATUS.aberta;
+  return `<span style="${s.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${s.label}</span>`;
+}
+function osTotal(d){
+  const vs = Number(d.os.valor_servicos)||0;
+  const vp = (d.produtos||[]).reduce((s,p)=>s + (Number(p.quantidade)||0)*(Number(p.valor_unitario)||0), 0);
+  return { vs, vp, total: vs+vp };
+}
+
+async function carregarOSClientes(){
+  try{
+    const sel = document.getElementById('osFiltroCliente');
+    if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
+      sel.innerHTML = '<option value="">Todos os clientes</option>' +
+        CLIENTES.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+    }
+  }catch(e){}
+  document.getElementById('osListaBox').classList.remove('hidden');
+  document.getElementById('osDetalheBox').classList.add('hidden');
+  document.getElementById('osEquipBox').classList.add('hidden');
+  try{
+    OS_CACHE = await apiGET('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc&limit=500');
+  }catch(e){ OS_CACHE = []; toast('Erro ao carregar OS: '+e.message,'erro'); }
+  renderOSLista();
+}
+
+function renderOSLista(){
+  const box = document.getElementById('osLista');
+  const q = (document.getElementById('osBusca').value||'').toLowerCase();
+  const fs = document.getElementById('osFiltroStatus').value;
+  const fc = document.getElementById('osFiltroCliente').value;
+  const rows = (OS_CACHE||[]).filter(o=>{
+    if(fs && o.status!==fs) return false;
+    if(fc && o.cliente_id!==fc) return false;
+    if(q){
+      const hay = `${o.numero} ${o.clientes?o.clientes.nome:''} ${o.equipamentos?o.equipamentos.nome:''} ${o.descricao_servico||''}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if(!rows.length){ box.innerHTML = '<span class="text-gray-400 text-sm">Nenhuma OS encontrada.</span>'; return; }
+  box.innerHTML = rows.map(o=>`
+    <div class="border rounded-xl p-3 flex items-center gap-3 flex-wrap hover:bg-gray-50 cursor-pointer" onclick="verOS('${o.id}')">
+      <div class="font-bold text-brand">${esc(o.numero)}</div>
+      <div class="flex-1 min-w-[180px]">
+        <div class="font-semibold text-sm">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
+        <div class="text-xs text-gray-500">${esc(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento')} · ${fmtData((o.created_at||'').slice(0,10))}</div>
+      </div>
+      <div class="text-xs text-gray-500 max-w-[260px] truncate">${esc(o.descricao_servico||'')}</div>
+      ${osStatusBadge(o.status)}
+    </div>`).join('');
+}
+
+/* ---------- nova OS ---------- */
+async function proximoNumeroOS(){
+  const ano = new Date().getFullYear();
+  const rows = await apiGET(`os_clientes?select=numero&numero=like.OS-${ano}-*&order=numero.desc&limit=1`);
+  let seq = 0;
+  if(rows.length){ const m = String(rows[0].numero||'').match(/-(\d+)$/); if(m) seq = parseInt(m[1],10)||0; }
+  return `OS-${ano}-`+String(seq+1).padStart(4,'0');
+}
+
+function novaOS(){
+  const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
+    .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+  openOsModal(`
+    <div class="font-bold mb-3">🔧 Nova ordem de serviço</div>
+    <label class="lbl">Cliente *</label>
+    <select id="nosCliente" class="inp text-sm mb-2" onchange="osCarregarEquips()"><option value="">— selecione —</option>${cliOpts}</select>
+    <label class="lbl">Equipamento</label>
+    <select id="nosEquip" class="inp text-sm mb-2"><option value="">— nenhum —</option></select>
+    <div class="mb-2"><button class="text-xs text-brand font-bold" onclick="document.getElementById('nosNovoEq').classList.toggle('hidden')">＋ Cadastrar equipamento</button></div>
+    <div id="nosNovoEq" class="hidden border rounded-lg p-2 mb-2 grid gap-2">
+      <input id="nosEqNome" class="inp text-sm" placeholder="Nome do equipamento (ex: ACL TOP 350)">
+      <div class="grid grid-cols-2 gap-2">
+        <input id="nosEqSerie" class="inp text-sm" placeholder="Nº de série">
+        <select id="nosEqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
+      </div>
+    </div>
+    <label class="lbl">Descrição do serviço *</label>
+    <textarea id="nosDesc" class="inp text-sm mb-2" rows="3" placeholder="Descreva o chamado…"></textarea>
+    <label class="lbl">Valor dos serviços (R$)</label>
+    <input id="nosValor" class="inp text-sm mb-3" inputmode="decimal" placeholder="0,00">
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="salvarOS()">Criar OS</button>
+    </div>`);
+}
+
+async function osCarregarEquips(){
+  const cid = document.getElementById('nosCliente').value;
+  const sel = document.getElementById('nosEquip');
+  if(!cid){ sel.innerHTML = '<option value="">— nenhum —</option>'; return; }
+  try{
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`);
+    sel.innerHTML = '<option value="">— nenhum —</option>' + eqs.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
+  }catch(e){ sel.innerHTML = '<option value="">— nenhum —</option>'; }
+}
+
+async function salvarOS(){
+  const cliente_id = document.getElementById('nosCliente').value;
+  const descricao = document.getElementById('nosDesc').value.trim();
+  if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(!descricao){ toast('Descreva o serviço.','erro'); return; }
+  let equipamento_id = document.getElementById('nosEquip').value || null;
+  const eqNome = document.getElementById('nosEqNome').value.trim();
+  try{
+    if(eqNome && !equipamento_id){
+      const eq = await apiPOST('equipamentos', {
+        cliente_id, nome: eqNome,
+        numero_serie: document.getElementById('nosEqSerie').value.trim()||null,
+        tipo: document.getElementById('nosEqTipo').value||null
+      });
+      equipamento_id = eq.id;
+    }
+    const numero = await proximoNumeroOS();
+    const vs = parseFloat(String(document.getElementById('nosValor').value).replace(/\./g,'').replace(',','.'))||0;
+    const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+    const os = await apiPOST('os_clientes', {
+      numero, cliente_id, equipamento_id, descricao_servico: descricao,
+      status:'aberta', valor_servicos: vs, created_by: uid
+    });
+    closeOsModal();
+    OS_CACHE = null;
+    toast(`OS ${numero} criada. ✓`,'ok');
+    await verOS(os.id);
+  }catch(e){ toast('Erro ao criar OS: '+e.message,'erro'); }
+}
+
+/* ---------- modal genérico ---------- */
+function openOsModal(html){
+  let m = document.getElementById('modalOS');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'modalOS';
+    m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
+    m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()"><div id="modalOSBody"></div></div>`;
+    m.onclick = ()=>closeOsModal();
+    document.body.appendChild(m);
+  }
+  document.getElementById('modalOSBody').innerHTML = html;
+  m.style.display = 'flex';
+}
+function closeOsModal(){ const m = document.getElementById('modalOS'); if(m) m.style.display='none'; }
+
+/* ---------- detalhe ---------- */
+async function verOS(id){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${id}&select=*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)`);
+    if(!os) throw new Error('OS não encontrada.');
+    const [atividades, produtos, anexos] = await Promise.all([
+      apiGET(`os_atividades?os_id=eq.${id}&select=*&order=data.asc,created_at.asc`),
+      apiGET(`os_produtos?os_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade)&order=created_at.asc`),
+      apiGET(`os_anexos?os_id=eq.${id}&select=*&order=created_at.asc`),
+    ]);
+    OS_DETALHE = { os, atividades, produtos, anexos };
+    renderOSDetalhe();
+  }catch(e){ toast('Erro ao abrir OS: '+e.message,'erro'); }
+}
+
+function renderOSDetalhe(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os, tot = osTotal(d);
+  const st = OS_STATUS[o.status]||OS_STATUS.aberta;
+  const cli = o.clientes||{}, eq = o.equipamentos||null;
+  const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+  const atvPend = d.atividades.filter(a=>a.status!=='concluida').length;
+
+  let acoes = '';
+  if(o.status==='aberta') acoes += `<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osTrocarStatus('em_atendimento')">▶️ Iniciar atendimento</button>`;
+  if(o.status==='em_atendimento') acoes += `<button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osConcluir()">✅ Concluir</button>`;
+  if(o.status==='aberta'||o.status==='em_atendimento') acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osCancelar()">❌ Cancelar OS</button>`;
+  acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osEnviarEmail()">📧 Enviar por e-mail</button>`;
+  acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="imprimirOS()">🖨️ Imprimir</button>`;
+
+  const atvHtml = d.atividades.length ? d.atividades.map((a,i)=>`
+    <div class="border rounded-lg p-2.5 text-sm">
+      <div class="flex items-center justify-between flex-wrap gap-1">
+        <b>Atividade ${i+1} — ${esc(a.tecnico)}</b>
+        <span class="text-xs">${a.status==='concluida'?'✅ Concluída':'⏳ Pendente'}</span>
+      </div>
+      <div class="text-xs text-gray-500">${fmtData(a.data)}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+      ${a.descricao_conclusao?`<div class="text-xs mt-1">${esc(a.descricao_conclusao)}</div>`:''}
+      <div class="mt-1 flex gap-2">
+        <button class="text-xs text-brand font-bold" onclick="osEditarAtividade('${a.id}')">✏️ Editar</button>
+        ${a.status!=='concluida'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button>`:''}
+        <button class="text-xs text-red-700 font-bold" onclick="osExcluirAtividade('${a.id}')">🗑️</button>
+      </div>
+    </div>`).join('') : '<span class="text-gray-400 text-xs">Nenhuma atividade registrada.</span>';
+
+  const prodHtml = d.produtos.length ? `
+    <table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500 uppercase">
+      <th class="py-1 pr-2">Produto</th><th class="py-1 pr-2">Lote</th>
+      <th class="py-1 pr-2 text-right">Qtd</th><th class="py-1 pr-2 text-right">V. unit</th><th class="py-1 text-right">Subtotal</th><th></th>
+    </tr></thead><tbody>
+    ${d.produtos.map(p=>{
+      const sub = (Number(p.quantidade)||0)*(Number(p.valor_unitario)||0);
+      return `<tr class="border-t"><td class="py-1.5 pr-2">${esc(p.produtos?p.produtos.nome:'—')}</td>
+        <td class="py-1.5 pr-2 text-xs">${esc(p.lotes?p.lotes.numero_lote:'—')}</td>
+        <td class="py-1.5 pr-2 text-right">${fmtQtd(p.quantidade)} ${esc(p.produtos?p.produtos.unidade||'un':'un')}</td>
+        <td class="py-1.5 pr-2 text-right">${fmtReais(p.valor_unitario)}</td>
+        <td class="py-1.5 text-right font-semibold">${fmtReais(sub)}</td>
+        <td class="py-1.5 text-right">${o.status!=='concluida'&&o.status!=='cancelada'?`<button class="text-xs text-red-700 font-bold" onclick="osRemoverProduto('${p.id}')" title="Remover e estornar baixa">🗑️</button>`:''}</td></tr>`;
+    }).join('')}
+    </tbody></table>` : '<span class="text-gray-400 text-xs">Nenhum produto utilizado.</span>';
+
+  const anexHtml = d.anexos.length ? d.anexos.map(a=>`
+    <div class="flex items-center gap-2 text-sm border rounded-lg px-2 py-1.5">
+      <a href="${esc(a.url)}" target="_blank" class="text-brand font-semibold truncate flex-1">📎 ${esc(a.nome||'anexo')}</a>
+      ${o.status!=='concluida'&&o.status!=='cancelada'?`<button class="text-xs text-red-700 font-bold" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
+    </div>`).join('') : '<span class="text-gray-400 text-xs">Sem anexos.</span>';
+
+  const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const prodOpts = (cacheProdutos||[]).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+
+  document.getElementById('osListaBox').classList.add('hidden');
+  const box = document.getElementById('osDetalheBox');
+  box.classList.remove('hidden');
+  box.innerHTML = `
+  <div class="card p-4 md:p-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
+      <div class="flex gap-2 flex-wrap">${acoes}</div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap mb-4">
+      <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
+      ${osStatusBadge(o.status)}
+      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
+    </div>
+    <div class="grid md:grid-cols-2 gap-3 mb-4">
+      <div class="border rounded-xl p-3">
+        <div class="text-xs font-bold text-gray-500 uppercase mb-1">Cliente</div>
+        <div class="font-bold">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+        <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}</div>
+        <div class="text-xs text-gray-500">${esc(endCli||'—')}</div>
+      </div>
+      <div class="border rounded-xl p-3">
+        <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento</div>
+        ${eq?`<div class="font-bold">${esc(eq.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eq.numero_serie||'—')} · ${esc(eq.tipo||'—')}</div>`
+          :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
+        <div class="text-xs font-bold text-gray-500 uppercase mt-2 mb-1">Serviço</div>
+        <div class="text-sm">${esc(o.descricao_servico)}</div>
+      </div>
+    </div>
+
+    <div class="font-bold mb-2">🛠️ Atividades ${atvPend?`<span class="text-xs text-amber-600">(${atvPend} pendente${atvPend>1?'s':''})</span>`:''}</div>
+    <div class="grid gap-2 mb-3">${atvHtml}</div>
+    ${editavel?`
+    <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-2">
+      <input type="hidden" id="osAtvId" value="">
+      <div class="md:col-span-2 text-xs font-bold text-gray-500 uppercase" id="osAtvTitulo">＋ Nova atividade</div>
+      <div><label class="lbl">Técnico *</label><input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico"></div>
+      <div><label class="lbl">Data *</label><input id="osAtvData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
+      <div><label class="lbl">Início</label><input id="osAtvIni" type="time" class="inp text-sm"></div>
+      <div><label class="lbl">Fim</label><input id="osAtvFim" type="time" class="inp text-sm"></div>
+      <div class="md:col-span-2"><label class="lbl">Descrição da conclusão</label><textarea id="osAtvDesc" class="inp text-sm" rows="2"></textarea></div>
+      <div class="md:col-span-2 flex gap-2">
+        <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarAtividade()">Salvar atividade</button>
+        <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osLimparAtividade()">Limpar</button>
+      </div>
+    </div>`:''}
+
+    <div class="font-bold mb-2">📦 Produtos utilizados</div>
+    <div class="mb-3">${prodHtml}</div>
+    ${editavel?`
+    <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-4">
+      <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Adicionar produto (baixa automática do estoque)</div>
+      <div><label class="lbl">Produto *</label><select id="osProdSel" class="inp text-sm" onchange="osCarregarLotes()"><option value="">— selecione —</option>${prodOpts}</select></div>
+      <div><label class="lbl">Lote (FEFO sugerido) *</label><select id="osLoteSel" class="inp text-sm"><option value="">— escolha o produto —</option></select></div>
+      <div><label class="lbl">Qtd *</label><input id="osProdQtd" type="number" min="1" step="1" class="inp text-sm"></div>
+      <div><label class="lbl">V. unit (R$)</label><input id="osProdVu" class="inp text-sm" inputmode="decimal" placeholder="0,00"></div>
+      <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAdicionarProduto()">Adicionar e baixar estoque</button></div>
+    </div>`:''}
+
+    <div class="font-bold mb-2">✍️ Assinatura</div>
+    <div class="border rounded-xl p-3 mb-4">
+      ${o.assinatura_url
+        ? `<a href="${esc(o.assinatura_url)}" target="_blank"><img src="${esc(o.assinatura_url)}" class="h-20 border rounded bg-white"></a>
+           <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div>
+           ${editavel?`<button class="text-xs text-brand font-bold mt-1" onclick="osAbrirAssinatura()">🔄 Assinar novamente</button>`:''}`
+        : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')}
+    </div>
+
+    <div class="font-bold mb-2">📎 Anexos</div>
+    <div class="grid gap-2 mb-3">${anexHtml}</div>
+    ${editavel?`<label class="btn-ghost !w-auto !py-2 !px-4 text-sm inline-block cursor-pointer">＋ Anexar arquivo<input type="file" class="hidden" onchange="osUploadAnexo(this)"></label>`:''}
+
+    <div class="border-t mt-4 pt-3 flex justify-end gap-6 text-sm">
+      <div>Serviços: <b>${fmtReais(tot.vs)}</b></div>
+      <div>Produtos: <b>${fmtReais(tot.vp)}</b></div>
+      <div class="text-base">Total: <b class="text-brand">${fmtReais(tot.total)}</b></div>
+    </div>
+  </div>`;
+  window.scrollTo({top:0});
+}
+
+/* ---------- atividades ---------- */
+function osLimparAtividade(){
+  document.getElementById('osAtvId').value='';
+  document.getElementById('osAtvTitulo').textContent='＋ Nova atividade';
+  ['osAtvTec','osAtvData','osAtvIni','osAtvFim','osAtvDesc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value = id==='osAtvData'?hojeISO():''; });
+}
+async function osSalvarAtividade(){
+  const d = OS_DETALHE; if(!d) return;
+  const id = document.getElementById('osAtvId').value||null;
+  const tecnico = document.getElementById('osAtvTec').value.trim();
+  const data = document.getElementById('osAtvData').value;
+  if(!tecnico){ toast('Informe o técnico.','erro'); return; }
+  if(!data){ toast('Informe a data.','erro'); return; }
+  const body = {
+    tecnico, data,
+    inicio: document.getElementById('osAtvIni').value||null,
+    fim: document.getElementById('osAtvFim').value||null,
+    descricao_conclusao: document.getElementById('osAtvDesc').value.trim()||null,
+  };
+  try{
+    if(id) await apiPATCH('os_atividades', `id=eq.${id}`, body);
+    else await apiPOST('os_atividades', { os_id:d.os.id, status:'pendente', ...body });
+    toast('Atividade salva. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+function osEditarAtividade(id){
+  const a = (OS_DETALHE.atividades||[]).find(x=>x.id===id); if(!a) return;
+  document.getElementById('osAtvId').value = a.id;
+  document.getElementById('osAtvTitulo').textContent = '✏️ Editar atividade';
+  document.getElementById('osAtvTec').value = a.tecnico||'';
+  document.getElementById('osAtvData').value = (a.data||'').slice(0,10);
+  document.getElementById('osAtvIni').value = (a.inicio||'').slice(0,5);
+  document.getElementById('osAtvFim').value = (a.fim||'').slice(0,5);
+  document.getElementById('osAtvDesc').value = a.descricao_conclusao||'';
+  document.getElementById('osAtvTitulo').scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function osToggleAtividade(id){
+  try{
+    await apiPATCH('os_atividades', `id=eq.${id}`, { status:'concluida' });
+    await verOS(OS_DETALHE.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osExcluirAtividade(id){
+  if(!confirm('Excluir esta atividade?')) return;
+  try{ await apiDELETE('os_atividades', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- produtos (baixa/estorno de estoque) ---------- */
+async function osCarregarLotes(){
+  const pid = document.getElementById('osProdSel').value;
+  const sel = document.getElementById('osLoteSel');
+  if(!pid){ sel.innerHTML = '<option value="">— escolha o produto —</option>'; return; }
+  try{
+    const lotes = await apiGET(`lotes?produto_id=eq.${pid}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual,local&order=validade.asc`);
+    sel.innerHTML = lotes.length
+      ? lotes.map((l,i)=>`<option value="${l.id}"${i===0?'':''}>${esc(l.numero_lote)} · val ${fmtData(l.validade)} · ${fmtQtd(l.quantidade_atual)} ${esc(l.local||'')}</option>`).join('')
+      : '<option value="">— sem saldo —</option>';
+  }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
+}
+async function osAdicionarProduto(){
+  const d = OS_DETALHE; if(!d) return;
+  const produto_id = document.getElementById('osProdSel').value;
+  const lote_id = document.getElementById('osLoteSel').value;
+  const qtd = Number(document.getElementById('osProdQtd').value);
+  const vu = parseFloat(String(document.getElementById('osProdVu').value).replace(/\./g,'').replace(',','.'))||0;
+  if(!produto_id){ toast('Escolha o produto.','erro'); return; }
+  if(!lote_id){ toast('Escolha o lote.','erro'); return; }
+  if(!(qtd>0)){ toast('Informe a quantidade.','erro'); return; }
+  try{
+    const [l] = await apiGET(`lotes?id=eq.${lote_id}&select=quantidade_atual,numero_lote`);
+    const saldo = Number((l&&l.quantidade_atual)||0);
+    if(saldo < qtd) throw new Error(`Saldo insuficiente no lote ${l?l.numero_lote:'?'}: tem ${fmtQtd(saldo)}, precisa de ${fmtQtd(qtd)}.`);
+    const hoje = hojeISO();
+    const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+    const nomeCli = d.os.clientes ? d.os.clientes.nome : null;
+    await apiPOST('movimentacoes', {
+      tipo:'saida_os', produto_id, lote_id, quantidade:qtd, data:hoje,
+      cliente:nomeCli, responsavel:null,
+      observacao:`[OS ${d.os.numero}] Baixa automática — produto usado na OS`,
+      anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
+    });
+    await apiPATCH('lotes', `id=eq.${lote_id}`, { quantidade_atual: saldo - qtd });
+    await apiPOST('os_produtos', { os_id:d.os.id, produto_id, lote_id, quantidade:qtd, valor_unitario:vu });
+    toast('Produto adicionado e estoque baixado. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osEstornarProdutoOS(item, osNumero){
+  /* devolve o saldo e marca a baixa original como estornada */
+  const movs = await apiGET(`movimentacoes?tipo=eq.saida_os&produto_id=eq.${item.produto_id}&lote_id=eq.${item.lote_id}&select=id,observacao&order=created_at.desc&limit=30`);
+  const mov = (movs||[]).find(m=>String(m.observacao||'').includes(osNumero) && !String(m.observacao||'').includes('[estornado]'));
+  if(mov) await apiPATCH('movimentacoes', `id=eq.${mov.id}`, { observacao: (mov.observacao||'')+' [estornado]' });
+  const [l] = await apiGET(`lotes?id=eq.${item.lote_id}&select=quantidade_atual`);
+  await apiPATCH('lotes', `id=eq.${item.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) + Number(item.quantidade) });
+}
+async function osRemoverProduto(id){
+  const d = OS_DETALHE; if(!d) return;
+  const it = (d.produtos||[]).find(p=>p.id===id); if(!it) return;
+  if(!confirm(`Remover "${it.produtos?it.produtos.nome:''}" da OS?\nA baixa de estoque será estornada.`)) return;
+  try{
+    await osEstornarProdutoOS(it, d.os.numero);
+    await apiDELETE('os_produtos', `id=eq.${id}`);
+    toast('Produto removido e baixa estornada. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- status ---------- */
+async function osTrocarStatus(st){
+  const d = OS_DETALHE; if(!d) return;
+  try{
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:st, updated_at:new Date().toISOString() });
+    toast(`OS ${st==='em_atendimento'?'em atendimento':'atualizada'}. ✓`,'ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osConcluir(){
+  const d = OS_DETALHE; if(!d) return;
+  const pend = (d.atividades||[]).filter(a=>a.status!=='concluida').length;
+  if(pend && !confirm(`Há ${pend} atividade(s) pendente(s).\nConcluir a OS mesmo assim?`)) return;
+  await osTrocarStatus('concluida');
+}
+async function osCancelar(){
+  const d = OS_DETALHE; if(!d) return;
+  if(!confirm(`Cancelar a OS ${d.os.numero}?\nOs produtos utilizados serão estornados ao estoque.`)) return;
+  try{
+    for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, d.os.numero);
+    await apiDELETE('os_produtos', `os_id=eq.${d.os.id}`);
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:'cancelada', updated_at:new Date().toISOString() });
+    toast('OS cancelada e estoque estornado. ✓','ok');
+    OS_CACHE = null;
+    await carregarOSClientes();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- assinatura (pad) ---------- */
+function osAbrirAssinatura(){
+  openOsModal(`
+    <div class="font-bold mb-2">✍️ Assinatura</div>
+    <div class="text-xs text-gray-500 mb-2">Assine no quadro abaixo (técnico ou responsável do cliente).</div>
+    <canvas id="osPad" width="460" height="180" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
+    <div class="flex gap-2 mt-3">
+      <button class="btn-ghost flex-1" onclick="osLimparPad()">Limpar</button>
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura()">Salvar assinatura</button>
+    </div>`);
+  const cv = document.getElementById('osPad');
+  const ctx = cv.getContext('2d');
+  ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
+  let des = false, lx=0, ly=0;
+  const pos = e=>{
+    const r = cv.getBoundingClientRect();
+    const t = (e.touches&&e.touches[0])||e;
+    return [ (t.clientX-r.left)*(cv.width/r.width), (t.clientY-r.top)*(cv.height/r.height) ];
+  };
+  cv.addEventListener('pointerdown', e=>{ des=true; [lx,ly]=pos(e); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e=>{ if(!des) return; const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(x,y); ctx.stroke(); lx=x; ly=y; });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>des=false));
+}
+function osLimparPad(){
+  const cv = document.getElementById('osPad');
+  if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+}
+async function osSalvarAssinatura(){
+  const d = OS_DETALHE; if(!d) return;
+  const cv = document.getElementById('osPad');
+  if(!cv) return;
+  try{
+    const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+    if(!blob) throw new Error('Falha ao gerar imagem.');
+    const nome = `os/assinatura-${d.os.id}-${Date.now()}.png`;
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
+    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+    const agora = new Date().toISOString();
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { assinatura_url:url, assinatura_em:agora });
+    closeOsModal();
+    toast('Assinatura salva. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- anexos ---------- */
+async function osUploadAnexo(input){
+  const d = OS_DETALHE; if(!d || !input.files || !input.files[0]) return;
+  const file = input.files[0];
+  try{
+    const base = file.name.replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9.\-_]/g,'_').slice(0,60)||'anexo';
+    const ext = (file.name.split('.').pop()||'bin').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
+    const nome = `os/${d.os.id}-${Date.now()}-${base}.${ext}`;
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'application/octet-stream' }, body: file
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
+    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+    await apiPOST('os_anexos', { os_id:d.os.id, url, nome:file.name });
+    toast('Anexo enviado. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osExcluirAnexo(id){
+  if(!confirm('Excluir este anexo?')) return;
+  try{ await apiDELETE('os_anexos', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- equipamentos ---------- */
+async function osTelaEquipamentos(){
+  document.getElementById('osListaBox').classList.add('hidden');
+  document.getElementById('osDetalheBox').classList.add('hidden');
+  const box = document.getElementById('osEquipBox');
+  box.classList.remove('hidden');
+  const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
+    .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+  box.innerHTML = `
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
+      <div class="font-bold text-lg">⚙️ Equipamentos</div><div></div>
+    </div>
+    <div class="grid gap-2 md:grid-cols-5 mb-3">
+      <select id="eqCliente" class="inp text-sm"><option value="">— cliente —</option>${cliOpts}</select>
+      <input id="eqNome" class="inp text-sm" placeholder="Nome (ex: ACL TOP 350)">
+      <input id="eqSerie" class="inp text-sm" placeholder="Nº de série">
+      <select id="eqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
+      <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarEquipamento()">＋ Adicionar</button>
+    </div>
+    <div class="mb-2"><select id="eqFiltroCli" class="inp text-sm !w-auto" onchange="osListarEquipamentos()"><option value="">Todos os clientes</option>${cliOpts}</select></div>
+    <div id="eqLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
+  await osListarEquipamentos();
+}
+async function osListarEquipamentos(){
+  const fc = (document.getElementById('eqFiltroCli')||{}).value || '';
+  try{
+    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${fc?`&cliente_id=eq.${fc}`:''}&order=created_at.desc&limit=300`);
+    document.getElementById('eqLista').innerHTML = eqs.length ? eqs.map(e=>`
+      <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap">
+        <div class="flex-1 min-w-[180px]">
+          <b>${esc(e.nome)}</b> <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}</span>
+          <div class="text-xs text-gray-500">${esc(e.clientes?fmtCliNome(e.clientes.nome,e.clientes.tipo):'—')}</div>
+        </div>
+        <button class="text-xs text-red-700 font-bold" onclick="osExcluirEquipamento('${e.id}')">🗑️</button>
+      </div>`).join('') : '<span class="text-gray-400 text-sm">Nenhum equipamento.</span>';
+  }catch(e){ document.getElementById('eqLista').innerHTML = '<span class="text-red-600 text-sm">Erro: '+esc(e.message)+'</span>'; }
+}
+async function osSalvarEquipamento(){
+  const cliente_id = document.getElementById('eqCliente').value;
+  const nome = document.getElementById('eqNome').value.trim();
+  if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(!nome){ toast('Informe o nome do equipamento.','erro'); return; }
+  try{
+    await apiPOST('equipamentos', { cliente_id, nome,
+      numero_serie: document.getElementById('eqSerie').value.trim()||null,
+      tipo: document.getElementById('eqTipo').value||null });
+    toast('Equipamento cadastrado. ✓','ok');
+    document.getElementById('eqNome').value=''; document.getElementById('eqSerie').value='';
+    await osListarEquipamentos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osExcluirEquipamento(id){
+  if(!confirm('Excluir este equipamento?')) return;
+  try{ await apiDELETE('equipamentos', `id=eq.${id}`); await osListarEquipamentos(); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- envio por e-mail (Edge Function + Resend) ---------- */
+async function osEnviarEmail(){
+  const d = OS_DETALHE; if(!d) return;
+  const email = ((d.os.clientes && d.os.clientes.email) || '').trim();
+  if(!email){ toast('Cliente sem e-mail cadastrado. Cadastre em Cadastros → Clientes.','erro'); return; }
+  if(!confirm(`Enviar a OS ${d.os.numero} para ${email}?`)) return;
+  try{
+    toast('Enviando e-mail…');
+    const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
+      method:'POST',
+      headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ os_id: d.os.id })
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.erro || j.message || ('HTTP '+r.status));
+    d.os.email_enviado_em = j.email_enviado_em || new Date().toISOString();
+    toast(`OS enviada para ${email}. ✓`,'ok');
+    renderOSDetalhe();
+  }catch(e){ toast('Erro ao enviar: '+e.message,'erro'); }
+}
+
+/* ---------- impressão (espelha o documento de referência) ---------- */
+function imprimirOS(){
+  const d = OS_DETALHE; if(!d){ toast('Abra uma OS para imprimir.','erro'); return; }
+  const o = d.os, cli = o.clientes||{}, eq = o.equipamentos||null, tot = osTotal(d);
+  const doc = cli.cnpj_cpf||cli.cnpj||'';
+  const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
+  const atvRows = d.atividades.map((a,i)=>`
+    <div class="atv"><div class="atv-t">Atividade ${i+1} — ${esc(a.tecnico)} <span class="st">${a.status==='concluida'?'Concluída':'Pendente'}</span></div>
+    <div class="mut">${fmtData(a.data)}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+    ${a.descricao_conclusao?`<div style="margin-top:4px"><b>Conclusão:</b> ${esc(a.descricao_conclusao)}</div>`:''}</div>`).join('') || '<div class="mut">—</div>';
+  const prodRows = d.produtos.map((p,i)=>{
+    const sub = (Number(p.quantidade)||0)*(Number(p.valor_unitario)||0);
+    return `<tr><td class="c">${i+1}</td><td><b>${esc(p.produtos?p.produtos.nome:'—')}</b><div class="sub">lote ${esc(p.lotes?p.lotes.numero_lote:'—')}</div></td>
+      <td class="r">${fmtQtd(p.quantidade)} ${esc(p.produtos?p.produtos.unidade||'un':'un')}</td>
+      <td class="r">${fmtReais(p.valor_unitario)}</td><td class="r"><b>${fmtReais(sub)}</b></td></tr>`;
+  }).join('');
+  const agora = new Date();
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;margin:0;padding:32px;line-height:1.45;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
+    .marca{display:flex;align-items:center;gap:14px;}
+    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome span{color:#C1272D;}
+    .marca .end{font-size:11px;color:#777;margin-top:2px;}
+    .doc{text-align:right;}
+    .doc h1{font-size:22px;margin:0;letter-spacing:2px;color:#111;}
+    .doc .num{font-size:16px;font-weight:800;color:#C1272D;margin-top:2px;}
+    .doc .meta{font-size:11px;color:#666;margin-top:6px;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:10px 16px;margin-bottom:16px;}
+    .fld{font-size:12.5px;margin:2px 0;}
+    .fld span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-right:6px;}
+    .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C1272D;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px;}
+    .atv{border:1px solid #e8eaee;border-radius:8px;padding:8px 12px;margin-bottom:8px;}
+    .atv-t{font-weight:700;}
+    .st{font-size:11px;font-weight:700;background:#f3f4f6;border-radius:12px;padding:2px 8px;margin-left:6px;}
+    .mut{color:#888;font-size:11.5px;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;}
+    th{background:#f3f4f6;text-align:left;padding:7px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#555;}
+    td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:top;}
+    .c{text-align:center;} .r{text-align:right;}
+    .sub{font-size:11px;color:#888;}
+    .tot{display:flex;justify-content:flex-end;gap:28px;margin-top:10px;font-size:13px;}
+    .tot b{font-size:15px;} .tot .grand{color:#C1272D;}
+    .ass{margin-top:34px;display:flex;gap:40px;align-items:flex-end;}
+    .ass img{max-height:90px;border-bottom:1px solid #333;padding:0 30px 4px;}
+    .ass .quem{font-size:12px;color:#555;margin-top:4px;}
+    .rodape{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10.5px;color:#999;}
+    .noprint{} @media print{ .noprint{display:none} }
+  </style></head><body>
+  <div class="topo">
+    <div class="marca"><div><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div><div class="end">Chamados Técnicos · Fortaleza/CE</div></div></div>
+    <div class="doc"><h1>ORDEM DE SERVIÇO</h1><div class="num">${esc(o.numero)}</div>
+      <div class="meta">Criada em ${fmtData((o.created_at||'').slice(0,10))} ${(o.created_at||'').slice(11,16)}</div></div>
+  </div>
+  <div class="sec">Dados do cliente</div>
+  <div class="card">
+    <div class="fld"><span>Cliente</span><b>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</b></div>
+    ${doc?`<div class="fld"><span>CPF/CNPJ</span>${esc(doc)}${cli.inscricao_estadual?' · IE '+esc(cli.inscricao_estadual):''}</div>`:''}
+    ${endCli?`<div class="fld"><span>Endereço</span>${esc(endCli)}</div>`:''}
+  </div>
+  <div class="sec">Descrição do serviço</div>
+  <div class="card">${esc(o.descricao_servico||'—')}</div>
+  <div class="sec">Informações de atendimento</div>
+  ${atvRows}
+  <div class="sec">Vínculos — equipamento</div>
+  <div class="card">${eq?`<div class="fld"><span>Equipamento</span><b>${esc(eq.nome)}</b></div><div class="fld"><span>Nº de série</span>${esc(eq.numero_serie||'—')}</div><div class="fld"><span>Tipo</span>${esc(eq.tipo||'—')}</div>`:'<span class="mut">—</span>'}</div>
+  ${d.produtos.length?`<div class="sec">Produtos utilizados</div>
+  <table><thead><tr><th class="c">#</th><th>Produto</th><th class="r">Qtd</th><th class="r">V. unit</th><th class="r">Subtotal</th></tr></thead><tbody>${prodRows}</tbody></table>`:''}
+  <div class="tot"><div>Serviços: <b>${fmtReais(tot.vs)}</b></div><div>Produtos: <b>${fmtReais(tot.vp)}</b></div><div class="grand">Total: <b>${fmtReais(tot.total)}</b></div></div>
+  ${o.assinatura_url?`<div class="sec">Assinatura</div><div class="ass"><div><img src="${esc(o.assinatura_url)}"><div class="quem">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div></div></div>`:''}
+  <div class="rodape"><span>Documento gerado pelo sistema Estoque NEW LIFE</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} por ${esc(typeof sessao!=='undefined'&&sessao?sessao.nome:'')}</span></div>
+  <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
+  </body></html>`;
+  let f = document.getElementById('printFrameOS');
+  if(!f){ f = document.createElement('iframe'); f.id='printFrameOS'; f.style.display='none'; document.body.appendChild(f); }
+  const docw = f.contentWindow.document;
+  docw.open(); docw.write(html); docw.close();
+  f.contentWindow.focus();
+  setTimeout(()=>f.contentWindow.print(), 500);
 }
 
 /* ================= INIT ================= */
