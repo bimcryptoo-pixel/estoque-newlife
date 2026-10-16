@@ -5088,6 +5088,7 @@ function osTotal(d){
 async function carregarOSClientes(){
   carregarTecnicos();
   carregarTiposOS();
+  osProbarLocal();
   try{
     const sel = document.getElementById('osFiltroCliente');
     if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
@@ -5177,6 +5178,13 @@ function novaOS(){
       <div><label class="lbl">Prazo de resposta</label><input id="nosPrzResp" type="datetime-local" class="inp text-sm mb-2"></div>
       <div><label class="lbl">Prazo de solução</label><input id="nosPrzSol" type="datetime-local" class="inp text-sm mb-2"></div>
     </div>
+    ${OS_TEM_LOCAL?`
+    <label class="lbl">Localização do cliente</label>
+    <input id="nosLocal" class="inp text-sm mb-2" placeholder="Ex: Hospital Geral de Fortaleza (HGF)">
+    <label class="lbl">Endereço da ordem de serviço</label>
+    <input id="nosEndOS" class="inp text-sm mb-2" placeholder="Rua, número, bairro, cidade - UF, CEP">
+    <label class="lbl">Prazo</label>
+    <input id="nosPrazo" type="date" class="inp text-sm mb-2">`:''}
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="nosDesc" class="inp text-sm mb-2" rows="3" placeholder="Descreva o chamado…"></textarea>
     <label class="lbl">Valor dos serviços (R$)</label>
@@ -5240,6 +5248,12 @@ async function salvarOS(){
       body.prazo_resposta = pr?new Date(pr).toISOString():null;
       body.prazo_solucao = ps?new Date(ps).toISOString():null;
     }
+    if(OS_TEM_LOCAL){
+      const locEl = document.getElementById('nosLocal'), endEl = document.getElementById('nosEndOS'), przEl = document.getElementById('nosPrazo');
+      body.localizacao = locEl?locEl.value.trim()||null:null;
+      body.endereco_os = endEl?endEl.value.trim()||null:null;
+      body.prazo = przEl&&przEl.value?przEl.value:null;
+    }
     const os = await apiPOST('os_clientes', body);
     await osLog(os.id, `criou a OS ${numero}`);
     closeOsModal();
@@ -5276,6 +5290,11 @@ const OS_ABAS = [
 ];
 let TIPOS_OS = [];
 let OS_FIELD_PARIDADE = false; /* true quando a migration 005 já rodou */
+let OS_TEM_LOCAL = false; /* true quando a migration 006 já rodou */
+async function osProbarLocal(){
+  try{ await apiGET('os_clientes?select=localizacao&limit=1'); OS_TEM_LOCAL = true; }
+  catch(e){ OS_TEM_LOCAL = false; }
+}
 async function carregarTiposOS(){
   try{
     TIPOS_OS = await apiGET("tipos_os?ativo=eq.true&select=id,descricao,duracao_min,prazo_resposta_h,prazo_solucao_h&order=descricao.asc");
@@ -5315,11 +5334,16 @@ function osEtiquetasChips(etqs){
 async function verOS(id){
   try{
     await carregarTecnicos();
-    const selBase = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
+    const selMin = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
+    const selBase = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,telefone,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
     const selFull = selBase + ',tipos_os(id,descricao,duracao_min)';
+    const selLocal = ',localizacao,endereco_os,prazo';
     let os = null;
-    try{ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${OS_FIELD_PARIDADE?selFull:selBase}`); }
-    catch(e){ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${selBase}`); }
+    try{ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${OS_FIELD_PARIDADE?selFull:selBase}${OS_TEM_LOCAL?selLocal:''}`); }
+    catch(e){
+      try{ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${OS_FIELD_PARIDADE?selFull:selBase}`); }
+      catch(e2){ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${selMin}`); }
+    }
     if(!os) throw new Error('OS não encontrada.');
     const [atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico] = await Promise.all([
       apiGET(`os_atividades?os_id=eq.${id}&select=*&order=data.asc,created_at.asc`),
@@ -5411,6 +5435,7 @@ function osAbaGeral(d){
       <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}</div>
       <div class="text-xs text-gray-500">${esc(endCli||'—')}</div>
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
+      ${cli.telefone?`<div class="text-xs text-gray-500">📱 ${esc(cli.telefone)}</div>`:''}
     </div>
     <div class="border rounded-xl p-3">
       <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
@@ -5426,6 +5451,9 @@ function osAbaGeral(d){
     <div class="grid md:grid-cols-2 gap-2 mt-3">
       <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de resposta:</span> ${o.prazo_resposta?fmtDataHora(o.prazo_resposta):'—'}</div>
       <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de solução:</span> ${o.prazo_solucao?fmtDataHora(o.prazo_solucao):'—'}</div>
+      ${OS_TEM_LOCAL?`<div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo:</span> ${o.prazo?fmtData(o.prazo):'—'}</div>
+      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Localização:</span> ${esc(o.localizacao||'—')}</div>
+      <div class="text-xs md:col-span-2"><span class="font-bold text-gray-500 uppercase">Endereço da OS:</span> ${esc(o.endereco_os||'—')}</div>`:''}
     </div>
     ${editavel?`<button class="text-xs text-brand font-bold mt-2" onclick="osEditarPrazos()">✏️ Ajustar prazos</button>`:''}
   </div>
@@ -5446,19 +5474,33 @@ function osAbaGeral(d){
   ${tot.vdesp?`<div class="flex justify-end text-xs text-gray-500 mt-1">Despesas: ${fmtReais(tot.vdesp)} (custo)</div>`:''}`;
 }
 
+function osDuracaoReal(a){
+  if(!a.inicio || !a.fim) return null;
+  const p = s => String(s).slice(0,5).split(':').map(Number);
+  const [h1,m1] = p(a.inicio), [h2,m2] = p(a.fim);
+  let min = (h2*60+m2)-(h1*60+m1);
+  if(min < 0) min += 24*60;
+  if(min <= 0) return null;
+  return min < 60 ? `${min}m` : `${Math.floor(min/60)}h ${min%60}m`;
+}
 function osAbaAtividades(d){
   const o = d.os;
   const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const durEst = o.tipos_os&&o.tipos_os.duracao_min?`${o.tipos_os.duracao_min} minutos`:'—';
   const atvHtml = d.atividades.length ? d.atividades.map((a,i)=>{
     const st = ATV_TEC_STATUS[a.status]||ATV_TEC_STATUS.pendente;
+    const durReal = osDuracaoReal(a);
     return `
     <div class="border rounded-lg p-2.5 text-sm">
       <div class="flex items-center justify-between flex-wrap gap-1">
-        <b>Atividade ${i+1} — ${esc(a.tecnico)}</b>
+        <b>Atividade ${i+1}</b>
         <span style="${st.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${st.label}</span>
       </div>
-      <div class="text-xs text-gray-500">${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
-      ${a.descricao_conclusao?`<div class="text-xs mt-1">${esc(a.descricao_conclusao)}</div>`:''}
+      <div class="text-xs mt-1">👤 <b>${esc(a.tecnico)}</b></div>
+      <div class="text-xs text-gray-500 mt-1">Duração estimada: <b class="text-gray-700">${durEst}</b></div>
+      <div class="text-xs text-gray-500">Duração real: <b class="text-gray-700">${durReal||'—'}</b></div>
+      <div class="text-xs text-gray-500">Data/hora do agendamento: <b class="text-gray-700">${fmtData((a.data||'').slice(0,10))}${a.inicio?' '+String(a.inicio).slice(0,5):''}</b></div>
+      <div class="text-xs text-gray-500">Observação: <b class="text-gray-700">${esc(a.descricao_conclusao||'Não atribuído')}</b></div>
       ${editavel?`<div class="mt-1 flex gap-2 flex-wrap">
         <button class="text-xs text-brand font-bold" onclick="osEditarAtividade('${a.id}')">✏️ Editar</button>
         ${a.status!=='concluida'&&a.status!=='cancelada'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button>`:''}
@@ -6264,76 +6306,96 @@ async function osEnviarEmail(){
 /* ---------- impressão (espelha o documento de referência) ---------- */
 function imprimirOS(){
   const d = OS_DETALHE; if(!d){ toast('Abra uma OS para imprimir.','erro'); return; }
-  const o = d.os, cli = o.clientes||{}, eq = o.equipamentos||null, tot = osTotal(d);
+  const o = d.os, cli = o.clientes||{}, tot = osTotal(d);
   const doc = cli.cnpj_cpf||cli.cnpj||'';
   const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
-  const atvRows = d.atividades.map((a,i)=>`
-    <div class="atv"><div class="atv-t">Atividade ${i+1} — ${esc(a.tecnico)} <span class="st">${a.status==='concluida'?'Concluída':'Pendente'}</span></div>
-    <div class="mut">${fmtData(a.data)}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
-    ${a.descricao_conclusao?`<div style="margin-top:4px"><b>Conclusão:</b> ${esc(a.descricao_conclusao)}</div>`:''}</div>`).join('') || '<div class="mut">—</div>';
-  const prodRows = d.produtos.map((p,i)=>{
-    const sub = (Number(p.quantidade)||0)*(Number(p.valor_unitario)||0);
-    return `<tr><td class="c">${i+1}</td><td><b>${esc(p.produtos?p.produtos.nome:'—')}</b><div class="sub">lote ${esc(p.lotes?p.lotes.numero_lote:'—')}</div></td>
-      <td class="r">${fmtQtd(p.quantidade)} ${esc(p.produtos?p.produtos.unidade||'un':'un')}</td>
-      <td class="r">${fmtReais(p.valor_unitario)}</td><td class="r"><b>${fmtReais(sub)}</b></td></tr>`;
-  }).join('');
+  const endOS = o.endereco_os || endCli;
+  const locOS = o.localizacao || cli.nome || '—';
+  const tipoNome = o.tipos_os?o.tipos_os.descricao:(d.os.tipo||'');
+  const criacao = o.created_at?new Date(o.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  const ST_PRINT = {pendente:'Agendada',agendada:'Agendada',a_caminho:'A caminho',em_atendimento:'Em atendimento',pausada:'Pausada',concluida:'Concluída',cancelada:'Cancelada'};
+  const atvBlocks = d.atividades.map((a,i)=>{
+    const stLabel = ST_PRINT[a.status]||a.status||'—';
+    const ini = a.inicio?`${fmtData((a.data||'').slice(0,10))} ${String(a.inicio).slice(0,5)}`:'—';
+    const fim = a.fim?`${fmtData((a.data||'').slice(0,10))} ${String(a.fim).slice(0,5)}`:'—';
+    return `
+    <div class="linha"><span><b>Atividade ${i+1}</b></span><span class="chip">${esc(stLabel)}</span></div>
+    <div class="cards4">
+      <div class="card4"><div class="t">Data</div><div class="v">${fmtData((a.data||'').slice(0,10))}</div></div>
+      <div class="card4"><div class="t">Início</div><div class="v">${esc(ini)}</div></div>
+      <div class="card4"><div class="t">Fim</div><div class="v">${esc(fim)}</div></div>
+      <div class="card4"><div class="t">Colaborador responsável</div><div class="v">${esc(a.tecnico||'—')}</div></div>
+    </div>
+    ${a.descricao_conclusao?`<div class="card"><div class="t" style="color:#15803d">Descrição da conclusão</div><div class="v" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div></div>`:''}`;
+  }).join('') || '<div class="mut">—</div>';
+  const vincEqs = [];
+  if(o.equipamentos) vincEqs.push(o.equipamentos);
+  (d.equips||[]).forEach(x=>{ if(x.equipamentos && !vincEqs.some(e=>e.id===x.equipamentos.id)) vincEqs.push(x.equipamentos); });
+  const vincHtml = vincEqs.length ? vincEqs.map(e=>`
+    <div class="card"><div class="v"><b>${esc(e.nome||'—')}</b></div><div class="mut">Nº de série: ${esc(e.numero_serie||'—')} · Tipo: ${esc(e.tipo||'—')}</div></div>`).join('')
+    : '<div class="mut">—</div>';
+  const anexoHtml = (d.anexos||[]).map(a=>`
+    <a href="${esc(a.arquivo_url||'#')}" target="_blank"><img src="${esc(a.arquivo_url||'')}" class="thumb" alt="${esc(a.nome||'anexo')}"></a>`).join('');
   const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
     *{box-sizing:border-box}
     body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;margin:0;padding:32px;line-height:1.45;}
     .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
-    .marca{display:flex;align-items:center;gap:14px;}
     .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
-    .marca .end{font-size:11px;color:#777;margin-top:2px;}
     .doc{text-align:right;}
-    .doc h1{font-size:22px;margin:0;letter-spacing:2px;color:#111;}
-    .doc .num{font-size:16px;font-weight:800;color:#C1272D;margin-top:2px;}
-    .doc .meta{font-size:11px;color:#666;margin-top:6px;}
-    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:10px 16px;margin-bottom:16px;}
-    .fld{font-size:12.5px;margin:2px 0;}
-    .fld span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-right:6px;}
-    .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C1272D;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px;}
-    .atv{border:1px solid #e8eaee;border-radius:8px;padding:8px 12px;margin-bottom:8px;}
-    .atv-t{font-weight:700;}
-    .st{font-size:11px;font-weight:700;background:#f3f4f6;border-radius:12px;padding:2px 8px;margin-left:6px;}
-    .mut{color:#888;font-size:11.5px;}
-    table{width:100%;border-collapse:collapse;font-size:12.5px;}
-    th{background:#f3f4f6;text-align:left;padding:7px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#555;}
-    td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:top;}
-    .c{text-align:center;} .r{text-align:right;}
-    .sub{font-size:11px;color:#888;}
-    .tot{display:flex;justify-content:flex-end;gap:28px;margin-top:10px;font-size:13px;}
-    .tot b{font-size:15px;} .tot .grand{color:#C1272D;}
-    .ass{margin-top:34px;display:flex;gap:40px;align-items:flex-end;}
-    .ass img{max-height:90px;border-bottom:1px solid #333;padding:0 30px 4px;}
-    .ass .quem{font-size:12px;color:#555;margin-top:4px;}
+    .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
+    .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
+    .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C1272D;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px;}
+    .sec .dir{font-size:11px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:10px 16px;margin-bottom:10px;}
+    .card .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:2px;}
+    .card .v{font-size:13px;}
+    .linha{display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;}
+    .chip{font-size:11px;font-weight:700;background:#f3f4f6;border-radius:12px;padding:2px 10px;}
+    .cards4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;}
+    .card4{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:8px 12px;}
+    .card4 .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
+    .card4 .v{font-size:13px;font-weight:600;margin-top:2px;}
+    .mut{color:#888;font-size:12px;}
+    .totais{display:flex;gap:18px;align-items:center;justify-content:center;margin:16px 0;font-size:13px;flex-wrap:wrap;}
+    .totais b{font-size:15px;}
+    .thumb{max-height:110px;border:1px solid #ddd;border-radius:8px;margin:0 8px 8px 0;}
+    .ass{margin-top:6px;text-align:center;}
+    .ass img{max-height:110px;border-bottom:1px solid #333;padding:0 30px 4px;}
+    .ass .quem{font-size:12px;color:#555;margin-top:6px;}
     .rodape{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10.5px;color:#999;}
     .noprint{} @media print{ .noprint{display:none} }
   </style></head><body>
   <div class="topo">
-    <div class="marca"><div><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div><div class="end">Chamados Técnicos · Fortaleza/CE</div></div></div>
-    <div class="doc"><h1>ORDEM DE SERVIÇO</h1><div class="num">${esc(o.numero)}</div>
-      <div class="meta">Criada em ${fmtData((o.created_at||'').slice(0,10))} ${(o.created_at||'').slice(11,16)}</div></div>
+    <div class="marca"><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div></div>
+    <div class="doc"><h1>OS ${esc(o.numero)}</h1>${tipoNome?`<div class="tipo">${esc(tipoNome)}</div>`:''}</div>
   </div>
-  <div class="sec">Dados do cliente</div>
+  <div class="sec"><span>Dados do cliente</span>${criacao?`<span class="dir">Ordem de serviço criada em ${criacao}</span>`:''}</div>
   <div class="card">
-    <div class="fld"><span>Cliente</span><b>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</b></div>
-    ${doc?`<div class="fld"><span>CPF/CNPJ</span>${esc(doc)}${cli.inscricao_estadual?' · IE '+esc(cli.inscricao_estadual):''}</div>`:''}
-    ${endCli?`<div class="fld"><span>Endereço</span>${esc(endCli)}</div>`:''}
+    <div class="v"><b>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</b></div>
+    ${doc?`<div class="mut">CPF/CNPJ:${esc(doc)}</div>`:''}
+    ${cli.email?`<div class="mut">E-mail:${esc(cli.email)}</div>`:''}
+    ${cli.telefone?`<div class="mut">Telefone (celular):${esc(cli.telefone)}</div>`:''}
   </div>
-  <div class="sec">Descrição do serviço</div>
-  <div class="card">${esc(o.descricao_servico||'—')}</div>
-  <div class="sec">Informações de atendimento</div>
-  ${atvRows}
-  <div class="sec">Vínculos — equipamento</div>
-  <div class="card">${eq?`<div class="fld"><span>Equipamento</span><b>${esc(eq.nome)}</b></div><div class="fld"><span>Nº de série</span>${esc(eq.numero_serie||'—')}</div><div class="fld"><span>Tipo</span>${esc(eq.tipo||'—')}</div>`:'<span class="mut">—</span>'}</div>
-  ${d.produtos.length?`<div class="sec">Produtos utilizados</div>
-  <table><thead><tr><th class="c">#</th><th>Produto</th><th class="r">Qtd</th><th class="r">V. unit</th><th class="r">Subtotal</th></tr></thead><tbody>${prodRows}</tbody></table>`:''}
-  <div class="tot"><div>Serviços: <b>${fmtReais(tot.vs)}</b></div><div>Produtos: <b>${fmtReais(tot.vp)}</b></div><div class="grand">Total: <b>${fmtReais(tot.total)}</b></div></div>
-  ${o.assinatura_url?`<div class="sec">Assinatura</div><div class="ass"><div><img src="${esc(o.assinatura_url)}"><div class="quem">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div></div></div>`:''}
-  <div class="rodape"><span>Documento gerado pelo sistema Estoque NEW LIFE</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} por ${esc(typeof sessao!=='undefined'&&sessao?sessao.nome:'')}</span></div>
+  <div class="card">
+    <div class="t">Localização</div>
+    <div class="v">${esc(locOS)}</div>
+    ${endOS?`<div class="mut">${esc(endOS)}</div>`:''}
+  </div>
+  <div class="card">
+    <div class="t">Descrição do serviço</div>
+    <div class="v" style="white-space:pre-wrap">${esc(o.descricao_servico||'—')}</div>
+  </div>
+  <div class="sec"><span>Informações de atendimento</span></div>
+  ${atvBlocks}
+  <div class="sec"><span>Vínculos</span></div>
+  ${vincHtml}
+  <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>
+  ${(d.anexos||[]).length?`<div class="sec"><span>Anexos</span></div><div>${anexoHtml}</div>`:''}
+  ${o.assinatura_url?`<div class="sec"><span>Assinatura</span></div><div class="ass"><img src="${esc(o.assinatura_url)}"><div class="quem">Assinatura do cliente</div><div class="mut">Assinado em: ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div></div>`:''}
+  <div class="rodape"><span>Documento gerado pelo sistema Estoque NEW LIFE</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
   </body></html>`;
   let f = document.getElementById('printFrameOS');
@@ -6343,7 +6405,6 @@ function imprimirOS(){
   f.contentWindow.focus();
   setTimeout(()=>f.contentWindow.print(), 500);
 }
-
 /* ================= INIT ================= */
 (function init(){
   try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ aplicarTema('claro'); }
