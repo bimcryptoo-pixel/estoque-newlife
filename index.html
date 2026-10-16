@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>NEW LIFE • Estoque</title>
+<title>NEW LIFE • Gestão Empresarial</title>
   <link rel="icon" type="image/png" href="logo.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -201,8 +201,9 @@
   <div class="card w-full max-w-sm p-6">
     <div class="text-center mb-5">
       <img src="logo.png" alt="NEW LIFE" class="w-20 h-20 mx-auto mb-2">
-      <div class="text-2xl font-black tracking-tight">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
-      <div class="text-xs text-gray-500 mt-1">Sistema de controle de estoque do laboratório</div>
+      <div class="text-2xl font-black tracking-tight">NEW LIFE</div>
+      <div class="text-sm font-light text-gray-500 tracking-wide">Gestão Empresarial</div>
+      <div class="text-xs text-gray-400 mt-2">Sistema de gestão da New Life Diagnóstica</div>
     </div>
     <label class="lbl" for="loginUser">Usuário</label>
     <input id="loginUser" class="inp mb-3" autocomplete="username" placeholder="seu login">
@@ -220,7 +221,10 @@
     <div class="w-full px-4 md:px-8 py-3 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <img src="logo.png" alt="NEW LIFE" class="w-9 h-9">
-        <div class="font-black tracking-tight text-lg">NEW LIFE <span class="brand">•</span> <span class="font-light">Estoque</span></div>
+        <div class="leading-tight">
+          <div class="font-black tracking-tight text-lg">NEW LIFE</div>
+          <div class="text-[11px] font-light text-gray-500 -mt-0.5">Gestão Empresarial</div>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <select id="selTema" class="inp !w-auto !py-1.5 !px-2 !text-xs" onchange="aplicarTema(this.value)" title="Tema do sistema">
@@ -6440,7 +6444,7 @@ function imprimirOS(){
   <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>
   ${(d.anexos||[]).length?`<div class="sec"><span>Anexos</span></div><div>${anexoHtml}</div>`:''}
   ${o.assinatura_url?`<div class="sec"><span>Assinatura</span></div><div class="ass"><img src="${esc(o.assinatura_url)}"><div class="quem">Assinatura do cliente</div><div class="mut">Assinado em: ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div></div>`:''}
-  <div class="rodape"><span>Documento gerado pelo sistema Estoque NEW LIFE</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  <div class="rodape"><span>Documento gerado pelo sistema NEW LIFE • Gestão Empresarial</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
   </body></html>`;
   let f = document.getElementById('printFrameOS');
