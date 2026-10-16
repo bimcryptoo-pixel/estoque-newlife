@@ -250,6 +250,7 @@
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🛒 Compras</button>
       <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔧 OS Clientes</button>
+      <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📱 Minhas OSs</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -1108,6 +1109,18 @@
         <div id="osEquipBox" class="hidden card p-4 max-w-6xl"></div>
       </section>
 
+      <!-- ===== PAINEL DO TÉCNICO (uso em campo) ===== -->
+      <section id="aba-ostecnico" class="hidden">
+        <div class="card p-4 mb-3 max-w-2xl">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <div class="font-bold text-lg">📱 Minhas OSs</div>
+            <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarPainelTecnico()">🔄 Atualizar</button>
+          </div>
+          <div id="tecNome" class="text-xs text-gray-500 mb-3"></div>
+          <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
+        </div>
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1202,6 +1215,7 @@
             <input id="uLogin" class="inp text-sm" placeholder="Login">
             <input id="uSenha" class="inp text-sm" placeholder="Senha">
             <select id="uPerfil" class="inp text-sm"><option value="operador">operador (equipe)</option><option value="admin">admin</option></select>
+            <input id="uTecnico" class="inp text-sm" placeholder="Nome do técnico p/ vincular às OSs (ex: Claúdio Costa) — vazio = sem vínculo">
             <button class="btn-brand !py-2 text-sm" onclick="criarUsuario()">Criar usuário</button>
           </div>
         </div>
@@ -1255,6 +1269,7 @@
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🛒</span>Compras<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔧</span>OS<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📱</span>Minhas OSs<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -1401,19 +1416,20 @@ function entrarApp(){
     preencherDatalistProdutos();
     carregarClientesCache(); /* preenche selects e datalist da base de clientes */
   });
-  mostrarAba('inicio');
+  const mp = modulosPermitidos();
+  mostrarAba(mp.includes('inicio') ? 'inicio' : (mp[0] || 'inicio'));
 }
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','ostecnico','cadastros','admin'];
 /* ================= PERMISSÕES POR MÓDULO ================= */
 const MODULOS = [
   ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
   ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
-  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],
+  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ostecnico','📱 Minhas OSs'],
   ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
@@ -1453,6 +1469,7 @@ function mostrarAba(aba){
   if(aba==='pedidos') carregarPedidos();
   if(aba==='compras') carregarCompras();
   if(aba==='osclientes') carregarOSClientes();
+  if(aba==='ostecnico') carregarPainelTecnico();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
@@ -2560,20 +2577,42 @@ async function iniciarDevolucao(saidaId){
 async function carregarAdmin(){
   try{
     let users;
-    try{ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo,permissoes&order=nome.asc'); }
-    catch(e){ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo&order=nome.asc'); }
+    try{ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo,permissoes,tecnico_nome&order=nome.asc'); }
+    catch(e){
+      try{ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo,permissoes&order=nome.asc'); }
+      catch(e2){ users = await apiGET('usuarios?select=id,nome,login,perfil,ativo&order=nome.asc'); }
+    }
     document.getElementById('listaUsuarios').innerHTML = (cacheUsuarios = users).map(u=>`
       <div class="py-1.5 rowline">
         <div class="flex items-center justify-between">
           <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
             <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
-            ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}</div>
-          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
+            ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}
+            ${u.tecnico_nome?`<span class="badge bg-blue-100 text-blue-800 ml-1">👷 ${esc(u.tecnico_nome)}</span>`:''}</div>
+          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button><button class="text-xs font-bold underline mr-2 brand" onclick="vincularTecnico('${u.id}')">👷 técnico</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
         </div>
         <div id="permBox-${u.id}" class="hidden mt-2 border rounded-xl p-3 bg-gray-50"></div>
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
     carregarEmpresaFiscal(); /* dados fiscais da empresa (NF-e) */
   }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
+}
+function vincularTecnico(id){
+  const u = (cacheUsuarios||[]).find(x=>x.id===id); if(!u) return;
+  openOsModal(`
+    <div class="font-bold mb-2">👷 Vincular técnico — ${esc(u.nome)}</div>
+    <div class="text-xs text-gray-500 mb-2">Nome do técnico como aparece nas atividades da OS (ex: Claúdio Costa). Vazio remove o vínculo.</div>
+    <input id="vincTecNome" class="inp text-sm mb-3" placeholder="Nome do técnico" value="${esc(u.tecnico_nome||'')}">
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="salvarVinculoTecnico('${id}')">Salvar</button>
+    </div>`);
+}
+async function salvarVinculoTecnico(id){
+  const v = document.getElementById('vincTecNome').value.trim()||null;
+  try{
+    await apiPATCH('usuarios', `id=eq.${id}`, { tecnico_nome:v });
+    closeOsModal(); toast('Vínculo salvo. ✓','ok'); carregarAdmin();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 function togglePermissoes(id){
   const u = (cacheUsuarios||[]).find(x=>x.id===id);
@@ -2606,12 +2645,13 @@ async function criarUsuario(){
   const nome=document.getElementById('uNome').value.trim(),
         login=document.getElementById('uLogin').value.trim(),
         senha=document.getElementById('uSenha').value,
-        perfil=document.getElementById('uPerfil').value;
+        perfil=document.getElementById('uPerfil').value,
+        tecnico_nome=document.getElementById('uTecnico').value.trim()||null;
   if(!nome||!login||!senha){ toast('Preencha nome, login e senha.','erro'); return; }
   try{
-    await apiPOST('usuarios',{nome,login,senha,perfil,ativo:true});
+    await apiPOST('usuarios',{nome,login,senha,perfil,ativo:true,tecnico_nome});
     toast('Usuário criado. ✓','ok');
-    document.getElementById('uNome').value=document.getElementById('uLogin').value=document.getElementById('uSenha').value='';
+    document.getElementById('uNome').value=document.getElementById('uLogin').value=document.getElementById('uSenha').value=document.getElementById('uTecnico').value='';
     carregarAdmin();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -5016,6 +5056,17 @@ const OS_STATUS = {
 };
 let OS_CACHE = [];
 let OS_DETALHE = null;
+let TEC_LIST = []; /* técnicos vinculados (usuarios.tecnico_nome) */
+let OS_ASS_ID = null; /* OS alvo da assinatura em coleta */
+
+async function carregarTecnicos(){
+  try{
+    TEC_LIST = await apiGET("usuarios?tecnico_nome=not.is.null&ativo=eq.true&select=id,nome,tecnico_nome&order=tecnico_nome.asc");
+  }catch(e){ TEC_LIST = []; }
+}
+function tecOptions(sel){
+  return (TEC_LIST||[]).map(t=>`<option value="${esc(t.tecnico_nome)}"${t.tecnico_nome===sel?' selected':''}>${esc(t.tecnico_nome)}</option>`).join('');
+}
 
 function osStatusBadge(st){
   const s = OS_STATUS[st] || OS_STATUS.aberta;
@@ -5028,6 +5079,7 @@ function osTotal(d){
 }
 
 async function carregarOSClientes(){
+  carregarTecnicos();
   try{
     const sel = document.getElementById('osFiltroCliente');
     if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
@@ -5167,6 +5219,7 @@ function closeOsModal(){ const m = document.getElementById('modalOS'); if(m) m.s
 /* ---------- detalhe ---------- */
 async function verOS(id){
   try{
+    await carregarTecnicos();
     const [os] = await apiGET(`os_clientes?id=eq.${id}&select=*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)`);
     if(!os) throw new Error('OS não encontrada.');
     const [atividades, produtos, anexos] = await Promise.all([
@@ -5270,7 +5323,7 @@ function renderOSDetalhe(){
     <div class="border rounded-xl p-3 mb-4 grid gap-2 md:grid-cols-2">
       <input type="hidden" id="osAtvId" value="">
       <div class="md:col-span-2 text-xs font-bold text-gray-500 uppercase" id="osAtvTitulo">＋ Nova atividade</div>
-      <div><label class="lbl">Técnico *</label><input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico"></div>
+      <div><label class="lbl">Técnico *</label>${TEC_LIST.length?`<select id="osAtvTec" class="inp text-sm">${tecOptions('')}</select>`:`<input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico">`}</div>
       <div><label class="lbl">Data *</label><input id="osAtvData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
       <div><label class="lbl">Início</label><input id="osAtvIni" type="time" class="inp text-sm"></div>
       <div><label class="lbl">Fim</label><input id="osAtvFim" type="time" class="inp text-sm"></div>
@@ -5345,7 +5398,11 @@ function osEditarAtividade(id){
   const a = (OS_DETALHE.atividades||[]).find(x=>x.id===id); if(!a) return;
   document.getElementById('osAtvId').value = a.id;
   document.getElementById('osAtvTitulo').textContent = '✏️ Editar atividade';
-  document.getElementById('osAtvTec').value = a.tecnico||'';
+  const selTec = document.getElementById('osAtvTec');
+  if(selTec && selTec.tagName==='SELECT' && a.tecnico && ![...selTec.options].some(o=>o.value===a.tecnico)){
+    selTec.insertAdjacentHTML('beforeend', `<option value="${esc(a.tecnico)}">${esc(a.tecnico)}</option>`);
+  }
+  if(selTec) selTec.value = a.tecnico||'';
   document.getElementById('osAtvData').value = (a.data||'').slice(0,10);
   document.getElementById('osAtvIni').value = (a.inicio||'').slice(0,5);
   document.getElementById('osAtvFim').value = (a.fim||'').slice(0,5);
@@ -5453,7 +5510,9 @@ async function osCancelar(){
 }
 
 /* ---------- assinatura (pad) ---------- */
-function osAbrirAssinatura(){
+function osAbrirAssinatura(osId){
+  OS_ASS_ID = osId || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id) || null;
+  if(!OS_ASS_ID){ toast('OS não identificada.','erro'); return; }
   openOsModal(`
     <div class="font-bold mb-2">✍️ Assinatura</div>
     <div class="text-xs text-gray-500 mb-2">Assine no quadro abaixo (técnico ou responsável do cliente).</div>
@@ -5481,23 +5540,26 @@ function osLimparPad(){
   if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
 }
 async function osSalvarAssinatura(){
-  const d = OS_DETALHE; if(!d) return;
+  const osId = OS_ASS_ID || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id);
+  if(!osId) return;
   const cv = document.getElementById('osPad');
   if(!cv) return;
   try{
     const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
     if(!blob) throw new Error('Falha ao gerar imagem.');
-    const nome = `os/assinatura-${d.os.id}-${Date.now()}.png`;
+    const nome = `os/assinatura-${osId}-${Date.now()}.png`;
     const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
       method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
     });
     if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
     const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
     const agora = new Date().toISOString();
-    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { assinatura_url:url, assinatura_em:agora });
+    await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url:url, assinatura_em:agora });
     closeOsModal();
     toast('Assinatura salva. ✓','ok');
-    await verOS(d.os.id);
+    OS_ASS_ID = null;
+    if(OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id===osId) await verOS(osId);
+    else if(!document.getElementById('aba-ostecnico').classList.contains('hidden')) await carregarPainelTecnico();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -5523,6 +5585,118 @@ async function osExcluirAnexo(id){
   if(!confirm('Excluir este anexo?')) return;
   try{ await apiDELETE('os_anexos', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ================= PAINEL DO TÉCNICO (uso em campo) ================= */
+const ATV_TEC_STATUS = {
+  pendente:      { label:'⏳ Pendente',        badge:'background:#fef9c3;color:#854d0e' },
+  agendada:      { label:'📅 Agendada',       badge:'background:#e0e7ff;color:#3730a3' },
+  a_caminho:     { label:'🚗 A caminho',      badge:'background:#dbeafe;color:#1e40af' },
+  em_atendimento:{ label:'🔵 Em atendimento', badge:'background:#bfdbfe;color:#1e40af' },
+  pausada:       { label:'⏸️ Pausada',         badge:'background:#ffedd5;color:#9a3412' },
+  concluida:     { label:'✅ Concluída',      badge:'background:#dcfce7;color:#166534' },
+  cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
+};
+function atvTecBadge(st){
+  const s = ATV_TEC_STATUS[st]||ATV_TEC_STATUS.pendente;
+  return `<span style="${s.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${s.label}</span>`;
+}
+async function carregarPainelTecnico(){
+  const box = document.getElementById('tecLista');
+  box.innerHTML = '<span class="text-gray-400 text-sm">Carregando…</span>';
+  try{
+    let tnome = (typeof sessao!=='undefined' && sessao) ? sessao.nome : '';
+    try{
+      const [me] = await apiGET(`usuarios?id=eq.${sessao.id}&select=tecnico_nome,nome`);
+      if(me) tnome = me.tecnico_nome || me.nome || tnome;
+    }catch(e){}
+    document.getElementById('tecNome').textContent = 'Técnico: ' + tnome;
+    const atvs = await apiGET(
+      'os_atividades?tecnico=ilike.*'+encodeURIComponent(tnome)+'*&status=not.in.(concluida,cancelada)' +
+      '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,telefone),equipamentos(nome,numero_serie))' +
+      '&order=data.asc,created_at.asc&limit=200'
+    );
+    renderPainelTecnico(atvs||[]);
+  }catch(e){
+    box.innerHTML = `<span class="text-red-600 text-sm">Erro ao carregar: ${esc(e.message)}</span>`;
+  }
+}
+function renderPainelTecnico(atvs){
+  const box = document.getElementById('tecLista');
+  if(!atvs.length){
+    box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
+    return;
+  }
+  box.innerHTML = atvs.map(a=>{
+    const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
+    const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+    let btns = '';
+    if(a.status==='pendente'||a.status==='agendada'){
+      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Iniciar</button>`;
+    }else if(a.status==='a_caminho'){
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
+    }else if(a.status==='em_atendimento'){
+      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}')">✅ Concluir</button>`;
+    }else if(a.status==='pausada'){
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
+      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}')">✅ Concluir</button>`;
+    }
+    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="osAbrirAssinatura('${os.id}')">✍️ Assinatura</button>`;
+    btns += `<button class="text-xs text-red-700 font-bold px-2" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌</button>`;
+    return `
+    <div class="border rounded-xl p-3 bg-white">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="font-black text-brand">${esc(os.numero||'')}</div>
+        ${atvTecBadge(a.status)}
+      </div>
+      <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
+      ${cli.telefone?`<div class="text-xs text-gray-500">📞 ${esc(cli.telefone)}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
+      <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+      ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
+      ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
+      ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+      <div class="flex gap-2 flex-wrap mt-2">${btns}</div>
+    </div>`;
+  }).join('');
+}
+function tecConcluirModal(id){
+  openOsModal(`
+    <div class="font-bold mb-2">✅ Concluir atividade</div>
+    <label class="lbl">O que foi feito? (descrição da conclusão)</label>
+    <textarea id="tecConcObs" class="inp text-sm mb-3" rows="3" placeholder="Descreva o serviço executado…"></textarea>
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Voltar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="tecMudarStatus('${id}','concluida',document.getElementById('tecConcObs').value)">Confirmar conclusão</button>
+    </div>`);
+}
+async function tecMudarStatus(id, novo, obs){
+  try{
+    const [a] = await apiGET(`os_atividades?id=eq.${id}&select=id,os_id,inicio,fim,status`);
+    if(!a) throw new Error('Atividade não encontrada.');
+    const hhmm = new Date().toTimeString().slice(0,5);
+    const body = { status:novo };
+    if(obs!==undefined) body.descricao_conclusao = String(obs).trim()||null;
+    if((novo==='a_caminho'||novo==='em_atendimento') && !a.inicio) body.inicio = hhmm;
+    if(novo==='concluida' && !a.fim) body.fim = hhmm;
+    await apiPATCH('os_atividades', `id=eq.${id}`, body);
+    try{ closeOsModal(); }catch(e){}
+    await tecSincronizarOS(a.os_id);
+    toast('Status atualizado. ✓','ok');
+    await carregarPainelTecnico();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function tecSincronizarOS(osId){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=status`);
+    if(!os || os.status!=='aberta') return;
+    const atvs = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
+    if(atvs.some(a=>['a_caminho','em_atendimento','pausada'].includes(a.status)))
+      await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'em_atendimento', updated_at:new Date().toISOString() });
+  }catch(e){}
 }
 
 /* ---------- equipamentos ---------- */
