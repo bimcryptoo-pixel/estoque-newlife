@@ -1092,16 +1092,16 @@
             <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-            <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="renderOSLista()">
-            <select id="osFiltroStatus" class="inp text-sm" onchange="renderOSLista()">
+            <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="osBuscaDebounce()">
+            <select id="osFiltroStatus" class="inp text-sm" onchange="osRecarregar()">
               <option value="">Todos os status</option>
               <option value="aberta">🟡 Aberta</option>
               <option value="em_atendimento">🔵 Em atendimento</option>
               <option value="concluida">🟢 Concluída</option>
               <option value="cancelada">⚫ Cancelada</option>
             </select>
-            <select id="osFiltroCliente" class="inp text-sm" onchange="renderOSLista()"><option value="">Todos os clientes</option></select>
-            <select id="osFiltroTipo" class="inp text-sm" onchange="renderOSLista()"><option value="">Todos os tipos</option></select>
+            <select id="osFiltroCliente" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os clientes</option></select>
+            <select id="osFiltroTipo" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os tipos</option></select>
             <div class="flex gap-2">
               <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">⚙️ Tipos</button>
               <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">⚙️ Equip.</button>
@@ -5060,7 +5060,63 @@ const OS_STATUS = {
   cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
 };
 let OS_CACHE = [];
-let OS_LIMITE = 300, OS_FILTRO_SIG = '';
+/* Paginação server-side da lista de OSs (escala com o crescimento da base) */
+let OS_PAGE = 200, OS_OFFSET = 0, OS_TOTAL = null, OS_TEM_MAIS = false, OS_BUSCA_T = null;
+const OS_LIST_SEL = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)';
+const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)';
+async function apiCount(path){
+  try{
+    const sep = path.includes('?') ? '&' : '?';
+    const r = await fetch(`${SUPA_URL}/rest/v1/${path}${sep}select=id&limit=1`, { headers: {...HJSON, 'Prefer':'count=exact'} });
+    const m = (r.headers.get('Content-Range')||'').match(/\/(\d+)\s*$/);
+    return m ? parseInt(m[1],10) : null;
+  }catch(e){ return null; }
+}
+function osFiltrosQuery(){
+  let f = '';
+  const fs = (document.getElementById('osFiltroStatus')||{}).value||'';
+  const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
+  const ft = (document.getElementById('osFiltroTipo')||{}).value||'';
+  if(fs) f += '&status=eq.'+encodeURIComponent(fs);
+  if(fc) f += '&cliente_id=eq.'+fc;
+  if(ft) f += '&tipo_os_id=eq.'+ft;
+  return f;
+}
+function osBuscaDebounce(){ clearTimeout(OS_BUSCA_T); OS_BUSCA_T = setTimeout(osRecarregar, 450); }
+async function osRecarregar(){
+  OS_CACHE = []; OS_OFFSET = 0; OS_TEM_MAIS = false; OS_TOTAL = null;
+  const box = document.getElementById('osLista');
+  if(box) box.innerHTML = '<span class="text-gray-400 text-sm">Carregando…</span>';
+  await osCarregarPagina();
+}
+async function osCarregarPagina(){
+  const q = (document.getElementById('osBusca').value||'').trim().replace(/%/g,'');
+  const filtros = osFiltrosQuery();
+  const selBase = `os_clientes?select=${OS_LIST_SEL}&order=created_at.desc${filtros}`;
+  const selBaseFb = `os_clientes?select=${OS_LIST_SEL_FB}&order=created_at.desc${filtros}`;
+  const buscar = async (sel)=>{
+    if(!q) return { rows: await apiGET(`${sel}&limit=${OS_PAGE}&offset=${OS_OFFSET}`), total: await apiCount(sel), busca: false };
+    const qq = encodeURIComponent('*'+q+'*');
+    const [a,b,c] = await Promise.all([
+      apiGET(`${sel}&or=(numero.ilike.${qq},descricao_servico.ilike.${qq})&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[]),
+      apiGET(`${sel}&clientes.nome=ilike.${qq}&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[]),
+      apiGET(`${sel}&equipamentos.nome=ilike.${qq}&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[])
+    ]);
+    const map = new Map();
+    [...a,...b,...c].forEach(o=>{ if(o && o.id!=null && !map.has(o.id)) map.set(o.id,o); });
+    const merged = [...map.values()].sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||''))).slice(0,OS_PAGE);
+    return { rows: merged, total: null, busca: true };
+  };
+  let res;
+  try{ res = await buscar(selBase); }
+  catch(e){ try{ res = await buscar(selBaseFb); }catch(e2){ toast('Erro ao carregar OS: '+e2.message,'erro'); return; } }
+  const ids = new Set((OS_CACHE||[]).map(o=>o.id));
+  res.rows.forEach(o=>{ if(!ids.has(o.id)){ OS_CACHE.push(o); ids.add(o.id); } });
+  OS_OFFSET += OS_PAGE;
+  OS_TEM_MAIS = !res.busca && res.rows.length === OS_PAGE;
+  if(res.total!=null) OS_TOTAL = res.total;
+  renderOSLista();
+}
 let OS_DETALHE = null;
 let TEC_LIST = []; /* técnicos vinculados (usuarios.tecnico_nome) */
 let OS_ASS_ID = null; /* OS alvo da assinatura em coleta */
@@ -5104,37 +5160,19 @@ async function carregarOSClientes(){
   document.getElementById('osDetalheBox').classList.add('hidden');
   document.getElementById('osEquipBox').classList.add('hidden');
   try{
-    OS_CACHE = await apiGETall('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)&order=created_at.desc');
-  }catch(e){
-    try{ OS_CACHE = await apiGETall('os_clientes?select=*,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)&order=created_at.desc'); }
-    catch(e2){ OS_CACHE = []; toast('Erro ao carregar OS: '+e2.message,'erro'); }
-  }
-  OS_LIMITE = 300; OS_FILTRO_SIG = '';
-  renderOSLista();
+    await osRecarregar();
+  }catch(e){ toast('Erro ao carregar OS: '+e.message,'erro'); }
 }
 
 function renderOSLista(){
   const box = document.getElementById('osLista');
-  const q = (document.getElementById('osBusca').value||'').toLowerCase();
-  const fs = document.getElementById('osFiltroStatus').value;
-  const fc = document.getElementById('osFiltroCliente').value;
-  const ft = (document.getElementById('osFiltroTipo')||{}).value||'';
-  const sig = q+'|'+fs+'|'+fc+'|'+ft;
-  if(sig !== OS_FILTRO_SIG){ OS_FILTRO_SIG = sig; OS_LIMITE = 300; }
-  const rows = (OS_CACHE||[]).filter(o=>{
-    if(fs && o.status!==fs) return false;
-    if(fc && o.cliente_id!==fc) return false;
-    if(ft && o.tipo_os_id!==ft) return false;
-    if(q){
-      const hay = `${o.numero} ${o.clientes?o.clientes.nome:''} ${o.equipamentos?o.equipamentos.nome:''} ${o.descricao_servico||''} ${(o.etiquetas||[]).join(' ')}`.toLowerCase();
-      if(!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  const q = (document.getElementById('osBusca').value||'').trim();
+  const rows = OS_CACHE||[];
   if(!rows.length){ box.innerHTML = '<span class="text-gray-400 text-sm">Nenhuma OS encontrada.</span>'; return; }
-  const vis = rows.slice(0, OS_LIMITE);
-  box.innerHTML = `<div class="text-xs text-gray-500 mb-1">Exibindo ${vis.length} de ${rows.length} OS${rows.length===1?'':'s'}</div>` +
-    vis.map(o=>`
+  const cont = q ? `Exibindo ${rows.length} resultado${rows.length===1?'':'s'} da busca`
+    : `Exibindo ${rows.length}` + (OS_TOTAL!=null ? ` de ${OS_TOTAL.toLocaleString('pt-BR')}` : '') + ` OS${rows.length===1?'':'s'}`;
+  box.innerHTML = `<div class="text-xs text-gray-500 mb-1">${cont}</div>` +
+    rows.map(o=>`
     <div class="border rounded-xl p-3 flex items-center gap-3 flex-wrap hover:bg-gray-50 cursor-pointer" onclick="verOS('${o.id}')">
       <div class="font-bold text-brand">${esc(o.numero)}</div>
       <div class="flex-1 min-w-[180px]">
@@ -5146,7 +5184,7 @@ function renderOSLista(){
       ${osPrazoBadge(o)}
       ${osStatusBadge(o.status)}
     </div>`).join('') +
-    (rows.length > OS_LIMITE ? `<button class="btn-ghost text-sm mt-1" onclick="OS_LIMITE+=500;renderOSLista()">Mostrar mais (${rows.length-OS_LIMITE} restantes)</button>` : '');
+    (OS_TEM_MAIS ? `<button class="btn-ghost text-sm mt-1" onclick="osCarregarPagina()">Mostrar mais</button>` : '');
 }
 
 /* ---------- nova OS ---------- */
