@@ -1031,6 +1031,26 @@
           <div class="text-xs text-gray-400 mt-2">Sugestão = (média mensal no período × meses de cobertura) − estoque atual. Você pode ajustar as quantidades antes de gerar o documento.</div>
         </div>
         <div id="cpResult" class="max-w-6xl"></div>
+        <div id="cpGraficos" class="max-w-6xl hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div class="card p-4">
+              <div class="font-bold mb-2">📊 Consumo mensal <span class="text-xs font-normal text-gray-400">(soma da seleção)</span></div>
+              <div class="relative h-60"><canvas id="cpGrafLinha"></canvas></div>
+            </div>
+            <div class="card p-4">
+              <div class="font-bold mb-2">📈 Projeção de cobertura <span class="text-xs font-normal text-gray-400">(estoque atual × necessário)</span></div>
+              <div class="relative h-60"><canvas id="cpGrafCobertura"></canvas></div>
+            </div>
+          </div>
+          <div class="card p-4 mb-3">
+            <div class="flex items-center gap-3 mb-2 flex-wrap">
+              <div class="font-bold">🔍 Consumo mensal do produto</div>
+              <select id="cpGrafProd" class="inp !w-auto text-sm" onchange="renderCpGrafProduto()"></select>
+              <div class="text-xs text-gray-400">ou clique no nome do produto na tabela</div>
+            </div>
+            <div class="relative h-60"><canvas id="cpGrafProduto"></canvas></div>
+          </div>
+        </div>
       </section>
 
       <!-- ===== CADASTROS (todos os perfis) ===== -->
@@ -1185,6 +1205,11 @@ function aplicarTema(t){
     Chart.defaults.color = escuro ? '#a1a1aa' : '#666';
     Chart.defaults.borderColor = escuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
     Object.values(CH).forEach(ch=>{ try{ ch.data.datasets[0].backgroundColor=corMarca(); ch.data.datasets[0].hoverBackgroundColor=corMarcaEscura(); ch.update(); }catch(e){} });
+    Object.entries(CP_CH||{}).forEach(([id,ch])=>{ try{
+      if(id==='cpGrafCobertura'){ ch.data.datasets[1].backgroundColor=corMarca(); ch.data.datasets[1].hoverBackgroundColor=corMarcaEscura(); }
+      else { ch.data.datasets[0].backgroundColor=corMarca(); ch.data.datasets[0].hoverBackgroundColor=corMarcaEscura(); }
+      ch.update();
+    }catch(e){} });
   }
 }
 
@@ -3812,7 +3837,7 @@ function calcularCompras(){
     rows.forEach(r=>{
       html += `<tr class="border-b border-gray-100">
         <td class="py-1.5 pr-2"><input type="checkbox" ${r.sug>0?'checked':''} class="accent-red-700"></td>
-        <td class="py-1.5 pr-2 font-medium">${esc(r.p.nome)}</td>
+        <td class="py-1.5 pr-2 font-medium cursor-pointer hover:text-red-700 hover:underline" title="Ver gráfico do produto" onclick="cpFocarProduto('${r.p.id}')">${esc(r.p.nome)}</td>
         <td class="py-1.5 pr-2 text-right text-gray-500">${esc(r.p.unidade||'un')}</td>
         <td class="py-1.5 pr-2 text-right">${fmtQtd(r.total)}</td>
         <td class="py-1.5 pr-2 text-right">${r.media.toFixed(1)}</td>
@@ -3823,9 +3848,83 @@ function calcularCompras(){
     html += `</tbody></table></div></div>`;
   });
   box.innerHTML = html;
+  renderCpGraficos(grupos, meses, cobertura);
 }
 function cpMarcarTodos(chk){
   chk.closest('.card').querySelectorAll('tbody input[type="checkbox"]').forEach(c=>{ c.checked = chk.checked; });
+}
+/* ===== Gráficos do módulo Compras ===== */
+let CP_CH = {};
+function cpChartEl(id){
+  const el = document.getElementById(id);
+  if(!el) return null;
+  if(CP_CH[id]){ try{ CP_CH[id].destroy(); }catch(e){} CP_CH[id]=null; }
+  if(typeof Chart==='undefined') return null;
+  return el;
+}
+function cpBar(id, labels, dados, titulo){
+  const el = cpChartEl(id); if(!el) return;
+  const fmt = v => Number(v).toLocaleString('pt-BR');
+  CP_CH[id] = new Chart(el, { type:'bar',
+    data:{ labels, datasets:[{ data:dados, backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:5 }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, title:{display:!!titulo, text:titulo||''},
+        tooltip:{ callbacks:{ label:c=>' '+fmt(c.parsed.y)+' un' } } },
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0, callback:fmt } } } } });
+}
+function cpGrouped(id, itens, cobertura){
+  const el = cpChartEl(id); if(!el) return;
+  const escuro = document.documentElement.getAttribute('data-theme')==='escuro';
+  const fmt = v => Number(v).toLocaleString('pt-BR');
+  CP_CH[id] = new Chart(el, { type:'bar',
+    data:{ labels: itens.map(i=> i.nome.length>30 ? i.nome.slice(0,30)+'…' : i.nome),
+      datasets:[
+        { label:'Estoque atual', data:itens.map(i=>i.est), backgroundColor: escuro?'#71717a':'#d4d4d8', borderRadius:4 },
+        { label:`Necessário (${cobertura} ${cobertura===1?'mês':'meses'})`, data:itens.map(i=>i.nec), backgroundColor:corMarca(), hoverBackgroundColor:corMarcaEscura(), borderRadius:4 }
+      ]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom' }, tooltip:{ callbacks:{ label:c=>' '+c.dataset.label+': '+fmt(c.parsed.x)+' un' } } },
+      scales:{ x:{ beginAtZero:true, ticks:{ precision:0, callback:fmt } }, y:{ ticks:{ autoSkip:false, font:{ size:11 } } } } } });
+}
+function renderCpGraficos(grupos, meses, cobertura){
+  const box = document.getElementById('cpGraficos');
+  if(!box) return;
+  const linhas = Object.keys(grupos||{});
+  box.classList.toggle('hidden', !linhas.length);
+  if(!linhas.length) return;
+  const ids = new Set(), todos = [];
+  linhas.forEach(g=>grupos[g].forEach(r=>{ ids.add(r.p.id); todos.push(r); }));
+  const consF = (CP_CACHE.cons||[]).filter(c=>ids.has(c.produto_id));
+  const labels = meses.map(m=>CP_MES_NOME[m-1].slice(0,3));
+  cpBar('cpGrafLinha', labels,
+    meses.map(m=>consF.filter(c=>Number(c.mes)===m).reduce((s,c)=>s+Number(c.quantidade||0),0)));
+  const itens = todos.map(r=>{
+    const nec = Math.round(r.media*cobertura), est = Math.round(r.est||0);
+    return { nome:r.p.nome, est, nec, gap:nec-est };
+  }).filter(i=>i.nec>0 || i.est>0).sort((a,b)=>b.gap-a.gap).slice(0,12);
+  cpGrouped('cpGrafCobertura', itens, cobertura);
+  const sel = document.getElementById('cpGrafProd');
+  const cur = sel.value;
+  sel.innerHTML = todos.map(r=>`<option value="${r.p.id}">${esc(r.p.nome)}</option>`).join('');
+  const top1 = [...todos].sort((a,b)=>b.sug-a.sug)[0];
+  sel.value = (cur && todos.some(r=>r.p.id===cur)) ? cur : (top1 ? top1.p.id : '');
+  renderCpGrafProduto();
+}
+function renderCpGrafProduto(){
+  const sel = document.getElementById('cpGrafProd');
+  if(!sel || !sel.value) return;
+  const pid = sel.value;
+  const meses = cpMesesBase();
+  const labels = meses.map(m=>CP_MES_NOME[m-1].slice(0,3));
+  const dados = meses.map(m=>(CP_CACHE.cons||[]).filter(c=>c.produto_id===pid && Number(c.mes)===m).reduce((s,c)=>s+Number(c.quantidade||0),0));
+  const p = (cacheProdutos||[]).find(x=>x.id===pid);
+  cpBar('cpGrafProduto', labels, dados, p ? p.nome : '');
+}
+function cpFocarProduto(pid){
+  const sel = document.getElementById('cpGrafProd');
+  if(sel){ sel.value = pid; renderCpGrafProduto(); }
+  const cv = document.getElementById('cpGrafProduto');
+  if(cv) cv.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 function imprimirPedidoCompra(){
   const cards = [...document.querySelectorAll('#cpResult .card[data-linha]')];
