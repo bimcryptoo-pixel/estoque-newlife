@@ -219,6 +219,7 @@
       <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📒 Kardex</button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📦 Pedidos</button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
+      <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🛒 Compras</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -986,6 +987,52 @@
 
       </section>
 
+      <!-- ===== COMPRAS / SUGESTÃO DE PEDIDO ===== -->
+      <section id="aba-compras" class="hidden">
+        <div class="card p-4 mb-3 max-w-6xl">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div class="font-bold text-lg">🛒 Sugestão de compras</div>
+            <div class="text-xs text-gray-500">Base: consumo real de 2026</div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <div>
+              <label class="lbl">Linha</label>
+              <select id="cpLinha" class="inp text-sm" onchange="calcularCompras()">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">Base de cálculo</label>
+              <select id="cpBase" class="inp text-sm" onchange="cpTrocarBase()">
+                <option value="anual">Anual (jan–dez/2026)</option>
+                <option value="semestral">Semestral (últimos 6 meses)</option>
+                <option value="trimestral" selected>Trimestral (últimos 3 meses)</option>
+                <option value="manual">Manual (escolher meses)</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">Meses de cobertura</label>
+              <input id="cpCobertura" type="number" min="1" max="12" value="3" class="inp text-sm" onchange="calcularCompras()">
+            </div>
+            <div>
+              <label class="lbl">Fornecedor (documento)</label>
+              <select id="cpFornecedor" class="inp text-sm"><option value="">—</option></select>
+            </div>
+          </div>
+          <div id="cpMesesBox" class="hidden mb-3">
+            <label class="lbl">Meses (2026)</label>
+            <div id="cpMeses" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn-brand !w-auto !py-2 !px-5 text-sm" onclick="calcularCompras()">📊 Calcular sugestão</button>
+            <button class="btn-ghost !py-2 !px-5 text-sm" onclick="imprimirPedidoCompra()">🖨️ Gerar pedido de compra</button>
+          </div>
+          <div class="mt-2"><input id="cpObs" class="inp text-sm" placeholder="Observações para o pedido de compra (opcional)"></div>
+          <div class="text-xs text-gray-400 mt-2">Sugestão = (média mensal no período × meses de cobertura) − estoque atual. Você pode ajustar as quantidades antes de gerar o documento.</div>
+        </div>
+        <div id="cpResult" class="max-w-6xl"></div>
+      </section>
+
       <!-- ===== CADASTROS (todos os perfis) ===== -->
       <section id="aba-cadastros" class="hidden">
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1080,6 +1127,7 @@
       <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📒</span>Kardex<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🛒</span>Compras<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
     </div>
@@ -1220,13 +1268,14 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','cadastros','admin'];
 /* ================= PERMISSÕES POR MÓDULO ================= */
 const MODULOS = [
   ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
   ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
+  ['compras','🛒 Compras'],
   ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
@@ -1264,6 +1313,7 @@ function mostrarAba(aba){
   if(aba==='inventario') carregarInventario();
   if(aba==='kardex') carregarKardexInit();
   if(aba==='pedidos') carregarPedidos();
+  if(aba==='compras') carregarCompras();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
   if(aba==='admin') carregarAdmin();
@@ -3647,6 +3697,210 @@ function imprimirPedido(){
   </body></html>`;
   let f = document.getElementById('printFramePed');
   if(!f){ f = document.createElement('iframe'); f.id='printFramePed'; f.style.display='none'; document.body.appendChild(f); }
+  const doc = f.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  f.contentWindow.focus();
+  setTimeout(()=>f.contentWindow.print(), 500);
+}
+
+/* ================= COMPRAS / SUGESTÃO DE PEDIDO ================= */
+const CP_MES_NOME = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+let CP_CACHE = null;
+
+async function carregarCompras(){
+  const selL = document.getElementById('cpLinha');
+  if(selL && selL.options.length<=1)
+    selL.innerHTML = '<option value="">Todas</option>' + LINHAS.map(l=>`<option>${l}</option>`).join('');
+  cpMontarMeses();
+  if(!CP_CACHE){
+    try{
+      const cons = [];
+      let off = 0;
+      for(;;){
+        const pg = await apiGET(`consumo?select=produto_id,mes,quantidade&ano=eq.2026&limit=1000&offset=${off}`);
+        cons.push(...pg);
+        if(pg.length<1000) break;
+        off += 1000;
+      }
+      const estoque = {};
+      off = 0;
+      for(;;){
+        const pg = await apiGET(`lotes?select=produto_id,quantidade_atual&quantidade_atual=gt.0&limit=1000&offset=${off}`);
+        pg.forEach(l=>{ estoque[l.produto_id] = (estoque[l.produto_id]||0) + Number(l.quantidade_atual||0); });
+        if(pg.length<1000) break;
+        off += 1000;
+      }
+      let forn = [];
+      try{ forn = await apiGET('fornecedores?select=id,nome&order=nome.asc'); }catch(e){}
+      CP_CACHE = { cons, estoque, fornecedores: forn };
+    }catch(e){ toast('Erro ao carregar dados: '+e.message,'erro'); return; }
+  }
+  const selF = document.getElementById('cpFornecedor');
+  if(selF && selF.options.length<=1)
+    selF.innerHTML = '<option value="">—</option>' + (CP_CACHE.fornecedores||[]).map(f=>`<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  calcularCompras();
+}
+function cpMontarMeses(){
+  const box = document.getElementById('cpMeses');
+  const mesAtual = new Date().getMonth()+1;
+  box.innerHTML = CP_MES_NOME.map((n,i)=>{
+    const m = i+1, dis = m > mesAtual;
+    return `<label class="flex items-center gap-1.5 text-sm bg-white border rounded-lg px-2.5 py-1.5 ${dis?'opacity-40':''}">`+
+      `<input type="checkbox" data-mes="${m}" ${dis?'disabled':''} class="accent-red-700" onchange="calcularCompras()"> ${n}</label>`;
+  }).join('');
+}
+function cpTrocarBase(){
+  const base = document.getElementById('cpBase').value;
+  document.getElementById('cpMesesBox').classList.toggle('hidden', base!=='manual');
+  if(base==='manual'){
+    const mesAtual = new Date().getMonth()+1;
+    document.querySelectorAll('#cpMeses input[data-mes]').forEach(c=>{ c.checked = Number(c.dataset.mes) > mesAtual-3; });
+  }
+  calcularCompras();
+}
+function cpMesesBase(){
+  const base = document.getElementById('cpBase').value;
+  const mesAtual = new Date().getMonth()+1;
+  if(base==='anual') return Array.from({length:mesAtual},(_,i)=>i+1);
+  if(base==='semestral') return Array.from({length:6},(_,i)=>mesAtual-5+i).filter(m=>m>=1);
+  if(base==='trimestral') return Array.from({length:3},(_,i)=>mesAtual-2+i).filter(m=>m>=1);
+  const man = [...document.querySelectorAll('#cpMeses input[data-mes]:checked')].map(c=>Number(c.dataset.mes));
+  return man.length ? man : [mesAtual];
+}
+function calcularCompras(){
+  const box = document.getElementById('cpResult');
+  if(!CP_CACHE || !box){ if(box) box.innerHTML=''; return; }
+  const meses = cpMesesBase();
+  const cobertura = Math.max(1, parseInt(document.getElementById('cpCobertura').value,10)||3);
+  const fLinha = document.getElementById('cpLinha').value;
+  const setM = new Set(meses);
+  const consPorProd = {};
+  CP_CACHE.cons.forEach(c=>{ if(setM.has(Number(c.mes))) consPorProd[c.produto_id] = (consPorProd[c.produto_id]||0) + Number(c.quantidade||0); });
+  const prods = (cacheProdutos||[]).filter(p=>!fLinha || p.linha===fLinha);
+  const nMeses = meses.length;
+  const grupos = {};
+  prods.forEach(p=>{
+    const total = consPorProd[p.id]||0;
+    const media = total/nMeses;
+    const est = CP_CACHE.estoque[p.id]||0;
+    const sug = Math.max(0, Math.round(media*cobertura - est));
+    const g = p.linha||'Outros';
+    (grupos[g] = grupos[g]||[]).push({p, total, media, est, sug});
+  });
+  const nomesMeses = meses.map(m=>CP_MES_NOME[m-1]).join(', ');
+  let html = `<div class="text-xs text-gray-500 mb-2">Período: <b>${esc(nomesMeses)}</b> (${nMeses} ${nMeses===1?'mês':'meses'}) · Cobertura: <b>${cobertura} ${cobertura===1?'mês':'meses'}</b> · ${prods.length} produtos</div>`;
+  const linhasOrd = Object.keys(grupos).sort();
+  if(!linhasOrd.length) html += '<div class="card p-4 text-gray-400 text-sm">Nenhum produto.</div>';
+  linhasOrd.forEach(g=>{
+    const rows = grupos[g].sort((a,b)=>b.sug-a.sug);
+    const totSug = rows.reduce((s,r)=>s+r.sug,0);
+    html += `<div class="card p-4 mb-3" data-linha="${esc(g)}"><div class="font-bold mb-2">🧪 ${esc(g)} <span class="text-xs font-semibold text-gray-400">· sugestão total: ${fmtQtd(totSug)}</span></div>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500 border-b">
+    <th class="py-1.5 pr-2"><input type="checkbox" checked onchange="cpMarcarTodos(this)" class="accent-red-700" title="Marcar/desmarcar todos"></th>
+    <th class="py-1.5 pr-2">Produto</th><th class="py-1.5 pr-2 text-right">Un</th>
+    <th class="py-1.5 pr-2 text-right">Consumo</th><th class="py-1.5 pr-2 text-right">Média/mês</th>
+    <th class="py-1.5 pr-2 text-right">Estoque</th><th class="py-1.5 pr-2 text-right">Sugestão</th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      html += `<tr class="border-b border-gray-100">
+        <td class="py-1.5 pr-2"><input type="checkbox" ${r.sug>0?'checked':''} class="accent-red-700"></td>
+        <td class="py-1.5 pr-2 font-medium">${esc(r.p.nome)}</td>
+        <td class="py-1.5 pr-2 text-right text-gray-500">${esc(r.p.unidade||'un')}</td>
+        <td class="py-1.5 pr-2 text-right">${fmtQtd(r.total)}</td>
+        <td class="py-1.5 pr-2 text-right">${r.media.toFixed(1)}</td>
+        <td class="py-1.5 pr-2 text-right">${fmtQtd(r.est)}</td>
+        <td class="py-1.5 pr-2 text-right"><input type="number" min="0" value="${r.sug}" class="inp !w-24 !py-1 text-sm text-right font-bold" data-cp-item="${esc(r.p.nome)}|${esc(r.p.unidade||'un')}"></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+  });
+  box.innerHTML = html;
+}
+function cpMarcarTodos(chk){
+  chk.closest('.card').querySelectorAll('tbody input[type="checkbox"]').forEach(c=>{ c.checked = chk.checked; });
+}
+function imprimirPedidoCompra(){
+  const cards = [...document.querySelectorAll('#cpResult .card[data-linha]')];
+  const itens = [];
+  cards.forEach(card=>{
+    const linha = card.dataset.linha;
+    card.querySelectorAll('tbody tr').forEach(tr=>{
+      const chk = tr.querySelector('input[type="checkbox"]');
+      const inp = tr.querySelector('input[data-cp-item]');
+      const qtd = parseFloat(String(inp.value).replace(',','.'))||0;
+      if(chk && chk.checked && qtd>0){
+        const [nome, un] = inp.dataset.cpItem.split('|');
+        itens.push({linha, nome, un, qtd});
+      }
+    });
+  });
+  if(!itens.length){ toast('Nenhum item marcado para o pedido.','erro'); return; }
+  const selF = document.getElementById('cpFornecedor');
+  const fornNome = selF && selF.value ? selF.options[selF.selectedIndex].text : '—';
+  const obs = (document.getElementById('cpObs')||{}).value || '';
+  const mesesTxt = document.querySelector('#cpResult .text-xs')?.textContent || '';
+  let seq = parseInt(localStorage.getItem('nl_pc_seq')||'0',10)+1;
+  try{ localStorage.setItem('nl_pc_seq', String(seq)); }catch(e){}
+  const numero = `PC-${new Date().getFullYear()}-${String(seq).padStart(4,'0')}`;
+  const agora = new Date();
+  let n=0, tq=0;
+  let corpo='';
+  let linhaAtual=null;
+  itens.forEach(it=>{
+    if(it.linha!==linhaAtual){ linhaAtual=it.linha; corpo+=`<tr class="gl"><td colspan="4">🧪 ${esc(linhaAtual)}</td></tr>`; }
+    n++; tq+=it.qtd;
+    corpo+=`<tr><td class="c">${n}</td><td><b>${esc(it.nome)}</b></td><td class="c">${esc(it.un)}</td><td class="r"><b>${fmtQtd(it.qtd)}</b></td></tr>`;
+  });
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido de compra ${esc(numero)}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;margin:0;padding:32px;line-height:1.45;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
+    .marca{display:flex;align-items:center;gap:14px;}
+    .marca img{height:62px;width:62px;object-fit:contain;}
+    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome span{color:#C1272D;}
+    .marca .end{font-size:11px;color:#777;margin-top:2px;}
+    .doc{text-align:right;}
+    .doc h1{font-size:24px;margin:0;letter-spacing:3px;color:#111;}
+    .doc .num{font-size:16px;font-weight:800;color:#C1272D;margin-top:2px;}
+    .doc .meta{font-size:11px;color:#666;margin-top:6px;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:12px 16px;margin-bottom:16px;}
+    .fld{font-size:12.5px;margin:3px 0;}
+    .fld span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-right:6px;}
+    table{width:100%;border-collapse:collapse;margin:0 0 18px;}
+    th{background:#C1272D;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    td{padding:9px 8px;border-bottom:1px solid #eee;vertical-align:top;}
+    tr.gl td{background:#f3f4f6;font-weight:800;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .c{text-align:center;} .r{text-align:right;white-space:nowrap;}
+    tfoot td{font-weight:800;background:#f3f4f6;border-top:2px solid #C1272D;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .obs{background:#fffbea;border:1px solid #f0e6c8;border-left:4px solid #d4a017;border-radius:6px;padding:10px 14px;margin-bottom:20px;}
+    .obs span{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#92680a;font-weight:700;}
+    .ass{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:56px;}
+    .ass div{border-top:1.5px solid #333;padding-top:8px;text-align:center;font-size:12px;color:#555;}
+    .rodape{margin-top:28px;font-size:10.5px;color:#999;border-top:1px solid #e5e5e5;padding-top:10px;display:flex;justify-content:space-between;}
+    @media print{ body{padding:8px;} }
+  </style></head><body>
+  <div class="topo">
+    <div class="marca">
+      <img src="logo.png" alt="NEW LIFE" onerror="this.style.display='none'">
+      <div><div class="nome">NEW LIFE <span>•</span> Diagnóstico</div><div class="end">Matriz: Fortaleza/CE &nbsp;•&nbsp; Filial: Piauí</div></div>
+    </div>
+    <div class="doc"><h1>PEDIDO DE COMPRA</h1><div class="num">${esc(numero)}</div>
+    <div class="meta">Emitido em ${agora.toLocaleDateString('pt-BR')}<br>${esc(mesesTxt.replace(/Período:/,'Base:'))}</div></div>
+  </div>
+  <div class="card">
+    <div class="fld"><span>Fornecedor</span><b>${esc(fornNome)}</b></div>
+    <div class="fld"><span>Itens</span>${n} &nbsp;&nbsp;<span>Quantidade total</span>${fmtQtd(tq)}</div>
+  </div>
+  <table><thead><tr><th class="c" style="width:36px">#</th><th>Produto</th><th class="c">Un</th><th class="r">Qtd</th></tr></thead>
+  <tbody>${corpo}</tbody>
+  <tfoot><tr><td colspan="3" class="r">TOTAL</td><td class="r">${fmtQtd(tq)}</td></tr></tfoot></table>
+  ${obs?`<div class="obs"><span>Observações</span><br>${esc(obs)}</div>`:''}
+  <div class="ass"><div>Comprador — New Life Diagnóstico</div><div>Fornecedor</div></div>
+  <div class="rodape"><span>Sugestão gerada a partir do consumo real de 2026 — conferir antes de enviar ao fornecedor.</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} por ${esc(sessao? sessao.nome : '')}</span></div>
+  </body></html>`;
+  let f = document.getElementById('printFramePC');
+  if(!f){ f = document.createElement('iframe'); f.id='printFramePC'; f.style.display='none'; document.body.appendChild(f); }
   const doc = f.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
   f.contentWindow.focus();
