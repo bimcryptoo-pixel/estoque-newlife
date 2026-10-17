@@ -181,6 +181,15 @@
     </select>
     <label class="lbl">Unidade</label>
     <input id="epUnidade" class="inp text-sm mb-2">
+    <div class="text-xs font-bold text-gray-500 uppercase mb-1 mt-1">📦 Fracionamento</div>
+    <label class="inline-flex items-center gap-2 text-sm mb-2 cursor-pointer">
+      <input type="checkbox" id="epFracionavel" onchange="document.getElementById('epFracBox').classList.toggle('hidden', !this.checked)">
+      Produto fracionável (kit aberto em frações)
+    </label>
+    <div id="epFracBox" class="hidden grid grid-cols-2 gap-2 mb-2">
+      <div><label class="lbl">Unidade da fração</label><select id="epFracaoUnidade" class="inp text-sm"></select></div>
+      <div><label class="lbl">Frações por <span id="epFracPorLbl">kit</span></label><input id="epFracoesPorUn" type="number" min="0" step="any" class="inp text-sm" placeholder="Ex: 450"></div>
+    </div>
     <div class="text-xs font-bold text-gray-500 uppercase mb-1 mt-1">🧾 Dados fiscais <span class="font-normal normal-case">(exigidos na NF-e)</span></div>
     <div class="grid grid-cols-3 gap-2 mb-2">
       <div><label class="lbl">NCM</label><input id="epNcm" class="inp text-sm" inputmode="numeric" maxlength="8" placeholder="8 dígitos"></div>
@@ -254,6 +263,7 @@
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📑 Contratos</button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🛒 Compras</button>
       <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔧 OS Clientes</button>
+      <button data-aba="ospainel" onclick="mostrarAba('ospainel')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Painel OS</button>
       <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📱 Minhas OSs</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
@@ -822,6 +832,13 @@
                   <label class="lbl">Qtd *</label>
                   <input id="npQtd" type="number" min="0" step="any" class="inp text-sm" placeholder="0">
                 </div>
+                <div class="md:col-span-2 hidden" id="npTipoBaixaWrap">
+                  <label class="lbl">Tipo de baixa</label>
+                  <select id="npTipoBaixa" class="inp text-sm" onchange="aoEscolherProdutoPedido()">
+                    <option value="unidade">Kit fechado</option>
+                    <option value="fracao">Fracionado</option>
+                  </select>
+                </div>
                 <div class="md:col-span-2">
                   <label class="lbl">Lote (opcional)</label>
                   <select id="npLote" class="inp text-sm"><option value="">— sem lote —</option></select>
@@ -1117,6 +1134,40 @@
         <div id="osEquipBox" class="hidden card p-4 max-w-6xl"></div>
       </section>
 
+      <!-- ===== 📊 PAINEL OS — analítico ===== -->
+      <section id="aba-ospainel" class="hidden">
+        <div class="card p-4 mb-3 max-w-6xl">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div class="font-bold text-lg">📊 Painel de Atendimentos</div>
+            <div class="text-xs text-gray-500" id="osPainelFonte">Carregando dados…</div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+            <select id="osPFiltroAno" class="inp text-sm" onchange="osPainelRender()"><option value="">📅 Todos os anos</option></select>
+            <select id="osPFiltroCliente" class="inp text-sm" onchange="osPainelRender()"><option value="">🏥 Todos os clientes</option></select>
+            <select id="osPFiltroTipo" class="inp text-sm" onchange="osPainelRender()"><option value="">🔧 Todos os tipos</option></select>
+            <select id="osPFiltroTecnico" class="inp text-sm" onchange="osPainelRender()"><option value="">👤 Todos os técnicos</option></select>
+          </div>
+          <div id="osPainelKPIs" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3"></div>
+          <div class="grid md:grid-cols-2 gap-3 mb-3">
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🏥 Clientes com mais atendimentos</div><div id="osPRankCli"></div></div>
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🔧 Tipos de OS</div><div id="osPRankTipo"></div></div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-3 mb-3">
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">👤 Atendimentos por técnico</div><div id="osPRankTec"></div></div>
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🔄 Corretiva x Preventiva</div><canvas id="osPDonut" height="180"></canvas></div>
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📅 Dia da semana</div><canvas id="osPSemana" height="180"></canvas></div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-3 mb-3">
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📈 Sazonalidade — atendimentos por mês</div><canvas id="osPMes" height="160"></canvas></div>
+            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📊 Evolução anual</div><canvas id="osPAno" height="160"></canvas></div>
+          </div>
+          <div class="border rounded-xl p-4 bg-amber-50 border-amber-200">
+            <div class="font-bold text-sm mb-2">💡 Leituras automáticas</div>
+            <div id="osPInsights" class="text-sm text-gray-700 grid gap-1"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ===== PAINEL DO TÉCNICO (uso em campo) ===== -->
       <section id="aba-ostecnico" class="hidden">
         <div class="card p-4 mb-3 max-w-2xl">
@@ -1126,6 +1177,7 @@
           </div>
           <div id="tecNome" class="text-xs text-gray-500 mb-3"></div>
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
+          <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
         </div>
       </section>
 
@@ -1277,6 +1329,7 @@
       <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🛒</span>Compras<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔧</span>OS<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+      <button data-aba="ospainel" onclick="mostrarAba('ospainel')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Painel<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📱</span>Minhas OSs<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
       <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
@@ -1431,14 +1484,14 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','ostecnico','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','ospainel','ostecnico','cadastros','admin'];
 /* ================= PERMISSÕES POR MÓDULO ================= */
 const MODULOS = [
   ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
   ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
-  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ostecnico','📱 Minhas OSs'],
+  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ospainel','📊 Painel OS'],['ostecnico','📱 Minhas OSs'],
   ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
@@ -1478,6 +1531,7 @@ function mostrarAba(aba){
   if(aba==='pedidos') carregarPedidos();
   if(aba==='compras') carregarCompras();
   if(aba==='osclientes') carregarOSClientes();
+  if(aba==='ospainel') carregarPainelOS();
   if(aba==='ostecnico') carregarPainelTecnico();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
@@ -1742,7 +1796,7 @@ function renderEstoque(){
 
 /* ================= FORM: NOVA MOVIMENTAÇÃO ================= */
 async function carregarProdutosCache(){
-  cacheProdutos = await apiGET('produtos?ativo=eq.true&select=id,nome,linha,unidade,codigo&order=nome.asc');
+  cacheProdutos = await apiGET('produtos?ativo=eq.true&select=id,nome,linha,unidade,codigo,fracionavel,fracao_unidade_id,fracoes_por_unidade&order=nome.asc');
 }
 function preencherDatalistProdutos(){
   document.getElementById('dlProdutos').innerHTML =
@@ -2739,6 +2793,18 @@ async function criarProduto(){
 
 /* ================= CADASTROS (todos os perfis: produtos, fornecedores, transportadoras) ================= */
 let CAD = { produtos:[], fornecedores:[], transportadoras:[] };
+let FRAC_UNIDADES = []; /* catálogo de nomenclaturas de fração */
+async function carregarFracaoUnidades(){
+  try{
+    FRAC_UNIDADES = await apiGET('fracao_unidades?ativo=eq.true&select=id,nome,simbolo&order=nome.asc');
+    const sel = document.getElementById('epFracaoUnidade');
+    if(sel) sel.innerHTML = FRAC_UNIDADES.map(u=>`<option value="${u.id}">${esc(u.nome)} (${esc(u.simbolo)})</option>`).join('');
+  }catch(e){ /* tabela ainda sem migration 008 — segue sem fracionamento */ FRAC_UNIDADES = []; }
+}
+function nomeFracao(id){
+  const u = FRAC_UNIDADES.find(x=>x.id===id);
+  return u ? u.nome : 'fração';
+}
 function linhaCadastro(item, tabela, detalhe){
   const btnEditar = tabela==='produtos'
     ? `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorProduto('${item.id}')">✏️ editar</button>` : '';
@@ -2751,8 +2817,9 @@ function linhaCadastro(item, tabela, detalhe){
 }
 async function carregarCadastros(){
   try{
+    await carregarFracaoUnidades();
     const [prods, forns, trans, clis] = await Promise.all([
-      apiGET('produtos?select=id,nome,linha,unidade,codigo,ncm,cfop,cst,aliquota_icms,ativo&order=nome.asc'),
+      apiGET('produtos?select=id,nome,linha,unidade,codigo,ncm,cfop,cst,aliquota_icms,fracionavel,fracao_unidade_id,fracoes_por_unidade,ativo&order=nome.asc'),
       apiGET('fornecedores?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
       apiGET('transportadoras?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
       apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc'),
@@ -2765,7 +2832,10 @@ function fonteCad(tipo){
   return tipo==='clientes' ? CLIENTES : (CAD[tipo]||[]);
 }
 function detalheCad(tipo, item){
-  if(tipo==='produtos') return `· ${esc(item.linha)} · ${esc(item.unidade)}${item.codigo?` · <b>cód. ${esc(item.codigo)}</b>`:''}`;
+  if(tipo==='produtos'){
+    const fr = item.fracionavel ? ` · 📦 fracionável: 1 ${esc(item.unidade)} = ${fmtQtd(item.fracoes_por_unidade)} ${esc(nomeFracao(item.fracao_unidade_id))}(s)` : '';
+    return `· ${esc(item.linha)} · ${esc(item.unidade)}${item.codigo?` · <b>cód. ${esc(item.codigo)}</b>`:''}${fr}`;
+  }
   const extras = [];
   if(tipo==='clientes') extras.push(esc(item.tipo));
   if(item.cnpj) extras.push('CNPJ '+esc(item.cnpj));
@@ -2824,6 +2894,12 @@ function abrirEditorProduto(id){
   document.getElementById('epCfop').value = p.cfop||'';
   document.getElementById('epCst').value = p.cst||'';
   document.getElementById('epAliqIcms').value = (p.aliquota_icms===null||p.aliquota_icms===undefined)?'':p.aliquota_icms;
+  const fr = !!p.fracionavel;
+  document.getElementById('epFracionavel').checked = fr;
+  document.getElementById('epFracBox').classList.toggle('hidden', !fr);
+  document.getElementById('epFracaoUnidade').value = p.fracao_unidade_id||'';
+  document.getElementById('epFracoesPorUn').value = (p.fracoes_por_unidade===null||p.fracoes_por_unidade===undefined)?'':p.fracoes_por_unidade;
+  document.getElementById('epFracPorLbl').textContent = p.unidade||'kit';
   document.getElementById('modalProduto').style.display = 'flex';
 }
 function fecharEditorProduto(){
@@ -2835,11 +2911,18 @@ async function salvarProduto(){
   const nome = document.getElementById('epNome').value.trim();
   if(!nome){ toast('Informe o nome do produto.','erro'); return; }
   const aliqRaw = document.getElementById('epAliqIcms').value.replace(',','.').trim();
+  const fr = document.getElementById('epFracionavel').checked;
+  const fpuRaw = String(document.getElementById('epFracoesPorUn').value||'').replace(',','.').trim();
+  if(fr && (!fpuRaw || !(parseFloat(fpuRaw)>0))){ toast('Informe quantas frações há em 1 '+(document.getElementById('epUnidade').value.trim()||'kit')+'.','erro'); return; }
+  if(fr && !document.getElementById('epFracaoUnidade').value){ toast('Escolha a unidade da fração.','erro'); return; }
   const dados = {
     nome,
     codigo: document.getElementById('epCodigo').value.trim()||null,
     linha: document.getElementById('epLinha').value,
     unidade: document.getElementById('epUnidade').value.trim()||'un',
+    fracionavel: fr,
+    fracao_unidade_id: fr ? document.getElementById('epFracaoUnidade').value : null,
+    fracoes_por_unidade: fr ? parseFloat(fpuRaw) : null,
     ncm: document.getElementById('epNcm').value.replace(/\D/g,'')||null,
     cfop: document.getElementById('epCfop').value.replace(/\D/g,'')||null,
     cst: document.getElementById('epCst').value.replace(/\D/g,'')||null,
@@ -3492,13 +3575,33 @@ async function aoEscolherProdutoPedido(){
   const local = document.getElementById('npLocal').value;
   const info = document.getElementById('pedEstoqueInfo');
   const sel = document.getElementById('npLote');
+  const tbWrap = document.getElementById('npTipoBaixaWrap');
+  const tbSel = document.getElementById('npTipoBaixa');
   PED_LOTES = [];
-  if(!p){ info.textContent=''; sel.innerHTML='<option value="">— sem lote —</option>'; return; }
+  if(!p){ info.textContent=''; sel.innerHTML='<option value="">— sem lote —</option>'; tbWrap.classList.add('hidden'); return; }
+  const ehFrac = !!p.fracionavel && p.fracoes_por_unidade>0;
+  tbWrap.classList.toggle('hidden', !ehFrac);
+  const tipoBaixa = ehFrac ? tbSel.value : 'unidade';
+  const nomeFr = nomeFracao(p.fracao_unidade_id);
   try{
     PED_LOTES = await apiGET(`lotes?produto_id=eq.${p.id}&local=eq.${encodeURIComponent(local)}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
     const tot = PED_LOTES.reduce((s,l)=>s+Number(l.quantidade_atual),0);
+    let extra = '';
+    if(ehFrac){
+      /* frações disponíveis nos lotes (kits já abertos) */
+      let frTot = 0;
+      try{
+        const ids = PED_LOTES.map(l=>l.id);
+        if(ids.length){
+          const frs = await apiGET(`lote_fracoes?lote_id=in.(${ids.join(',')})&select=lote_id,fracoes_disponiveis`);
+          frTot = frs.reduce((s,f)=>s+Number(f.fracoes_disponiveis||0),0);
+        }
+      }catch(e2){}
+      extra = ` · 📦 <b>${fmtQtd(frTot)} ${esc(nomeFr)}(s)</b> em kits abertos` +
+        (tipoBaixa==='fracao' ? ` <span class="text-blue-700 font-bold">— baixando em ${esc(nomeFr)}; kits serão abertos se preciso (1 ${esc(p.unidade||'kit')} = ${fmtQtd(p.fracoes_por_unidade)} ${esc(nomeFr)})</span>` : '');
+    }
     info.innerHTML = `📦 Estoque em <b>${esc(local)}</b>: <b>${fmtQtd(tot)} ${esc(p.unidade||'un')}</b>` +
-      (tot<=0 ? ' <span class="text-red-600 font-bold">— sem saldo!</span>' : '');
+      (tot<=0 ? ' <span class="text-red-600 font-bold">— sem saldo!</span>' : '') + extra;
     sel.innerHTML = '<option value="">— sem lote —</option>' + PED_LOTES.map(l=>
       `<option value="${l.id}">${esc(l.numero_lote)} — ${fmtQtd(l.quantidade_atual)} ${esc(p.unidade||'un')} (val. ${fmtData(l.validade)})</option>`).join('');
   }catch(e){ info.textContent='Não foi possível consultar o estoque.'; }
@@ -3511,9 +3614,11 @@ function adicionarItemPedido(){
   const valor = document.getElementById('npValor').value;
   if(!p){ toast('Escolha um produto da lista.','erro'); return; }
   if(!qtd || qtd<=0){ toast('Informe a quantidade.','erro'); return; }
+  const tipoBaixa = (p.fracionavel && p.fracoes_por_unidade>0) ? document.getElementById('npTipoBaixa').value : 'unidade';
+  const undItem = tipoBaixa==='fracao' ? nomeFracao(p.fracao_unidade_id) : (p.unidade||'un');
   const lote = loteId ? PED_LOTES.find(l=>l.id===loteId) : null;
   PED_ITENS.push({
-    produto_id:p.id, produto_nome:p.nome, unidade:p.unidade||'un',
+    produto_id:p.id, produto_nome:p.nome, unidade:undItem, tipo_baixa:tipoBaixa,
     lote_id:loteId, lote_num:lote?lote.numero_lote:null, lote_val:lote?lote.validade:null,
     quantidade:qtd, valor_unitario: valor===''||valor===null ? null : parseFloat(String(valor).replace(',','.'))
   });
@@ -3522,6 +3627,8 @@ function adicionarItemPedido(){
   document.getElementById('npValor').value='';
   document.getElementById('npLote').value='';
   document.getElementById('pedEstoqueInfo').textContent='';
+  document.getElementById('npTipoBaixaWrap').classList.add('hidden');
+  document.getElementById('npTipoBaixa').value='unidade';
   renderItensPedido();
 }
 function removerItemPedido(i){ PED_ITENS.splice(i,1); renderItensPedido(); }
@@ -3534,7 +3641,7 @@ function renderItensPedido(){
     if(sub!==null){ tv+=sub; temV=true; }
     return `<tr class="rowline">
       <td class="py-2 pr-2 text-gray-500">${i+1}</td>
-      <td class="py-2 pr-2 font-semibold">${esc(it.produto_nome)}</td>
+      <td class="py-2 pr-2 font-semibold">${esc(it.produto_nome)}${it.tipo_baixa==='fracao'?' <span class="badge bg-blue-100 text-blue-700">fracionado</span>':''}</td>
       <td class="py-2 pr-2 text-gray-500">${it.lote_num?esc(it.lote_num):'<span class="text-gray-400">—</span>'}</td>
       <td class="py-2 pr-2 text-right">${fmtQtd(it.quantidade)} ${esc(it.unidade)}</td>
       <td class="py-2 pr-2 text-right">${it.valor_unitario!==null?fmtReais(it.valor_unitario):'<span class="text-gray-400">—</span>'}</td>
@@ -3575,7 +3682,8 @@ async function salvarPedido(statusInicial){
     for(const it of PED_ITENS){
       await apiPOST('pedidos_itens', {
         pedido_id: ped.id, produto_id: it.produto_id, lote_id: it.lote_id,
-        quantidade: it.quantidade, valor_unitario: it.valor_unitario
+        quantidade: it.quantidade, valor_unitario: it.valor_unitario,
+        tipo_baixa: it.tipo_baixa||'unidade'
       });
     }
     toast(`Pedido ${numero} ${statusInicial==='solicitado'?'solicitado':'salvo como rascunho'}. ✓`,'ok');
@@ -3591,7 +3699,7 @@ async function verPedido(id){
     const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
     if(!rows.length){ toast('Pedido não encontrado.','erro'); return; }
     const p = rows[0];
-    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,linha),lotes(id,numero_lote,validade)&order=created_at.asc`);
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,linha,fracionavel,fracao_unidade_id,fracoes_por_unidade),lotes(id,numero_lote,validade)&order=created_at.asc`);
     PED_DETALHE_ATUAL = { pedido:p, itens };
     const st = PED_STATUS[p.status]||PED_STATUS.rascunho;
     const prox = PED_PROX[p.status]||[];
@@ -3601,11 +3709,13 @@ async function verPedido(id){
       const vu = it.valor_unitario!==null&&it.valor_unitario!==undefined?Number(it.valor_unitario):null;
       const sub = vu!==null ? q*vu : null;
       if(sub!==null){ tv+=sub; temV=true; }
+      const ehFr = (it.tipo_baixa||'unidade')==='fracao';
+      const undEx = ehFr ? nomeFracao(it.produtos?it.produtos.fracao_unidade_id:null) : (it.produtos?it.produtos.unidade||'un':'un');
       return `<tr class="rowline">
         <td class="py-2 pr-2 text-gray-500">${i+1}</td>
-        <td class="py-2 pr-2 font-semibold">${esc(it.produtos?it.produtos.nome:'—')}<div class="text-xs text-gray-500 font-normal">${esc(it.produtos?it.produtos.linha||'':'')}</div></td>
+        <td class="py-2 pr-2 font-semibold">${esc(it.produtos?it.produtos.nome:'—')}${ehFr?' <span class="badge bg-blue-100 text-blue-700">fracionado</span>':''}<div class="text-xs text-gray-500 font-normal">${esc(it.produtos?it.produtos.linha||'':'')}</div></td>
         <td class="py-2 pr-2">${it.lotes?esc(it.lotes.numero_lote)+' <span class="text-xs text-gray-500">(val. '+fmtData(it.lotes.validade)+')</span>':'<span class="text-gray-400">—</span>'}</td>
-        <td class="py-2 pr-2 text-right">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>
+        <td class="py-2 pr-2 text-right">${fmtQtd(q)} ${esc(undEx)}</td>
         <td class="py-2 pr-2 text-right">${vu!==null?fmtReais(vu):'<span class="text-gray-400">—</span>'}</td>
         <td class="py-2 pr-2 text-right font-bold">${sub!==null?fmtReais(sub):'<span class="text-gray-400">—</span>'}</td>
       </tr>`;
@@ -3703,9 +3813,16 @@ async function estornarBaixaPedido(id){
   if(!ativas.length) return 0;
   const hoje = hojeISO();
   for(const m of ativas){
-    const l = await apiGET(`lotes?id=eq.${m.lote_id}&select=quantidade_atual`);
-    const saldo = Number((l[0] && l[0].quantidade_atual) || 0);
-    await apiPATCH('lotes', `id=eq.${m.lote_id}`, { quantidade_atual: saldo + Number(m.quantidade) });
+    const ehFracao = /\[fra[cç][aã]o:/i.test(String(m.observacao||''));
+    if(ehFracao){
+      /* baixa fracionada: devolve as frações ao lote (o kit continua aberto — não dá pra "desabrir") */
+      const fr = await getLoteFracoes(m.lote_id);
+      await setLoteFracoes(m.lote_id, Number((fr&&fr.fracoes_disponiveis)||0) + Number(m.quantidade));
+    } else {
+      const l = await apiGET(`lotes?id=eq.${m.lote_id}&select=quantidade_atual`);
+      const saldo = Number((l[0] && l[0].quantidade_atual) || 0);
+      await apiPATCH('lotes', `id=eq.${m.lote_id}`, { quantidade_atual: saldo + Number(m.quantidade) });
+    }
     await apiPOST('movimentacoes', {
       tipo:'ajuste_entrada', produto_id:m.produto_id, lote_id:m.lote_id,
       quantidade:m.quantidade, data:hoje,
@@ -3715,7 +3832,7 @@ async function estornarBaixaPedido(id){
   }
   /* remove o consumo automático lançado no faturamento (volta limpo se refaturar) */
   const obsCons = `[pedido ${ped.numero}] baixa automática`;
-  const consRows = await apiGET(`consumo?observacao=eq.${encodeURIComponent(obsCons)}&select=id`);
+  const consRows = await apiGET(`consumo?observacao=like.${encodeURIComponent(obsCons)}*&select=id`);
   for(const c of consRows){ await apiDELETE('consumo', `id=eq.${c.id}`); }
   return ativas.length;
 }
@@ -3731,6 +3848,17 @@ async function desfazerFaturamento(id){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
+/* ---------- helpers de fracionamento ---------- */
+async function getLoteFracoes(loteId){
+  const rows = await apiGET(`lote_fracoes?lote_id=eq.${loteId}&select=id,fracoes_disponiveis&limit=1`);
+  return rows[0] || null;
+}
+async function setLoteFracoes(loteId, valor){
+  const ex = await getLoteFracoes(loteId);
+  if(ex) await apiPATCH('lote_fracoes', `id=eq.${ex.id}`, { fracoes_disponiveis: valor, updated_at: new Date().toISOString() });
+  else await apiPOST('lote_fracoes', { lote_id: loteId, fracoes_disponiveis: valor });
+}
+
 /* ---------- baixa automática de estoque ao faturar ---------- */
 async function baixarEstoquePedido(id){
   const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
@@ -3739,18 +3867,48 @@ async function baixarEstoquePedido(id){
   /* idempotência: já baixado antes? (ignora baixas estornadas) */
   const ja = await apiGET(`movimentacoes?tipo=eq.saida_pedido&observacao=like.*${encodeURIComponent(ped.numero)}*&select=id,observacao&limit=20`);
   if(ja.filter(m=>!String(m.observacao||'').includes('[estornado')).length) return;
-  const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
+  const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,fracionavel,fracao_unidade_id,fracoes_por_unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
   if(!itens.length) throw new Error('Pedido sem itens para baixar.');
   const nomeCli = ped.clientes ? ped.clientes.nome : (ped.setor_destino || null);
-  const baixas = []; /* {produto_id, lote_id, qtd} */
+  const baixas = []; /* {produto_id, lote_id, qtd, fracao, nome_fracao} */
+  const aberturas = []; /* {produto_id, lote_id, fpu, nome_fracao, und_base} — kits a abrir */
   for(const it of itens){
     let falta = Number(it.quantidade)||0;
     if(falta<=0) continue;
+    const prod = it.produtos||{};
+    const ehFracao = (it.tipo_baixa||'unidade')==='fracao';
+    if(ehFracao && !(prod.fracionavel && Number(prod.fracoes_por_unidade)>0))
+      throw new Error(`"${prod.nome||'item'}" está marcado como fracionado, mas o produto não tem fracionamento configurado (Cadastros → editar produto).`);
+    const nomeFr = nomeFracao(prod.fracao_unidade_id);
+    const fpu = Number(prod.fracoes_por_unidade)||0;
+    const undBase = prod.unidade||'kit';
+    let alvos = [];
     if(it.lote_id){
       const l = it.lotes;
+      alvos = [{ id: it.lote_id, numero_lote: l?l.numero_lote:'?', quantidade_atual: Number((l&&l.quantidade_atual)||0) }];
+    } else {
+      alvos = await apiGET(`lotes?produto_id=eq.${it.produto_id}&local=eq.${encodeURIComponent(ped.local_origem)}&quantidade_atual=gt.0&select=id,numero_lote,quantidade_atual&order=validade.asc`);
+    }
+    if(ehFracao){
+      /* baixa em frações: usa kits já abertos; abre novos se preciso */
+      for(const al of alvos){
+        if(falta<=0) break;
+        const fr = await getLoteFracoes(al.id);
+        let disp = Number((fr&&fr.fracoes_disponiveis)||0);
+        let kits = Number(al.quantidade_atual)||0;
+        while(disp < falta && kits >= 1){
+          kits -= 1; disp += fpu;
+          aberturas.push({ produto_id:it.produto_id, lote_id:al.id, fpu, nome_fracao:nomeFr, und_base:undBase });
+        }
+        const usa = Math.min(disp, falta);
+        if(usa>0){ baixas.push({ produto_id:it.produto_id, lote_id:al.id, qtd:usa, fracao:true, nome_fracao:nomeFr }); falta -= usa; }
+      }
+      if(falta>0) throw new Error(`Saldo insuficiente de ${prod.nome} em ${ped.local_origem}: faltam ${fmtQtd(falta)} ${nomeFr}(s) para faturar (nem abrindo kits fechados cobre).`);
+    } else if(it.lote_id){
+      const l = it.lotes;
       const saldo = Number((l && l.quantidade_atual) || 0);
-      if(saldo < falta) throw new Error(`Saldo insuficiente no lote ${l?l.numero_lote:'?'} (${it.produtos.nome}): tem ${fmtQtd(saldo)}, o pedido precisa de ${fmtQtd(falta)}.`);
-      baixas.push({ produto_id:it.produto_id, lote_id:it.lote_id, qtd:falta });
+      if(saldo < falta) throw new Error(`Saldo insuficiente no lote ${l?l.numero_lote:'?'} (${prod.nome}): tem ${fmtQtd(saldo)}, o pedido precisa de ${fmtQtd(falta)}.`);
+      baixas.push({ produto_id:it.produto_id, lote_id:it.lote_id, qtd:falta, fracao:false });
     } else {
       /* sem lote separado: distribui sozinho pelos que vencem primeiro (FEFO) */
       const lotes = await apiGET(`lotes?produto_id=eq.${it.produto_id}&local=eq.${encodeURIComponent(ped.local_origem)}&quantidade_atual=gt.0&select=id,numero_lote,quantidade_atual&order=validade.asc`);
@@ -3758,37 +3916,65 @@ async function baixarEstoquePedido(id){
         if(falta<=0) break;
         const disp = Number(l.quantidade_atual)||0;
         const usa = Math.min(disp, falta);
-        if(usa>0){ baixas.push({ produto_id:it.produto_id, lote_id:l.id, qtd:usa }); falta -= usa; }
+        if(usa>0){ baixas.push({ produto_id:it.produto_id, lote_id:l.id, qtd:usa, fracao:false }); falta -= usa; }
       }
-      if(falta>0) throw new Error(`Saldo insuficiente de ${it.produtos.nome} em ${ped.local_origem}: faltam ${fmtQtd(falta)} ${it.produtos.unidade||'un'} para faturar.`);
+      if(falta>0) throw new Error(`Saldo insuficiente de ${prod.nome} em ${ped.local_origem}: faltam ${fmtQtd(falta)} ${prod.unidade||'un'} para faturar.`);
     }
   }
   const hoje = hojeISO();
   const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
+  /* 1) abre os kits necessários (kit fechado vira frações no lote) */
+  for(const ab of aberturas){
+    const [l] = await apiGET(`lotes?id=eq.${ab.lote_id}&select=quantidade_atual`);
+    const saldoKit = Number((l&&l.quantidade_atual)||0);
+    if(saldoKit < 1) throw new Error('Concorrência: kit já utilizado por outro faturamento. Tente novamente.');
+    await apiPATCH('lotes', `id=eq.${ab.lote_id}`, { quantidade_atual: saldoKit - 1 });
+    const fr = await getLoteFracoes(ab.lote_id);
+    await setLoteFracoes(ab.lote_id, Number((fr&&fr.fracoes_disponiveis)||0) + ab.fpu);
+    await apiPOST('movimentacoes', {
+      tipo:'fracionamento', produto_id:ab.produto_id, lote_id:ab.lote_id, quantidade:1, data:hoje,
+      cliente:nomeCli, responsavel:ped.responsavel||null,
+      observacao:`[pedido ${ped.numero}] 📦 Abertura de 1 ${ab.und_base} → ${fmtQtd(ab.fpu)} ${ab.nome_fracao}(s) para baixa fracionada`,
+      anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
+    });
+  }
+  /* 2) baixas */
   for(const b of baixas){
     await apiPOST('movimentacoes', {
       tipo:'saida_pedido', produto_id:b.produto_id, lote_id:b.lote_id, quantidade:b.qtd, data:hoje,
       cliente:nomeCli, responsavel:ped.responsavel||null,
-      observacao:`[pedido ${ped.numero}] Baixa automática — faturamento do pedido ${ped.numero}`,
+      observacao: b.fracao
+        ? `[pedido ${ped.numero}] [fração:${b.nome_fracao}] Baixa fracionada — faturamento do pedido ${ped.numero}`
+        : `[pedido ${ped.numero}] Baixa automática — faturamento do pedido ${ped.numero}`,
       anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
     });
-    const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
-    await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) - b.qtd });
+    if(b.fracao){
+      const fr = await getLoteFracoes(b.lote_id);
+      await setLoteFracoes(b.lote_id, Math.max(0, Number((fr&&fr.fracoes_disponiveis)||0) - b.qtd));
+    } else {
+      const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
+      await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) - b.qtd });
+    }
   }
   /* registra o consumo (alimenta os módulos Consumo e Contratos) — idempotente */
   if(ped.cliente_id){
     const obsCons = `[pedido ${ped.numero}] baixa automática`;
-    const jaCons = await apiGET(`consumo?observacao=eq.${encodeURIComponent(obsCons)}&select=id&limit=1`);
+    const jaCons = await apiGET(`consumo?observacao=like.${encodeURIComponent(obsCons)}*&select=id&limit=1`);
     if(!jaCons.length){
       const agr = new Date();
       const porProd = {};
-      for(const b of baixas){ porProd[b.produto_id] = (porProd[b.produto_id]||0) + b.qtd; }
-      for(const pid of Object.keys(porProd)){
+      for(const b of baixas){
+        const chave = b.fracao ? b.produto_id+'|fracao:'+b.nome_fracao : b.produto_id;
+        porProd[chave] = porProd[chave]||{ produto_id:b.produto_id, qtd:0, fracao:b.fracao?b.nome_fracao:null };
+        porProd[chave].qtd += b.qtd;
+      }
+      for(const chave of Object.keys(porProd)){
+        const ag = porProd[chave];
         await apiPOST('consumo', {
-          cliente_id: ped.cliente_id, produto_id: pid,
-          ano: agr.getFullYear(), mes: agr.getMonth()+1, quantidade: porProd[pid],
+          cliente_id: ped.cliente_id, produto_id: ag.produto_id,
+          ano: agr.getFullYear(), mes: agr.getMonth()+1, quantidade: ag.qtd,
           local: ped.local_origem || null, origem: 'lancamento',
-          observacao: obsCons, usuario_id: uid
+          observacao: ag.fracao ? `${obsCons} (em ${ag.fracao})` : obsCons, usuario_id: uid
         });
       }
     }
@@ -3878,9 +4064,11 @@ function imprimirPedido(){
     const vu = it.valor_unitario!==null&&it.valor_unitario!==undefined?Number(it.valor_unitario):null;
     const sub = vu!==null?q*vu:null;
     if(sub!==null){ tv+=sub; temV=true; }
-    return `<tr><td class="c">${i+1}</td><td><b>${esc(it.produtos?it.produtos.nome:'—')}</b><div class="sub">${esc(it.produtos&&it.produtos.linha?it.produtos.linha:'')}</div></td>`+
+    const ehFr2 = (it.tipo_baixa||'unidade')==='fracao';
+    const undImp = ehFr2 ? nomeFracao(it.produtos?it.produtos.fracao_unidade_id:null) : (it.produtos?it.produtos.unidade||'un':'un');
+    return `<tr><td class="c">${i+1}</td><td><b>${esc(it.produtos?it.produtos.nome:'—')}</b>${ehFr2?' <span class="badge">fracionado</span>':''}<div class="sub">${esc(it.produtos&&it.produtos.linha?it.produtos.linha:'')}</div></td>`+
       `<td>${it.lotes?esc(it.lotes.numero_lote):'<span class="mut">a definir</span>'}${it.lotes&&it.lotes.validade?'<div class="sub">val '+fmtData(it.lotes.validade)+'</div>':''}</td>`+
-      `<td class="r">${fmtQtd(q)} ${esc(it.produtos?it.produtos.unidade||'un':'un')}</td>`+
+      `<td class="r">${fmtQtd(q)} ${esc(undImp)}</td>`+
       `<td class="r">${vu!==null?fmtReais(vu):'—'}</td>`+
       `<td class="r"><b>${sub!==null?fmtReais(sub):'—'}</b></td></tr>`;
   }).join('');
@@ -4928,7 +5116,7 @@ async function emitirNfe(pedidoId){
     const pr = await apiGET(`pedidos?id=eq.${pedidoId}&select=*,clientes(*)`);
     const ped = pr[0];
     if(!ped){ toast('Pedido não encontrado.','erro'); return; }
-    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${pedidoId}&select=quantidade,valor_unitario,produtos(id,nome,codigo,ncm,cfop,cst,aliquota_icms,unidade)&order=created_at.asc`);
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${pedidoId}&select=quantidade,valor_unitario,tipo_baixa,produtos(id,nome,codigo,ncm,cfop,cst,aliquota_icms,unidade,fracao_unidade_id)&order=created_at.asc`);
     const dados = {
       empresa: { cnpj:emp.cnpj, razao_social:emp.razao_social, nome_fantasia:emp.nome_fantasia,
         ie:emp.ie, regime_tributario:emp.regime_tributario, endereco:emp.endereco, numero:emp.numero,
@@ -4942,7 +5130,7 @@ async function emitirNfe(pedidoId){
       itens: itens.map(it=>({ produto:{ id:it.produtos&&it.produtos.id, nome:it.produtos&&it.produtos.nome,
         codigo:it.produtos&&it.produtos.codigo, ncm:it.produtos&&it.produtos.ncm, cfop:it.produtos&&it.produtos.cfop,
         cst:it.produtos&&it.produtos.cst, aliquota_icms:it.produtos&&it.produtos.aliquota_icms,
-        unidade:it.produtos&&it.produtos.unidade }, quantidade:it.quantidade, valorUnitario:it.valor_unitario })),
+        unidade: (it.tipo_baixa==='fracao' && it.produtos) ? nomeFracao(it.produtos.fracao_unidade_id) : (it.produtos&&it.produtos.unidade) }, quantidade:it.quantidade, valorUnitario:it.valor_unitario })),
       numero: (Number(emp.ultimo_numero_nfe)||0)+1, serie: Number(emp.serie_nfe)||1, ambiente:'homologacao'
     };
     const erros = window.NFeXml.validarDadosNfe(dados);
@@ -5001,7 +5189,7 @@ async function imprimirDanfe(notaId){
     const pr = await apiGET(`pedidos?id=eq.${n.pedido_id}&select=*,clientes(*)`);
     const ped = pr[0]||{};
     const cli = ped.clientes||{};
-    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${n.pedido_id}&select=quantidade,valor_unitario,produtos(nome,codigo,ncm,cfop,unidade)&order=created_at.asc`);
+    const itens = await apiGET(`pedidos_itens?pedido_id=eq.${n.pedido_id}&select=quantidade,valor_unitario,tipo_baixa,produtos(nome,codigo,ncm,cfop,unidade,fracao_unidade_id)&order=created_at.asc`);
     const er = await apiGET('empresa_fiscal?select=*&limit=1');
     const emp = er[0]||{};
     const soD = s=>String(s||'').replace(/\D/g,'');
@@ -5010,8 +5198,9 @@ async function imprimirDanfe(notaId){
     const linhas = itens.map((it,i)=>{
       const q=Number(it.quantidade)||0, vu=Number(it.valor_unitario)||0, sub=q*vu; vTot+=sub;
       const p=it.produtos||{};
+      const undDanfe = (it.tipo_baixa==='fracao') ? nomeFracao(p.fracao_unidade_id).toUpperCase() : (p.unidade||'UN');
       return `<tr><td>${esc(p.codigo||String(i+1))}</td><td>${esc(p.nome||'—')}</td><td class="c">${esc(p.ncm||'')}</td>`+
-        `<td class="c">${esc(p.cfop||'')}</td><td class="c">${esc(p.unidade||'UN')}</td>`+
+        `<td class="c">${esc(p.cfop||'')}</td><td class="c">${esc(undDanfe)}</td>`+
         `<td class="r">${fmtQtd(q)}</td><td class="r">${fmtReais(vu)}</td><td class="r"><b>${fmtReais(sub)}</b></td></tr>`;
     }).join('');
     const end = (e)=>[e.endereco,e.numero?('nº '+e.numero):'',e.bairro,e.cidade,e.uf,e.cep].filter(Boolean).join(' — ');
@@ -5336,7 +5525,8 @@ const ETIQUETAS_SUGERIDAS = ['TROCA DE CARTUCHO','CHAMADO TÉCNICO','TREINAMENTO
 const OS_ABAS = [
   ['geral','📋 Geral'],['atividades','🛠️ Atividades'],['equipamentos','⚙️ Equipamentos'],
   ['produtos','📦 Produtos'],['servicos','🧰 Serviços'],['despesas','💸 Despesas'],
-  ['orcamentos','💰 Orçamentos'],['anexos','📎 Anexos'],['comentarios','💬 Comentários'],
+  ['orcamentos','💰 Orçamentos'],['formularios','📝 Formulários'],['anexos','📎 Anexos'],
+  ['assinaturas','✍️ Assinaturas'],['comentarios','💬 Comentários'],
   ['historico','🕘 Histórico'],
 ];
 let TIPOS_OS = [];
@@ -5360,6 +5550,9 @@ async function carregarTiposOS(){
 }
 async function apiGETsafe(path){
   try{ return await apiGET(path); }catch(e){ return []; }
+}
+async function apiPOSTsafe(table, body){
+  try{ return await apiPOST(table, body); }catch(e){ return null; }
 }
 async function osLog(osId, evento){
   try{
@@ -5396,7 +5589,7 @@ async function verOS(id){
       catch(e2){ [os] = await apiGET(`os_clientes?id=eq.${id}&select=${selMin}`); }
     }
     if(!os) throw new Error('OS não encontrada.');
-    const [atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico] = await Promise.all([
+    const [atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico, formularios, assinaturas] = await Promise.all([
       apiGET(`os_atividades?os_id=eq.${id}&select=*&order=data.asc,created_at.asc`),
       apiGET(`os_produtos?os_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade)&order=created_at.asc`),
       apiGET(`os_anexos?os_id=eq.${id}&select=*&order=created_at.asc`),
@@ -5406,8 +5599,10 @@ async function verOS(id){
       apiGETsafe(`os_orcamentos?os_id=eq.${id}&select=*&order=created_at.asc`),
       apiGETsafe(`os_comentarios?os_id=eq.${id}&select=*,usuarios(nome)&order=created_at.asc`),
       apiGETsafe(`os_historico?os_id=eq.${id}&select=*,usuarios(nome)&order=created_at.desc&limit=120`),
+      apiGETsafe(`os_formularios?os_id=eq.${id}&select=*&order=created_at.asc`),
+      apiGETsafe(`os_assinaturas?os_id=eq.${id}&select=*&order=created_at.asc`),
     ]);
-    OS_DETALHE = { os, atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico, aba:(OS_DETALHE&&OS_DETALHE.os&&OS_DETALHE.os.id===id&&OS_DETALHE.aba)||'geral' };
+    OS_DETALHE = { os, atividades, produtos, anexos, equips, servicos, despesas, orcamentos, comentarios, historico, formularios, assinaturas, aba:(OS_DETALHE&&OS_DETALHE.os&&OS_DETALHE.os.id===id&&OS_DETALHE.aba)||'geral' };
     renderOSDetalhe();
   }catch(e){ toast('Erro ao abrir OS: '+e.message,'erro'); }
 }
@@ -5430,7 +5625,8 @@ function renderOSDetalhe(){
   const tabs = OS_ABAS.map(([id,rot])=>{
     const n = { atividades:d.atividades.length, produtos:d.produtos.length, anexos:d.anexos.length,
       equipamentos:(d.equips||[]).length, servicos:(d.servicos||[]).length, despesas:(d.despesas||[]).length,
-      orcamentos:(d.orcamentos||[]).length, comentarios:(d.comentarios||[]).length }[id];
+      orcamentos:(d.orcamentos||[]).length, comentarios:(d.comentarios||[]).length,
+      formularios:(d.formularios||[]).length, assinaturas:(d.assinaturas||[]).length }[id];
     const ativo = (d.aba||'geral')===id;
     return `<button onclick="osAba('${id}')" class="px-3 py-2 text-sm font-bold whitespace-nowrap rounded-lg ${ativo?'bg-brand text-white':'text-gray-600 hover:bg-gray-100'}">${rot}${n?` <span class="text-[11px] opacity-80">(${n})</span>`:''}</button>`;
   }).join('');
@@ -5468,6 +5664,8 @@ function renderOSAba(){
   if(aba==='despesas') return osAbaDespesas(d);
   if(aba==='orcamentos') return osAbaOrcamentos(d);
   if(aba==='anexos') return osAbaAnexos(d);
+  if(aba==='formularios') return osAbaFormularios(d);
+  if(aba==='assinaturas') return osAbaAssinaturas(d);
   if(aba==='comentarios') return osAbaComentarios(d);
   if(aba==='historico') return osAbaHistorico(d);
   return osAbaGeral(d);
@@ -5477,44 +5675,75 @@ function osAbaGeral(d){
   const o = d.os, cli = o.clientes||{}, eq = o.equipamentos||null;
   const tot = osTotal(d);
   const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+  const endOS = o.endereco_os || endCli;
   const editavel = o.status!=='concluida' && o.status!=='cancelada';
+  const iniNome = (cli.nome||'?').trim().charAt(0).toUpperCase();
+  const mapsUrl = endOS ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endOS)}` : null;
+  // ---- linha do tempo das atividades
+  const tlAtv = d.atividades.length ? d.atividades.map(a=>{
+    const st = ATV_TEC_STATUS[a.status]||ATV_TEC_STATUS.pendente;
+    const dt = fmtData((a.data||'').slice(0,10));
+    return `<div class="relative pl-7 pb-4 last:pb-0">
+      <span class="absolute left-[7px] top-1 w-3 h-3 rounded-full border-2 ${a.status==='concluida'?'bg-green-600 border-green-600':'bg-white border-brand'}"></span>
+      ${a.status!=='concluida'?'<span class="absolute left-[12px] top-5 bottom-0 w-[2px] bg-gray-200"></span>':''}
+      <div class="text-sm"><b>${esc(a.tecnico||'—')}</b> ${st.label}</div>
+      <div class="text-xs text-gray-500">${dt}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' → '+String(a.fim).slice(0,5):''}${osDuracaoReal(a)?' · '+osDuracaoReal(a):''}</div>
+      ${a.descricao_conclusao?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(a.descricao_conclusao)}</div>`:''}
+    </div>`;
+  }).join('') : '<span class="text-gray-400 text-xs">Nenhuma atividade registrada.</span>';
+  // ---- equipamentos vinculados
+  const vincEq = (d.equips||[]).map(e=>e.equipamentos).filter(Boolean);
+  const eqHtml = vincEq.length ? vincEq.map(e=>`
+    <div class="flex items-center justify-between gap-2 py-2 border-b last:border-0 text-sm">
+      <div><b>${esc(e.nome)}</b><div class="text-xs text-gray-500 font-mono">nº de série ${esc(e.numero_serie||'—')}</div></div>
+      <button class="text-xs text-brand font-bold whitespace-nowrap" onclick="osVerFichaEquipamento('${e.id}')">Abrir ficha ↗</button>
+    </div>`).join('') : '<span class="text-gray-400 text-xs">Nenhum equipamento vinculado.</span>';
   return `
-  <div class="grid md:grid-cols-2 gap-3 mb-4">
-    <div class="border rounded-xl p-3">
-      <div class="text-xs font-bold text-gray-500 uppercase mb-1">Cliente</div>
-      <div class="font-bold">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
-      <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}</div>
-      <div class="text-xs text-gray-500">${esc(endCli||'—')}</div>
-      ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
-      ${cli.telefone?`<div class="text-xs text-gray-500">📱 ${esc(cli.telefone)}</div>`:''}
+  <div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="text-xs font-bold text-brand uppercase tracking-wide mb-2">Dados do cliente</div>
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-12 h-12 rounded-full bg-brand text-white flex items-center justify-center font-black text-xl shrink-0">${esc(iniNome)}</div>
+      <div class="min-w-0">
+        <div class="font-extrabold text-base leading-snug">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+        <div class="text-xs text-gray-500">${esc([cli.cnpj_cpf||cli.cnpj, cli.inscricao_estadual?'IE '+cli.inscricao_estadual:''].filter(Boolean).join(' · '))}
+          ${cli.id?` · <button class="text-brand font-bold" onclick="osVerFichaCliente('${cli.id}')">Ver ficha do cliente ↗</button>`:''}</div>
+      </div>
     </div>
-    <div class="border rounded-xl p-3">
-      <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
-      ${eq?`<div class="font-bold">${esc(eq.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eq.numero_serie||'—')} · ${esc(eq.tipo||'—')}</div>`
-        :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
-      <div class="text-xs font-bold text-gray-500 uppercase mt-2 mb-1">Tipo de OS</div>
-      <div class="text-sm">${esc(o.tipos_os?o.tipos_os.descricao:'—')}${o.tipos_os&&o.tipos_os.duracao_min?` <span class="text-xs text-gray-500">(${o.tipos_os.duracao_min} min)</span>`:''}</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">E-mail</div><b class="text-[13px] break-words">${esc(cli.email||'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Telefone</div><b class="text-[13px]">${esc(cli.telefone||'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Localização</div><b class="text-[13px]">${esc(o.localizacao||cli.nome||'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Endereço da OS</div><b class="text-[13px]">${esc(endOS||'—')}</b>${mapsUrl?`<br><a class="text-brand font-bold text-xs" target="_blank" href="${mapsUrl}">📍 Ver no mapa</a>`:''}</div>
     </div>
   </div>
-  <div class="border rounded-xl p-3 mb-4">
-    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Descrição do serviço</div>
-    <div class="text-sm whitespace-pre-wrap">${esc(o.descricao_servico||'—')}</div>
-    <div class="grid md:grid-cols-2 gap-2 mt-3">
-      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de resposta:</span> ${o.prazo_resposta?fmtDataHora(o.prazo_resposta):'—'}</div>
-      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo de solução:</span> ${o.prazo_solucao?fmtDataHora(o.prazo_solucao):'—'}</div>
-      ${OS_TEM_LOCAL?`<div class="text-xs"><span class="font-bold text-gray-500 uppercase">Prazo:</span> ${o.prazo?fmtData(o.prazo):'—'}</div>
-      <div class="text-xs"><span class="font-bold text-gray-500 uppercase">Localização:</span> ${esc(o.localizacao||'—')}</div>
-      <div class="text-xs md:col-span-2"><span class="font-bold text-gray-500 uppercase">Endereço da OS:</span> ${esc(o.endereco_os||'—')}</div>`:''}
+  <div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="text-xs font-bold text-brand uppercase tracking-wide mb-2">Dados da OS</div>
+    <div class="grid grid-cols-3 gap-2 text-sm mb-2">
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Identificador</div><b>${esc(o.numero)}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo de OS</div><b>${esc(o.tipos_os?o.tipos_os.descricao:'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Prazo</div><b>${o.prazo_solucao?fmtData((o.prazo_solucao||'').slice(0,10)):'—'}</b></div>
     </div>
-    ${editavel?`<button class="text-xs text-brand font-bold mt-2" onclick="osEditarPrazos()">✏️ Ajustar prazos</button>`:''}
+    <div class="bg-gray-50 rounded-lg p-2 text-sm"><div class="text-[10px] text-gray-500 uppercase">Descrição</div><div class="whitespace-pre-wrap">${esc(o.descricao_servico||'—')}</div></div>
   </div>
-  <div class="font-bold mb-2">✍️ Assinatura</div>
-  <div class="border rounded-xl p-3 mb-4">
+  <div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="text-xs font-bold text-brand uppercase tracking-wide mb-3">Atividades — linha do tempo (${d.atividades.length})</div>
+    ${tlAtv}
+  </div>
+  <div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="text-xs font-bold text-brand uppercase tracking-wide mb-1">Vínculos — Equipamentos (${vincEq.length})</div>
+    ${eqHtml}
+  </div>
+  <div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="text-xs font-bold text-brand uppercase tracking-wide mb-2">✍️ Assinatura</div>
     ${o.assinatura_url
-      ? `<a href="${esc(o.assinatura_url)}" target="_blank"><img src="${esc(o.assinatura_url)}" class="h-20 border rounded bg-white"></a>
-         <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div>
+      ? `<img src="${esc(o.assinatura_url)}" class="max-w-full h-auto max-h-32 border rounded-lg bg-white" style="transform:rotate(0deg)">
+         <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''} · coletada no celular do técnico</div>
          ${editavel?`<button class="text-xs text-brand font-bold mt-1" onclick="osAbrirAssinatura()">🔄 Assinar novamente</button>`:''}`
-      : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')}
+      : ((d.assinaturas||[]).length
+        ? (d.assinaturas||[]).map(s=>`
+          <div class="mb-3"><img src="${esc(s.url)}" class="max-w-full h-auto max-h-32 border rounded-lg bg-white">
+          <div class="text-xs text-gray-500 mt-1">Assinatura de <b>${esc(s.nome_assinante||'—')}</b>${s.created_at?' · '+new Date(s.created_at).toLocaleString('pt-BR'):''}</div></div>`).join('')
+        : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>'))}
   </div>
   <div class="border-t mt-2 pt-3 flex justify-end gap-6 text-sm flex-wrap">
     <div>Serviços: <b>${fmtReais(tot.vs)}</b></div>
@@ -5523,6 +5752,40 @@ function osAbaGeral(d){
     <div class="text-base">Total: <b class="text-brand">${fmtReais(tot.total)}</b></div>
   </div>
   ${tot.vdesp?`<div class="flex justify-end text-xs text-gray-500 mt-1">Despesas: ${fmtReais(tot.vdesp)} (custo)</div>`:''}`;
+}
+
+/* ---------- links da ficha ---------- */
+function osVerFichaCliente(id){
+  const d = OS_DETALHE, cli = (d&&d.os&&d.os.clientes)||{};
+  mostrarAba('cadastros');
+  setTimeout(()=>{
+    const inp = document.querySelector('#aba-cadastros input[placeholder*="Buscar cliente"]');
+    if(inp){ inp.value = cli.nome||''; inp.dispatchEvent(new Event('input')); inp.focus(); }
+  }, 300);
+}
+async function osVerFichaEquipamento(id){
+  try{
+    const [e] = await apiGET(`equipamentos?id=eq.${id}&select=*,clientes(nome)`);
+    if(!e) throw new Error('Equipamento não encontrado.');
+    const oss = await apiGET(`os_equipamentos?equipamento_id=eq.${id}&select=os_clientes(id,numero,descricao_servico,status,created_at)&order=created_at.desc&limit=20`)||[];
+    openOsModal(`
+      <div class="font-black text-lg mb-1">${esc(e.nome)}</div>
+      <div class="text-xs text-gray-500 mb-3 font-mono">nº de série ${esc(e.numero_serie||'—')}</div>
+      <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Cliente</div><b class="text-[13px]">${esc(e.clientes?e.clientes.nome:'—')}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Setor</div><b class="text-[13px]">${esc(e.setor||'—')}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo</div><b class="text-[13px]">${esc(e.tipo||'—')}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Status</div><b class="text-[13px]">${esc(e.status||'ativo')}</b></div>
+      </div>
+      ${e.observacao?`<div class="text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">📝 ${esc(e.observacao)}</div>`:''}
+      <div class="font-bold text-sm mb-2">Histórico de OSs (${oss.length})</div>
+      <div class="max-h-48 overflow-y-auto grid gap-1.5">
+        ${oss.length?oss.map(x=>{const oo=x.os_clientes||{};return `<button class="text-left border rounded-lg p-2 text-xs hover:bg-gray-50" onclick="closeOsModal();verOS('${oo.id||''}')">
+          <b class="text-brand">${esc(oo.numero||'')}</b> · ${esc((oo.descricao_servico||'').slice(0,60))} <span class="text-gray-400">${oo.created_at?fmtData(oo.created_at.slice(0,10)):''}</span></button>`;}).join('')
+        :'<span class="text-gray-400 text-xs">Nenhuma OS vinculada.</span>'}
+      </div>
+      <button class="btn-ghost w-full mt-3" onclick="closeOsModal()">Fechar</button>`);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 function osDuracaoReal(a){
@@ -5763,6 +6026,36 @@ async function osDelOrcamento(id){
   if(!confirm('Excluir este orçamento?')) return;
   try{ await apiDELETE('os_orcamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um orçamento'); await verOS(OS_DETALHE.os.id); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+function osAbaFormularios(d){
+  const forms = d.formularios||[];
+  if(!forms.length) return '<span class="text-gray-400 text-xs">Nenhum formulário preenchido nesta OS.</span>';
+  return `<div class="grid gap-3">` + forms.map(f=>{
+    const dados = f.dados||{};
+    const qs = dados.perguntas||[];
+    return `<div class="border rounded-xl p-4 bg-white">
+      <div class="font-extrabold text-sm mb-1">📝 ${esc(f.nome||dados.nome||'Formulário')}</div>
+      <div class="text-xs text-gray-500 mb-3">${f.created_at?new Date(f.created_at).toLocaleString('pt-BR'):''}</div>
+      ${qs.length?`<div class="grid gap-2">`+qs.map(q=>`
+        <div class="bg-gray-50 rounded-lg p-2.5 text-sm">
+          <div class="text-[11px] font-bold text-gray-500 uppercase">${esc(q.titulo||'—')}</div>
+          <div class="whitespace-pre-wrap">${esc(q.resposta==null||q.resposta===''?'—':String(q.resposta))}</div>
+        </div>`).join('')+`</div>`
+      :'<span class="text-gray-400 text-xs">Sem respostas registradas.</span>'}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function osAbaAssinaturas(d){
+  const sigs = d.assinaturas||[];
+  if(!sigs.length) return '<span class="text-gray-400 text-xs">Nenhuma assinatura registrada nesta OS.</span>';
+  return `<div class="grid gap-3">` + sigs.map(s=>`
+    <div class="border rounded-xl p-4 bg-white">
+      <img src="${esc(s.url)}" class="max-w-full h-auto max-h-40 bg-white border rounded-lg mb-2">
+      <div class="text-sm">Assinatura de <b>${esc(s.nome_assinante||'—')}</b></div>
+      <div class="text-xs text-gray-500">${s.created_at?new Date(s.created_at).toLocaleString('pt-BR'):''} · coletada no celular do técnico</div>
+    </div>`).join('') + `</div>`;
 }
 
 function osAbaAnexos(d){
@@ -6176,6 +6469,109 @@ function atvTecBadge(st){
   const s = ATV_TEC_STATUS[st]||ATV_TEC_STATUS.pendente;
   return `<span style="${s.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${s.label}</span>`;
 }
+/* ================= 📊 PAINEL OS — analítico ================= */
+let OS_PAINEL = null, OS_PAINEL_CH = {};
+function osPainelDestroy(){ Object.values(OS_PAINEL_CH).forEach(c=>{try{c.destroy()}catch(e){}}); OS_PAINEL_CH = {}; }
+async function carregarPainelOS(){
+  const fonte = document.getElementById('osPainelFonte');
+  try{
+    if(!OS_PAINEL){
+      fonte.textContent = 'Carregando dados…';
+      const [oss, atvs] = await Promise.all([
+        apiGETall('os_clientes?select=id,numero,cliente_id,tipo_os_id,status,created_at,clientes(nome),tipos_os(descricao)&order=created_at.asc'),
+        apiGETall('os_atividades?select=os_id,tecnico,data&order=data.asc'),
+      ]);
+      OS_PAINEL = { oss, atvs };
+      // preenche filtros
+      const anos = [...new Set(oss.map(o=>(o.created_at||'').slice(0,4)).filter(Boolean))].sort();
+      document.getElementById('osPFiltroAno').innerHTML = '<option value="">📅 Todos os anos</option>' + anos.map(a=>`<option>${a}</option>`).join('');
+      const clis = [...new Map(oss.filter(o=>o.clientes).map(o=>[o.cliente_id, o.clientes.nome])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+      document.getElementById('osPFiltroCliente').innerHTML = '<option value="">🏥 Todos os clientes</option>' + clis.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join('');
+      const tipos = [...new Set(oss.map(o=>o.tipos_os?o.tipos_os.descricao:'').filter(Boolean))].sort();
+      document.getElementById('osPFiltroTipo').innerHTML = '<option value="">🔧 Todos os tipos</option>' + tipos.map(t=>`<option>${esc(t)}</option>`).join('');
+      const tecs = [...new Set(atvs.map(a=>(a.tecnico||'').trim()).filter(Boolean))].sort();
+      document.getElementById('osPFiltroTecnico').innerHTML = '<option value="">👤 Todos os técnicos</option>' + tecs.map(t=>`<option>${esc(t)}</option>`).join('');
+    }
+    osPainelRender();
+  }catch(e){ fonte.textContent = 'Erro ao carregar: '+e.message; }
+}
+function osPainelRender(){
+  if(!OS_PAINEL) return;
+  const fAno = document.getElementById('osPFiltroAno').value;
+  const fCli = document.getElementById('osPFiltroCliente').value;
+  const fTipo = document.getElementById('osPFiltroTipo').value;
+  const fTec = document.getElementById('osPFiltroTecnico').value.toLowerCase();
+  const { oss, atvs } = OS_PAINEL;
+  const fos = oss.filter(o =>
+    (!fAno || (o.created_at||'').slice(0,4)===fAno) &&
+    (!fCli || o.cliente_id===fCli) &&
+    (!fTipo || (o.tipos_os&&o.tipos_os.descricao===fTipo)) &&
+    (!fTec || atvs.some(a=>a.os_id===o.id && (a.tecnico||'').toLowerCase()===fTec)));
+  const fids = new Set(fos.map(o=>o.id));
+  const fat = atvs.filter(a=>fids.has(a.os_id));
+  document.getElementById('osPainelFonte').textContent = `${fos.length.toLocaleString('pt-BR')} OSs no filtro · dados ao vivo`;
+  // ---- KPIs
+  const nCli = new Set(fos.map(o=>o.cliente_id).filter(Boolean)).size;
+  const ehPrev = d => /preventiv/i.test(d||'');
+  const nPrev = fos.filter(o=>ehPrev(o.tipos_os&&o.tipos_os.descricao)).length;
+  const pPrev = fos.length? (nPrev/fos.length*100):0;
+  document.getElementById('osPainelKPIs').innerHTML = [
+    [fos.length.toLocaleString('pt-BR'),'ATENDIMENTOS'],
+    [nCli.toLocaleString('pt-BR'),'CLIENTES ATENDIDOS'],
+    [(100-pPrev).toFixed(0)+'%','CORRETIVAS'],
+    [pPrev.toFixed(1)+'%','PREVENTIVAS'],
+  ].map(([v,l])=>`<div class="border rounded-xl p-3 bg-white"><div class="text-2xl font-black text-brand">${v}</div><div class="text-[11px] text-gray-500 uppercase">${l}</div></div>`).join('');
+  // ---- ranking clientes
+  const rc = {};
+  fos.forEach(o=>{ const n=o.clientes?o.clientes.nome:'—'; rc[n]=(rc[n]||0)+1; });
+  document.getElementById('osPRankCli').innerHTML = osPainelBarras(Object.entries(rc).sort((a,b)=>b[1]-a[1]).slice(0,10), '#C1272D');
+  // ---- tipos
+  const rt = {};
+  fos.forEach(o=>{ const n=o.tipos_os?o.tipos_os.descricao:'Sem tipo'; rt[n]=(rt[n]||0)+1; });
+  document.getElementById('osPRankTipo').innerHTML = osPainelBarras(Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,10), '#2563eb');
+  // ---- técnicos (normalizado case-insensitive)
+  const rte = {};
+  fat.forEach(a=>{ const n=(a.tecnico||'').trim(); const k=n.toLowerCase(); if(k) rte[k]={n, c:((rte[k]||{}).c||0)+1}; });
+  document.getElementById('osPRankTec').innerHTML = osPainelBarras(Object.values(rte).sort((a,b)=>b.c-a.c).slice(0,10).map(e=>[e.n,e.c]), '#16a34a');
+  // ---- gráficos
+  osPainelDestroy();
+  const mk = (id,cfg)=>{ const el=document.getElementById(id); if(el) OS_PAINEL_CH[id]=new Chart(el,cfg); };
+  mk('osPDonut',{type:'doughnut',data:{labels:['Corretivas','Preventivas'],datasets:[{data:[fos.length-nPrev,nPrev],backgroundColor:['#C1272D','#fbbf24']}]},options:{plugins:{legend:{position:'bottom'}}}});
+  const sem = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const cs = [0,0,0,0,0,0,0];
+  fat.forEach(a=>{ if(a.data){ const d=new Date(a.data+'T12:00:00'); if(!isNaN(d)) cs[d.getDay()]++; } });
+  mk('osPSemana',{type:'bar',data:{labels:sem,datasets:[{data:cs,backgroundColor:'#2563eb'}]},options:{plugins:{legend:{display:false}}}});
+  const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const cm=[0,0,0,0,0,0,0,0,0,0,0,0];
+  fos.forEach(o=>{ const m=parseInt((o.created_at||'').slice(5,7),10); if(m>=1&&m<=12) cm[m-1]++; });
+  mk('osPMes',{type:'bar',data:{labels:meses,datasets:[{data:cm,backgroundColor:'#C1272D'}]},options:{plugins:{legend:{display:false}}}});
+  const ca={};
+  fos.forEach(o=>{ const a=(o.created_at||'').slice(0,4); if(a) ca[a]=(ca[a]||0)+1; });
+  const anos=Object.keys(ca).sort();
+  mk('osPAno',{type:'line',data:{labels:anos,datasets:[{data:anos.map(a=>ca[a]),borderColor:'#C1272D',backgroundColor:'rgba(193,39,45,.12)',fill:true,tension:.3}]},options:{plugins:{legend:{display:false}}}});
+  // ---- insights
+  const ins = [];
+  if(fos.length){
+    const topC = Object.entries(rc).sort((a,b)=>b[1]-a[1])[0];
+    if(topC) ins.push(`🏥 <b>${esc(topC[0])}</b> lidera com <b>${topC[1].toLocaleString('pt-BR')}</b> atendimentos (${(topC[1]/fos.length*100).toFixed(1)}% do total).`);
+    ins.push(`🔄 Corretivas: <b>${(100-pPrev).toFixed(1)}%</b> · Preventivas: <b>${pPrev.toFixed(1)}%</b> — ${pPrev<10?'há espaço para crescer o plano preventivo.':'bom equilíbrio preventivo.'}`);
+    const mi = cm.indexOf(Math.max(...cm));
+    if(cm[mi]>0) ins.push(`📅 Pico de demanda em <b>${meses[mi]}</b> (${cm[mi].toLocaleString('pt-BR')} OSs) — reforce a escala nesse mês.`);
+    const si = cs.indexOf(Math.max(...cs));
+    ins.push(`🗓️ <b>${['domingo','segunda','terça','quarta','quinta','sexta','sábado'][si]}</b> é o dia de pico (${cs[si].toLocaleString('pt-BR')} atendimentos).`);
+  }
+  document.getElementById('osPInsights').innerHTML = ins.map(i=>`<div>• ${i}</div>`).join('') || '<span class="text-gray-400">Sem dados no filtro.</span>';
+}
+function osPainelBarras(entries, cor){
+  if(!entries.length) return '<span class="text-gray-400 text-xs">Sem dados.</span>';
+  const max = entries[0][1]||1;
+  return entries.map(([n,v])=>`
+    <div class="flex items-center gap-2 mb-1.5">
+      <div class="text-xs w-32 shrink-0 truncate" title="${esc(n)}">${esc(n)}</div>
+      <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden"><div class="h-4 rounded-full" style="width:${(v/max*100).toFixed(1)}%;background:${cor}"></div></div>
+      <div class="text-xs font-bold w-12 text-right">${v.toLocaleString('pt-BR')}</div>
+    </div>`).join('');
+}
 async function carregarPainelTecnico(){
   const box = document.getElementById('tecLista');
   box.innerHTML = '<span class="text-gray-400 text-sm">Carregando…</span>';
@@ -6191,12 +6587,21 @@ async function carregarPainelTecnico(){
       '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))' +
       '&order=data.asc,created_at.asc&limit=200'
     );
-    renderPainelTecnico(atvs||[]);
+    let fotoCount = {};
+    try{
+      const osIds = [...new Set((atvs||[]).map(a=>a.os_clientes&&a.os_clientes.id).filter(Boolean))];
+      if(osIds.length){
+        const rows = await apiGET(`os_anexos?os_id=in.(${osIds.join(',')})&select=os_id`);
+        (rows||[]).forEach(r=>{ fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; });
+      }
+    }catch(e){}
+    renderPainelTecnico(atvs||[], fotoCount);
   }catch(e){
     box.innerHTML = `<span class="text-red-600 text-sm">Erro ao carregar: ${esc(e.message)}</span>`;
   }
 }
-function renderPainelTecnico(atvs){
+function renderPainelTecnico(atvs, fotoCount){
+  fotoCount = fotoCount||{};
   const box = document.getElementById('tecLista');
   if(!atvs.length){
     box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
@@ -6213,12 +6618,13 @@ function renderPainelTecnico(atvs){
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
     }else if(a.status==='em_atendimento'){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}')">✅ Concluir</button>`;
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }else if(a.status==='pausada'){
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
-      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}')">✅ Concluir</button>`;
+      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }
     btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="osAbrirAssinatura('${os.id}')">✍️ Assinatura</button>`;
+    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecFotoOS('${os.id}')">📷 Foto</button>`;
     btns += `<button class="text-xs text-red-700 font-bold px-2" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌</button>`;
     return `
     <div class="border rounded-xl p-3 bg-white">
@@ -6234,19 +6640,140 @@ function renderPainelTecnico(atvs){
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+      ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
       <div class="flex gap-2 flex-wrap mt-2">${btns}</div>
     </div>`;
   }).join('');
 }
-function tecConcluirModal(id){
-  openOsModal(`
-    <div class="font-bold mb-2">✅ Concluir atividade</div>
-    <label class="lbl">O que foi feito? (descrição da conclusão)</label>
-    <textarea id="tecConcObs" class="inp text-sm mb-3" rows="3" placeholder="Descreva o serviço executado…"></textarea>
-    <div class="flex gap-2">
-      <button class="btn-ghost flex-1" onclick="closeOsModal()">Voltar</button>
-      <button class="btn-brand flex-1 !w-auto" onclick="tecMudarStatus('${id}','concluida',document.getElementById('tecConcObs').value)">Confirmar conclusão</button>
-    </div>`);
+/* ---------- fluxo guiado de conclusão (3 passos) ---------- */
+let TEC_FLUXO = null;
+function tecConcluirModal(atvId, osId){
+  TEC_FLUXO = { atvId, osId, passo:1, obs:'', fotos:[], sigOk:false };
+  tecFluxoRender();
+}
+function tecFluxoBarra(){
+  return `<div class="flex gap-1.5 mb-4">${[1,2,3].map(i=>`<div class="flex-1 h-1.5 rounded-full ${i<=TEC_FLUXO.passo?'bg-brand':'bg-gray-200'}"></div>`).join('')}</div>`;
+}
+function tecFluxoRender(){
+  const F = TEC_FLUXO; if(!F) return;
+  let corpo = '';
+  if(F.passo===1){
+    corpo = `<div class="font-extrabold text-base mb-1">📝 O que foi feito?</div>
+      <div class="text-xs text-gray-500 mb-3">Descreva o serviço executado — vai para a OS e para o cliente.</div>
+      <textarea id="tecFluxoObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…">${esc(F.obs)}</textarea>
+      <button class="btn-brand w-full !py-3.5 text-base" onclick="tecFluxoAvancar()">Avançar →</button>`;
+  }else if(F.passo===2){
+    corpo = `<div class="font-extrabold text-base mb-1">📷 Fotos do atendimento</div>
+      <div class="text-xs text-gray-500 mb-3">Toque para abrir a câmera. Quantas precisar.</div>
+      <button class="w-full p-5 border-2 border-dashed border-brand rounded-xl bg-red-50 text-brand font-extrabold text-base mb-2" onclick="document.getElementById('tecFluxoFotoInput').click()">📷 Tirar foto</button>
+      <input type="file" id="tecFluxoFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecFluxoFotoUp(this)">
+      <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map(u=>`<img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border">`).join('')}</div>
+      ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
+      <div class="flex gap-2"><button class="btn-ghost flex-1 !py-3" onclick="tecFluxoVoltar()">← Voltar</button>
+      <button class="btn-brand flex-1 !w-auto !py-3" onclick="tecFluxoAvancar()">Avançar →</button></div>`;
+  }else if(F.passo===3){
+    corpo = `<div class="font-extrabold text-base mb-1">✍️ Assinatura do cliente</div>
+      <div class="text-xs text-gray-500 mb-3">Entregue o celular ao responsável para assinar no quadro.</div>
+      <canvas id="tecFluxoPad" width="460" height="180" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
+      <input id="tecFluxoNome" class="inp text-base mb-3" placeholder="Nome de quem assinou">
+      <button class="btn-brand w-full !py-3.5 text-base mb-2" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
+      <button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
+      <button class="w-full text-sm text-gray-500 mt-2" onclick="tecFluxoVoltar()">← Voltar</button>`;
+  }
+  openOsModal(`<div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>${tecFluxoBarra()}${corpo}`);
+  if(F.passo===3) tecFluxoInitPad();
+}
+function tecFluxoAvancar(){
+  const F = TEC_FLUXO; if(!F) return;
+  if(F.passo===1){ F.obs = document.getElementById('tecFluxoObs').value; }
+  if(F.passo<3){ F.passo++; tecFluxoRender(); }
+}
+function tecFluxoVoltar(){ if(TEC_FLUXO && TEC_FLUXO.passo>1){ TEC_FLUXO.passo--; tecFluxoRender(); } }
+function tecFluxoInitPad(){
+  const cv = document.getElementById('tecFluxoPad'); if(!cv) return;
+  const ctx = cv.getContext('2d'); ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.strokeStyle='#111';
+  let des=false, lx=0, ly=0;
+  const pos = e=>{ const r=cv.getBoundingClientRect(); const t=(e.touches&&e.touches[0])||e;
+    return [(t.clientX-r.left)*(cv.width/r.width),(t.clientY-r.top)*(cv.height/r.height)]; };
+  cv.addEventListener('pointerdown', e=>{ des=true; [lx,ly]=pos(e); try{cv.setPointerCapture(e.pointerId)}catch(_){} });
+  cv.addEventListener('pointermove', e=>{ if(!des) return; const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(x,y); ctx.stroke(); lx=x; ly=y; });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>des=false));
+}
+function tecFluxoLimparPad(){ const cv=document.getElementById('tecFluxoPad'); if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+async function tecFluxoFotoUp(input){
+  const F = TEC_FLUXO;
+  if(!F || !input.files || !input.files[0]){ if(input) input.value=''; return; }
+  const file = input.files[0];
+  try{
+    toast('Enviando foto…','ok');
+    const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
+    const nome = `os/${F.osId}-${Date.now()}.${ext}`;
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'image/jpeg' }, body: file
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+')'); }
+    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+    await apiPOST('os_anexos', { os_id:F.osId, url, nome:file.name||('foto-'+Date.now()+'.jpg') });
+    F.fotos.push(url);
+    toast('Foto incluída. ✓','ok');
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  input.value='';
+  tecFluxoRender();
+}
+async function tecFluxoFinalizar(){
+  const F = TEC_FLUXO; if(!F) return;
+  const nome = (document.getElementById('tecFluxoNome')||{}).value||'';
+  const cv = document.getElementById('tecFluxoPad');
+  try{
+    // 1) salva observação + conclui atividade
+    await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
+    // 2) assinatura (se desenhou)
+    let sigUrl = null;
+    if(cv && !tecPadVazio(cv)){
+      const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+      const sname = `os/assinatura-${F.osId}-${Date.now()}.png`;
+      const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(sname)}`, {
+        method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
+      });
+      if(r.ok){
+        sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(sname)}`;
+        await apiPATCH('os_clientes', `id=eq.${F.osId}`, { assinatura_url:sigUrl, assinatura_em:new Date().toISOString() });
+        try{ await apiPOSTsafe('os_assinaturas', { os_id:F.osId, url:sigUrl, nome_assinante:nome.trim()||null }); }catch(_){}
+      }
+    }
+    try{ await osLog(F.osId, 'concluiu o atendimento pelo celular'); }catch(_){}
+    TEC_FLUXO = null;
+    // 3) tela de confirmação
+    const [a] = await apiGET(`os_atividades?id=eq.${F.atvId}&select=inicio,fim`);
+    openOsModal(`
+      <div class="text-center py-4">
+        <div class="text-6xl mb-3">🎉</div>
+        <div class="font-extrabold text-lg mb-1">Atendimento concluído!</div>
+        <div class="text-xs text-gray-500 mb-4">OS concluída às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="text-left grid gap-2 mb-4">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📝 Descrição registrada</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📷 ${F.fotos.length} foto(s) anexada(s)</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ ${sigUrl?('Assinado por <b>'+esc(nome.trim()||'cliente')+'</b>'):'Sem assinatura'}</div>
+          ${a&&a.inicio&&a.fim?`<div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">⏱️ Duração: ${osDuracaoReal(a)||'—'}</div>`:''}
+        </div>
+        <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
+      </div>`);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+function tecPadVazio(cv){
+  const d = cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;
+  for(let i=3;i<d.length;i+=4){ if(d[i]!==0) return false; }
+  return true;
+}
+async function tecMudarStatusSilent(id, novo, obs){
+  const [a] = await apiGET(`os_atividades?id=eq.${id}&select=id,os_id,inicio,fim,status`);
+  if(!a) throw new Error('Atividade não encontrada.');
+  const hhmm = new Date().toTimeString().slice(0,5);
+  const body = { status:novo };
+  if(obs!==undefined) body.descricao_conclusao = String(obs).trim()||null;
+  if(novo==='concluida' && !a.fim) body.fim = hhmm;
+  await apiPATCH('os_atividades', `id=eq.${id}`, body);
+  await tecSincronizarOS(a.os_id);
 }
 async function tecMudarStatus(id, novo, obs){
   try{
@@ -6264,8 +6791,34 @@ async function tecMudarStatus(id, novo, obs){
     await carregarPainelTecnico();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
-async function tecSincronizarOS(osId){
+/* ---------- fotos do atendimento (técnico em campo) ---------- */
+let TEC_FOTO_OS = null;
+function tecFotoOS(osId){
+  TEC_FOTO_OS = osId;
+  const inp = document.getElementById('tecFotoInput');
+  if(inp) inp.click(); else toast('Não foi possível abrir a câmera.','erro');
+}
+async function tecUploadFoto(input){
+  const osId = TEC_FOTO_OS; TEC_FOTO_OS = null;
+  if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
+  const file = input.files[0];
   try{
+    toast('Enviando foto…','ok');
+    const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
+    const nome = `os/${osId}-${Date.now()}.${ext}`;
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'image/jpeg' }, body: file
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
+    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+    await apiPOST('os_anexos', { os_id:osId, url, nome:file.name||('foto-'+Date.now()+'.jpg') });
+    try{ await osLog(osId, 'anexou uma foto do atendimento'); }catch(e){}
+    toast('Foto incluída na OS. ✓','ok');
+    await carregarPainelTecnico();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  input.value='';
+}
+async function tecSincronizarOS(osId){  try{
     const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=status`);
     if(!os || os.status!=='aberta') return;
     const atvs = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
