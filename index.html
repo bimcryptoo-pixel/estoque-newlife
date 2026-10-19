@@ -6816,7 +6816,7 @@ async function verTrajetoTecnico(nome){
       info.innerHTML = `<div class="text-sm text-gray-500">🛣️ <b>${esc(nome)}</b>: nenhum deslocamento registrado hoje ainda.</div>`;
       return;
     }
-    const g = L.layerGroup();
+    const g = L.featureGroup();
     const coords = pts.map(p=>[+p.lat, +p.lng]);
     // rota
     L.polyline(coords, { color:'#2563eb', weight:4, opacity:0.85 }).addTo(g);
