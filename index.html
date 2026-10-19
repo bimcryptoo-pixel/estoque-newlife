@@ -5517,7 +5517,7 @@ function novaOS(){
     <select id="nosTipo" class="inp text-sm mb-2" onchange="osTipoChanged()"><option value="">— selecione —</option>${tipoOpts}</select>
     <label class="lbl">Etiquetas (separadas por vírgula)</label>
     <div class="relative mb-2">
-      <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)">
+      <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')osEtiqFechar()">
       <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-64 overflow-y-auto"></div>
     </div>
     <label class="lbl">Equipamento</label>
@@ -5588,10 +5588,18 @@ function osEtiqRender(filtro){
   const lista = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[])
     .filter(e=>!filtro || e.toUpperCase().includes(filtro));
   if(!lista.length){ box.classList.add('hidden'); return; }
-  box.innerHTML = lista.map(e=>`
+  box.innerHTML = `
+    <button type="button" class="w-full text-left px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 border-b border-gray-200" onclick="osEtiqFechar()">✕ Fechar sem escolher</button>` +
+    lista.map(e=>`
     <button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0" onclick="osEtiqEscolher('${esc(e).replace(/'/g,"\\'")}')">🏷️ ${esc(e)}</button>
   `).join('');
   box.classList.remove('hidden');
+}
+function osEtiqFechar(){
+  const box = document.getElementById('nosEtiqLista');
+  if(box) box.classList.add('hidden');
+  OS_ETIQ_ESCOLHEU_EM = Date.now();
+  document.getElementById('nosEtiq').blur();
 }
 function osEtiqEscolher(tag){
   const inp = document.getElementById('nosEtiq');
