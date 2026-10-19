@@ -1110,10 +1110,15 @@
 
       <!-- ===== OS CLIENTES (chamados técnicos) ===== -->
       <section id="aba-osclientes" class="hidden">
-        <div id="osListaBox" class="card p-4 mb-3 max-w-6xl">
+        <div id="osListaBox" class="card p-4 mb-3 w-full xl:max-w-none max-w-6xl mx-auto">
           <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div class="font-bold text-lg">🔧 OS Clientes</div>
             <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
+          </div>
+          <div class="flex gap-2 mb-3" id="osFiltroSituacao">
+            <button data-sit="aberto" onclick="osMudarSituacao('aberto')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm font-bold">📌 Em aberto</button>
+            <button data-sit="concluida" onclick="osMudarSituacao('concluida')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">✅ Concluídas</button>
+            <button data-sit="todas" onclick="osMudarSituacao('todas')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">📋 Todas</button>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
             <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="osBuscaDebounce()">
@@ -1133,8 +1138,8 @@
           </div>
           <div id="osLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
         </div>
-        <div id="osDetalheBox" class="hidden max-w-6xl"></div>
-        <div id="osEquipBox" class="hidden card p-4 max-w-6xl"></div>
+        <div id="osDetalheBox" class="hidden w-full xl:max-w-none max-w-6xl mx-auto"></div>
+        <div id="osEquipBox" class="hidden card p-4 w-full xl:max-w-none max-w-6xl mx-auto"></div>
       </section>
 
       <!-- ===== 📊 PAINEL OS — analítico ===== -->
@@ -5349,9 +5354,25 @@ function osFiltrosQuery(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
   const ft = (document.getElementById('osFiltroTipo')||{}).value||'';
   if(fs) f += '&status=eq.'+encodeURIComponent(fs);
+  else if(OS_SITUACAO==='aberto') f += '&status=in.(aberta,em_atendimento)';
+  else if(OS_SITUACAO==='concluida') f += '&status=eq.concluida';
   if(fc) f += '&cliente_id=eq.'+fc;
   if(ft) f += '&tipo_os_id=eq.'+ft;
   return f;
+}
+let OS_SITUACAO = 'aberto'; /* padrão: só as em aberto, sem poluir a tela */
+function osMudarSituacao(sit){
+  OS_SITUACAO = sit;
+  const sel = document.getElementById('osFiltroStatus');
+  if(sel) sel.value = '';
+  document.querySelectorAll('#osFiltroSituacao button').forEach(b=>{
+    const ativo = b.dataset.sit===sit;
+    b.classList.toggle('!bg-red-600', ativo);
+    b.classList.toggle('!text-white', ativo);
+    b.classList.toggle('!border-red-600', ativo);
+    b.classList.toggle('font-bold', ativo);
+  });
+  osRecarregar();
 }
 function osBuscaDebounce(){ clearTimeout(OS_BUSCA_T); OS_BUSCA_T = setTimeout(osRecarregar, 450); }
 async function osRecarregar(){
@@ -5417,6 +5438,16 @@ async function carregarOSClientes(){
   carregarTecnicos();
   carregarTiposOS();
   osProbarLocal();
+  /* destaca o botão da situação ativa */
+  try{
+    document.querySelectorAll('#osFiltroSituacao button').forEach(b=>{
+      const ativo = b.dataset.sit===OS_SITUACAO;
+      b.classList.toggle('!bg-red-600', ativo);
+      b.classList.toggle('!text-white', ativo);
+      b.classList.toggle('!border-red-600', ativo);
+      b.classList.toggle('font-bold', ativo);
+    });
+  }catch(e){}
   try{
     const sel = document.getElementById('osFiltroCliente');
     if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
