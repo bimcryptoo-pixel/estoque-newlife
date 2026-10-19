@@ -7636,14 +7636,17 @@ function imprimirOS(){
   const vincHtml = vincEqs.length ? vincEqs.map(e=>`
     <div class="card"><div class="v"><b>${esc(e.nome||'—')}</b></div><div class="mut">Nº de série: ${esc(e.numero_serie||'—')} · Tipo: ${esc(e.tipo||'—')}</div></div>`).join('')
     : '<div class="mut">—</div>';
-  const anexoHtml = (d.anexos||[]).map((a,i)=>`
+  const anexoHtml = (d.anexos||[]).map((a,i)=>{
+    const imgUrl = a.url || a.arquivo_url || '';
+    const nomeLimpo = (a.nome||'').replace(/\.[a-z]+$/i,'').slice(0,40);
+    return `
     <div style="page-break-inside:avoid;break-inside:avoid;text-align:center">
-      <img src="${esc(a.arquivo_url||'')}" style="max-width:100%;max-height:220px;border:1px solid #ddd;border-radius:8px;object-fit:cover">
-      <div class="mut" style="margin-top:4px">Foto ${i+1}${a.nome?` — ${esc(a.nome)}`:''}</div>
-    </div>`).join('');
+      <img src="${esc(imgUrl)}" style="max-width:100%;max-height:220px;border:1px solid #ddd;border-radius:8px">
+      <div class="mut" style="margin-top:4px">Foto ${i+1}${nomeLimpo?` — ${esc(nomeLimpo)}`:''}</div>
+    </div>`;}).join('');
   const anexoSec = (d.anexos||[]).length
-    ? `<div class="sec"><span>Anexos — fotos do atendimento (${(d.anexos||[]).length})</span></div>
-       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin:8px 0">${anexoHtml}</div>` : '';
+    ? `<div style="page-break-before:auto;break-inside:avoid-page"><div class="sec" style="break-after:avoid;page-break-after:avoid"><span>Anexos — fotos do atendimento (${(d.anexos||[]).length})</span></div>
+       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin:8px 0">${anexoHtml}</div></div>` : '';
   const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
