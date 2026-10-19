@@ -6747,6 +6747,14 @@ function mapaTempoAtras(iso){
 }
 async function carregarMapaEquipe(){
   try{
+    // 📍 se quem abriu o mapa é técnico vinculado, envia a própria posição também
+    try{
+      if(typeof sessao!=='undefined' && sessao && sessao.id){
+        const [me] = await apiGET(`usuarios?id=eq.${sessao.id}&select=tecnico_nome,nome`);
+        const meuNomeTec = me && (me.tecnico_nome || me.nome);
+        if(meuNomeTec && TEC_GPS.nome !== meuNomeTec) tecGpsIniciar(meuNomeTec);
+      }
+    }catch(e){}
     const rows = await apiGET('tecnico_localizacao?select=*&order=updated_at.desc');
     const info = document.getElementById('mapaEquipeInfo');
     const div = document.getElementById('mapaEquipe');
