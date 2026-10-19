@@ -5512,9 +5512,31 @@ function novaOS(){
   openOsModal(`
     <div class="font-bold mb-3">🔧 Nova ordem de serviço</div>
     <label class="lbl">Cliente *</label>
-    <select id="nosCliente" class="inp text-sm mb-2" onchange="osCarregarEquips()"><option value="">— selecione —</option>${cliOpts}</select>
+    <input type="hidden" id="nosCliente" value="">
+    <div class="relative mb-2">
+      <button type="button" id="nosCliBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osCliAbrir()">
+        <span id="nosCliLabel" class="truncate text-gray-500">— selecione —</span><span>▾</span>
+      </button>
+      <div id="nosCliLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+          <input id="nosCliBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="osCliFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosCliLista').classList.add('hidden')}">
+        </div>
+        <div id="nosCliOpcoes" class="overflow-y-auto"></div>
+      </div>
+    </div>
     <label class="lbl">Tipo de OS</label>
-    <select id="nosTipo" class="inp text-sm mb-2" onchange="osTipoChanged()"><option value="">— selecione —</option>${tipoOpts}</select>
+    <input type="hidden" id="nosTipo" value="">
+    <div class="relative mb-2">
+      <button type="button" id="nosTipoBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osTipoAbrir()">
+        <span id="nosTipoLabel" class="truncate text-gray-500">— selecione —</span><span>▾</span>
+      </button>
+      <div id="nosTipoLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+          <input id="nosTipoBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar tipo…" autocomplete="off" oninput="osTipoFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosTipoLista').classList.add('hidden')}">
+        </div>
+        <div id="nosTipoOpcoes" class="overflow-y-auto"></div>
+      </div>
+    </div>
     <label class="lbl">Etiquetas (separadas por vírgula)</label>
     <div class="relative mb-2">
       <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')osEtiqFechar()">
@@ -5561,16 +5583,18 @@ function novaOS(){
       <button class="btn-brand flex-1 !w-auto" onclick="salvarOS()">Criar OS</button>
     </div>`);
 }
-function osTipoChanged(){
-  const sel = document.getElementById('nosTipo');
-  const opt = sel.options[sel.selectedIndex];
-  if(!opt || !opt.dataset) return;
+function osTipoChanged(t){
+  if(!t){
+    const id = document.getElementById('nosTipo').value;
+    t = (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).find(x=>String(x.id)===String(id));
+  }
+  if(!t) return;
   const agora = new Date();
   const fmt = d => { const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
-  if(opt.dataset.pr && !document.getElementById('nosPrzResp').value)
-    document.getElementById('nosPrzResp').value = fmt(new Date(agora.getTime() + Number(opt.dataset.pr)*36e5));
-  if(opt.dataset.ps && !document.getElementById('nosPrzSol').value)
-    document.getElementById('nosPrzSol').value = fmt(new Date(agora.getTime() + Number(opt.dataset.ps)*36e5));
+  const pr = t.prazo_resposta_h, ps = t.prazo_solucao_h;
+  const elR = document.getElementById('nosPrzResp'), elS = document.getElementById('nosPrzSol');
+  if(pr && elR && !elR.value) elR.value = fmt(new Date(agora.getTime() + Number(pr)*36e5));
+  if(ps && elS && !elS.value) elS.value = fmt(new Date(agora.getTime() + Number(ps)*36e5));
 }
 
 let OS_EQUIPS = [];
@@ -5632,6 +5656,87 @@ function osEquipClickFora(e){
   const box = document.getElementById('nosEquipLista');
   if(!box || box.classList.contains('hidden')) return;
   if(e.target.closest('#nosEquipBtn') || e.target.closest('#nosEquipLista')) return;
+  box.classList.add('hidden');
+}
+/* ============ seletor de CLIENTE ============ */
+function osCliAbrir(){
+  const box = document.getElementById('nosCliLista');
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  const busca = document.getElementById('nosCliBusca');
+  if(busca) busca.value = '';
+  osCliRender('');
+  box.classList.remove('hidden');
+  if(busca) setTimeout(()=>busca.focus(), 50);
+}
+function osCliFiltrar(v){ osCliRender((v||'').toUpperCase()); }
+function osCliRender(filtro){
+  const div = document.getElementById('nosCliOpcoes');
+  if(!div) return;
+  const lista = (typeof CLIENTES!=='undefined'?CLIENTES:[]).filter(c=>c.ativo!==false).filter(c=>{
+    if(!filtro) return true;
+    return fmtCliNome(c.nome,c.tipo).toUpperCase().includes(filtro);
+  });
+  const selId = document.getElementById('nosCliente').value;
+  div.innerHTML = lista.map(c=>{
+    const sel = String(c.id)===String(selId);
+    return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osCliEscolher('${c.id}')">${sel?'✅ ':''}🏥 ${esc(fmtCliNome(c.nome,c.tipo))}</button>`;
+  }).join('') || '<div class="p-4 text-sm text-gray-400">Nenhum cliente encontrado.</div>';
+}
+function osCliEscolher(id){
+  document.getElementById('nosCliente').value = id||'';
+  const lbl = document.getElementById('nosCliLabel');
+  const c = (typeof CLIENTES!=='undefined'?CLIENTES:[]).find(x=>String(x.id)===String(id));
+  lbl.textContent = c ? fmtCliNome(c.nome,c.tipo) : '— selecione —';
+  lbl.classList.toggle('text-gray-500', !c);
+  document.getElementById('nosCliLista').classList.add('hidden');
+  osCarregarEquips(); // recarrega equipamentos do cliente
+}
+function osCliClickFora(e){
+  const box = document.getElementById('nosCliLista');
+  if(!box || box.classList.contains('hidden')) return;
+  if(e.target.closest('#nosCliBtn') || e.target.closest('#nosCliLista')) return;
+  box.classList.add('hidden');
+}
+/* ============ seletor de TIPO DE OS ============ */
+function osTipoAbrir(){
+  const box = document.getElementById('nosTipoLista');
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  const busca = document.getElementById('nosTipoBusca');
+  if(busca) busca.value = '';
+  osTipoRender('');
+  box.classList.remove('hidden');
+  if(busca) setTimeout(()=>busca.focus(), 50);
+}
+function osTipoFiltrar(v){ osTipoRender((v||'').toUpperCase()); }
+function osTipoRender(filtro){
+  const div = document.getElementById('nosTipoOpcoes');
+  if(!div) return;
+  const lista = (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).filter(t=>{
+    if(!filtro) return true;
+    return (t.descricao||'').toUpperCase().includes(filtro);
+  });
+  const selId = document.getElementById('nosTipo').value;
+  div.innerHTML = `<button type="button" class="w-full text-left px-4 py-3 text-base hover:bg-gray-100 border-b border-gray-100 text-gray-500" onclick="osTipoEscolher('')">— selecione —</button>` +
+    lista.map(t=>{
+      const sel = String(t.id)===String(selId);
+      return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osTipoEscolher('${t.id}')" data-dur="${t.duracao_min||''}" data-pr="${t.prazo_resposta_h||''}" data-ps="${t.prazo_solucao_h||''}">${sel?'✅ ':''}🔧 ${esc(t.descricao)}${t.duracao_min?` (${t.duracao_min} min)`:''}</button>`;
+    }).join('') || '<div class="p-4 text-sm text-gray-400">Nenhum tipo encontrado.</div>';
+}
+function osTipoEscolher(id){
+  document.getElementById('nosTipo').value = id||'';
+  const lbl = document.getElementById('nosTipoLabel');
+  const t = (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).find(x=>String(x.id)===String(id));
+  lbl.textContent = t ? `${t.descricao}${t.duracao_min?` (${t.duracao_min} min)`:''}` : '— selecione —';
+  lbl.classList.toggle('text-gray-500', !t);
+  document.getElementById('nosTipoLista').classList.add('hidden');
+  if(t) osTipoChanged(t); // aplica prazos automáticos
+}
+function osTipoClickFora(e){
+  const box = document.getElementById('nosTipoLista');
+  if(!box || box.classList.contains('hidden')) return;
+  if(e.target.closest('#nosTipoBtn') || e.target.closest('#nosTipoLista')) return;
   box.classList.add('hidden');
 }
 /* ============ seletor de etiquetas (lista ampla e legível) ============ */
@@ -5750,7 +5855,7 @@ function openOsModal(html){
     m.id = 'modalOS';
     m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
     m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
-    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event)"><div id="modalOSBody"></div></div>`;
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg xl:max-w-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event);osCliClickFora(event);osTipoClickFora(event)"><div id="modalOSBody"></div></div>`;
     m.onclick = ()=>closeOsModal();
     document.body.appendChild(m);
   }
