@@ -5516,8 +5516,10 @@ function novaOS(){
     <label class="lbl">Tipo de OS</label>
     <select id="nosTipo" class="inp text-sm mb-2" onchange="osTipoChanged()"><option value="">— selecione —</option>${tipoOpts}</select>
     <label class="lbl">Etiquetas (separadas por vírgula)</label>
-    <input id="nosEtiq" class="inp text-sm mb-2" list="dlEtiq" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO">
-    <datalist id="dlEtiq">${ETIQUETAS_SUGERIDAS.map(e=>`<option value="${e}">`).join('')}</datalist>
+    <div class="relative mb-2">
+      <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)">
+      <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-64 overflow-y-auto"></div>
+    </div>
     <label class="lbl">Equipamento</label>
     <select id="nosEquip" class="inp text-sm mb-2"><option value="">— nenhum —</option></select>
     <div class="mb-2"><button class="text-xs text-brand font-bold" onclick="document.getElementById('nosNovoEq').classList.toggle('hidden')">＋ Cadastrar equipamento</button></div>
@@ -5569,6 +5571,43 @@ async function osCarregarEquips(){
     sel.innerHTML = '<option value="">— nenhum —</option>' + eqs.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
   }catch(e){ sel.innerHTML = '<option value="">— nenhum —</option>'; }
 }
+/* ============ seletor de etiquetas (lista ampla e legível) ============ */
+function osEtiqAbrir(){ osEtiqRender(''); }
+function osEtiqFiltrar(v){
+  const partes = v.split(',');
+  const atual = (partes[partes.length-1]||'').trim().toUpperCase();
+  osEtiqRender(atual);
+}
+function osEtiqRender(filtro){
+  const box = document.getElementById('nosEtiqLista');
+  if(!box) return;
+  const lista = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[])
+    .filter(e=>!filtro || e.toUpperCase().includes(filtro));
+  if(!lista.length){ box.classList.add('hidden'); return; }
+  box.innerHTML = lista.map(e=>`
+    <button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0" onclick="osEtiqEscolher('${esc(e).replace(/'/g,"\\'")}')">🏷️ ${esc(e)}</button>
+  `).join('');
+  box.classList.remove('hidden');
+}
+function osEtiqEscolher(tag){
+  const inp = document.getElementById('nosEtiq');
+  const partes = inp.value.split(',').map(s=>s.trim()).filter(s=>s);
+  if(partes[partes.length-1] && !ETIQUETAS_SUGERIDAS.includes(partes[partes.length-1].toUpperCase()) && partes[partes.length-1].toUpperCase()!==tag.toUpperCase()){
+    // usuário estava digitando algo parcial: substitui a última parte
+    partes[partes.length-1] = tag;
+  } else if(!partes.map(p=>p.toUpperCase()).includes(tag.toUpperCase())){
+    partes.push(tag);
+  }
+  inp.value = partes.join(', ') + ', ';
+  inp.focus();
+  osEtiqRender('');
+}
+document.addEventListener('click', e=>{
+  const box = document.getElementById('nosEtiqLista');
+  if(box && !box.classList.contains('hidden')){
+    if(!e.target.closest('#nosEtiq') && !e.target.closest('#nosEtiqLista')) box.classList.add('hidden');
+  }
+});
 
 async function salvarOS(){
   const cliente_id = document.getElementById('nosCliente').value;
