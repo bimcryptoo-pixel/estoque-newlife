@@ -5517,7 +5517,7 @@ function novaOS(){
       <button type="button" id="nosCliBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osCliAbrir()">
         <span id="nosCliLabel" class="truncate text-gray-500">— selecione —</span><span>▾</span>
       </button>
-      <div id="nosCliLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+      <div id="nosCliLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-72 flex flex-col">
         <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
           <input id="nosCliBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="osCliFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosCliLista').classList.add('hidden')}">
         </div>
@@ -5530,7 +5530,7 @@ function novaOS(){
       <button type="button" id="nosTipoBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osTipoAbrir()">
         <span id="nosTipoLabel" class="truncate text-gray-500">— selecione —</span><span>▾</span>
       </button>
-      <div id="nosTipoLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+      <div id="nosTipoLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-72 flex flex-col">
         <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
           <input id="nosTipoBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar tipo…" autocomplete="off" oninput="osTipoFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosTipoLista').classList.add('hidden')}">
         </div>
@@ -5540,7 +5540,7 @@ function novaOS(){
     <label class="lbl">Etiquetas (separadas por vírgula)</label>
     <div class="relative mb-2">
       <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')osEtiqFechar()">
-      <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-64 overflow-y-auto"></div>
+      <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-64 overflow-y-auto"></div>
     </div>
     <label class="lbl">Equipamento</label>
     <input type="hidden" id="nosEquip" value="">
@@ -5548,7 +5548,7 @@ function novaOS(){
       <button type="button" id="nosEquipBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osEquipAbrir()">
         <span id="nosEquipLabel" class="truncate text-gray-500">— nenhum —</span><span>▾</span>
       </button>
-      <div id="nosEquipLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+      <div id="nosEquipLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-72 flex flex-col">
         <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
           <input id="nosEquipBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar equipamento…" autocomplete="off" oninput="osEquipFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosEquipLista').classList.add('hidden')}">
         </div>
