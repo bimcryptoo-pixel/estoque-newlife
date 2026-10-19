@@ -5572,7 +5572,11 @@ async function osCarregarEquips(){
   }catch(e){ sel.innerHTML = '<option value="">— nenhum —</option>'; }
 }
 /* ============ seletor de etiquetas (lista ampla e legível) ============ */
-function osEtiqAbrir(){ osEtiqRender(''); }
+let OS_ETIQ_ESCOLHEU_EM = 0;
+function osEtiqAbrir(){
+  if(Date.now() - OS_ETIQ_ESCOLHEU_EM < 800) return; // acabou de escolher: não reabre
+  osEtiqRender('');
+}
 function osEtiqFiltrar(v){
   const partes = v.split(',');
   const atual = (partes[partes.length-1]||'').trim().toUpperCase();
@@ -5603,6 +5607,7 @@ function osEtiqEscolher(tag){
   inp.value = partes.join(', ') + ', ';
   const box = document.getElementById('nosEtiqLista');
   if(box) box.classList.add('hidden'); // fecha a lista após escolher
+  OS_ETIQ_ESCOLHEU_EM = Date.now(); // evita reabrir pelo focus
   inp.focus();
 }
 document.addEventListener('click', e=>{
