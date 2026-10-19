@@ -7636,8 +7636,14 @@ function imprimirOS(){
   const vincHtml = vincEqs.length ? vincEqs.map(e=>`
     <div class="card"><div class="v"><b>${esc(e.nome||'—')}</b></div><div class="mut">Nº de série: ${esc(e.numero_serie||'—')} · Tipo: ${esc(e.tipo||'—')}</div></div>`).join('')
     : '<div class="mut">—</div>';
-  const anexoHtml = (d.anexos||[]).map(a=>`
-    <a href="${esc(a.arquivo_url||'#')}" target="_blank"><img src="${esc(a.arquivo_url||'')}" class="thumb" alt="${esc(a.nome||'anexo')}"></a>`).join('');
+  const anexoHtml = (d.anexos||[]).map((a,i)=>`
+    <div style="page-break-inside:avoid;break-inside:avoid;text-align:center">
+      <img src="${esc(a.arquivo_url||'')}" style="max-width:100%;max-height:220px;border:1px solid #ddd;border-radius:8px;object-fit:cover">
+      <div class="mut" style="margin-top:4px">Foto ${i+1}${a.nome?` — ${esc(a.nome)}`:''}</div>
+    </div>`).join('');
+  const anexoSec = (d.anexos||[]).length
+    ? `<div class="sec"><span>Anexos — fotos do atendimento (${(d.anexos||[]).length})</span></div>
+       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin:8px 0">${anexoHtml}</div>` : '';
   const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
@@ -7704,7 +7710,7 @@ function imprimirOS(){
       <div class="ass" style="margin-top:0;min-width:220px;flex:1;max-width:320px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
       ${s.em?`<div class="mut">Assinado em: ${new Date(s.em).toLocaleString('pt-BR')}</div>`:''}</div>`).join('') + `</div>`;
   })()}
-  ${(d.anexos||[]).length?`<div class="sec"><span>Anexos</span></div><div>${anexoHtml}</div>`:''}
+  ${anexoSec}
   <div class="rodape"><span>Documento gerado pelo sistema New Life Diagnóstico</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
   </body></html>`;
