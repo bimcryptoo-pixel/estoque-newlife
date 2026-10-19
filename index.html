@@ -5521,7 +5521,18 @@ function novaOS(){
       <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-64 overflow-y-auto"></div>
     </div>
     <label class="lbl">Equipamento</label>
-    <select id="nosEquip" class="inp text-sm mb-2"><option value="">— nenhum —</option></select>
+    <input type="hidden" id="nosEquip" value="">
+    <div class="relative mb-2">
+      <button type="button" id="nosEquipBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osEquipAbrir()">
+        <span id="nosEquipLabel" class="truncate text-gray-500">— nenhum —</span><span>▾</span>
+      </button>
+      <div id="nosEquipLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+          <input id="nosEquipBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar equipamento…" autocomplete="off" oninput="osEquipFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosEquipLista').classList.add('hidden')}">
+        </div>
+        <div id="nosEquipOpcoes" class="overflow-y-auto"></div>
+      </div>
+    </div>
     <div class="mb-2"><button class="text-xs text-brand font-bold" onclick="document.getElementById('nosNovoEq').classList.toggle('hidden')">＋ Cadastrar equipamento</button></div>
     <div id="nosNovoEq" class="hidden border rounded-lg p-2 mb-2 grid gap-2">
       <input id="nosEqNome" class="inp text-sm" placeholder="Nome do equipamento (ex: ACL TOP 350)">
@@ -5562,14 +5573,66 @@ function osTipoChanged(){
     document.getElementById('nosPrzSol').value = fmt(new Date(agora.getTime() + Number(opt.dataset.ps)*36e5));
 }
 
+let OS_EQUIPS = [];
 async function osCarregarEquips(){
   const cid = document.getElementById('nosCliente').value;
-  const sel = document.getElementById('nosEquip');
-  if(!cid){ sel.innerHTML = '<option value="">— nenhum —</option>'; return; }
+  OS_EQUIPS = [];
+  document.getElementById('nosEquip').value = '';
+  document.getElementById('nosEquipLabel').textContent = '— nenhum —';
+  document.getElementById('nosEquipLabel').classList.add('text-gray-500');
+  if(!cid) return;
   try{
-    const eqs = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`);
-    sel.innerHTML = '<option value="">— nenhum —</option>' + eqs.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
-  }catch(e){ sel.innerHTML = '<option value="">— nenhum —</option>'; }
+    OS_EQUIPS = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`);
+  }catch(e){ OS_EQUIPS = []; }
+}
+/* ============ seletor de equipamento (mesmo layout das etiquetas) ============ */
+function osEquipAbrir(){
+  const box = document.getElementById('nosEquipLista');
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  const busca = document.getElementById('nosEquipBusca');
+  if(busca) busca.value = '';
+  osEquipRender('');
+  box.classList.remove('hidden');
+  if(busca) setTimeout(()=>busca.focus(), 50);
+}
+function osEquipFiltrar(v){ osEquipRender((v||'').toUpperCase()); }
+function osEquipRender(filtro){
+  const div = document.getElementById('nosEquipOpcoes');
+  if(!div) return;
+  const lista = OS_EQUIPS.filter(e=>{
+    if(!filtro) return true;
+    const t = `${e.nome||''} ${e.numero_serie||''}`.toUpperCase();
+    return t.includes(filtro);
+  });
+  const selId = document.getElementById('nosEquip').value;
+  let html = `<button type="button" class="w-full text-left px-4 py-3 text-base hover:bg-gray-100 border-b border-gray-100 text-gray-500" onclick="osEquipEscolher('')">— nenhum —</button>`;
+  html += lista.map(e=>{
+    const txt = `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}`;
+    const sel = String(e.id)===String(selId);
+    return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osEquipEscolher('${e.id}')">${sel?'✅ ':''}🔧 ${esc(txt)}</button>`;
+  }).join('');
+  div.innerHTML = html || '<div class="p-4 text-sm text-gray-400">Nenhum equipamento encontrado.</div>';
+}
+function osEquipEscolher(id){
+  const hid = document.getElementById('nosEquip');
+  const lbl = document.getElementById('nosEquipLabel');
+  hid.value = id||'';
+  if(id){
+    const e = OS_EQUIPS.find(x=>String(x.id)===String(id));
+    lbl.textContent = e ? `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}` : '— nenhum —';
+    lbl.classList.remove('text-gray-500');
+  } else {
+    lbl.textContent = '— nenhum —';
+    lbl.classList.add('text-gray-500');
+  }
+  document.getElementById('nosEquipLista').classList.add('hidden');
+}
+function osEquipClickFora(e){
+  const box = document.getElementById('nosEquipLista');
+  if(!box || box.classList.contains('hidden')) return;
+  if(e.target.closest('#nosEquipBtn') || e.target.closest('#nosEquipLista')) return;
+  box.classList.add('hidden');
 }
 /* ============ seletor de etiquetas (lista ampla e legível) ============ */
 let OS_ETIQ_ESCOLHEU_EM = 0;
@@ -5687,7 +5750,7 @@ function openOsModal(html){
     m.id = 'modalOS';
     m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
     m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
-    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event)"><div id="modalOSBody"></div></div>`;
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event)"><div id="modalOSBody"></div></div>`;
     m.onclick = ()=>closeOsModal();
     document.body.appendChild(m);
   }
