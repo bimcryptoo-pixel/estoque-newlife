@@ -5680,7 +5680,7 @@ function osCliRender(filtro){
   const selId = document.getElementById('nosCliente').value;
   div.innerHTML = lista.map(c=>{
     const sel = String(c.id)===String(selId);
-    return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osCliEscolher('${c.id}')">${sel?'✅ ':''}🏥 ${esc(fmtCliNome(c.nome,c.tipo))}</button>`;
+    return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osCliEscolher('${c.id}')">${sel?'✅ ':''}${esc(fmtCliNome(c.nome,c.tipo))}</button>`;
   }).join('') || '<div class="p-4 text-sm text-gray-400">Nenhum cliente encontrado.</div>';
 }
 function osCliEscolher(id){
@@ -5855,7 +5855,7 @@ function openOsModal(html){
     m.id = 'modalOS';
     m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
     m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
-    m.innerHTML = `<div class="card p-5 w-full max-w-lg xl:max-w-2xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event);osCliClickFora(event);osTipoClickFora(event)"><div id="modalOSBody"></div></div>`;
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg xl:max-w-4xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event);osCliClickFora(event);osTipoClickFora(event)"><div id="modalOSBody"></div></div>`;
     m.onclick = ()=>closeOsModal();
     document.body.appendChild(m);
   }
