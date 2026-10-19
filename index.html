@@ -1335,28 +1335,23 @@
 
   <!-- NAV INFERIOR (mobile) -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="grid grid-cols-7 text-[10px] font-semibold text-gray-500">
-      <button data-aba="inicio" onclick="mostrarAba('inicio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏠</span>Início<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="lancar" onclick="mostrarAba('lancar')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">➕</span>Lançar<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="movs" onclick="mostrarAba('movs')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Movim.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="rastreio" onclick="mostrarAba('rastreio')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔍</span>Lotes<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="emprestimos" onclick="mostrarAba('emprestimos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🤝</span>Empr.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="consumo" onclick="mostrarAba('consumo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Consumo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="arquivo" onclick="mostrarAba('arquivo')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Arquivo<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="produtos" onclick="mostrarAba('produtos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🏷️</span>Prods<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="inventario" id="navInvMob" onclick="mostrarAba('inventario')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📋</span>Invent.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="kardex" onclick="mostrarAba('kardex')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📒</span>Kardex<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="pedidos" onclick="mostrarAba('pedidos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📦</span>Pedidos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="contratos" onclick="mostrarAba('contratos')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📑</span>Contratos<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="compras" onclick="mostrarAba('compras')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🛒</span>Compras<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🔧</span>OS<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="ospainel" onclick="mostrarAba('ospainel')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📊</span>Painel<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="mapaequipe" onclick="mostrarAba('mapaequipe')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗺️</span>Mapa<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">📱</span>Minhas OSs<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="cadastros" id="navCadMob" onclick="mostrarAba('cadastros')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">🗂️</span>Cadast.<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
-      <button data-aba="admin" id="navAdminMob" onclick="mostrarAba('admin')" class="tabbtn py-2.5 flex flex-col items-center gap-0.5"><span class="text-lg">⚙️</span>Admin<span class="tabdot w-1 h-1 rounded-full bg-brand opacity-0"></span></button>
+    <div class="flex items-center justify-between px-4 py-2.5">
+      <button onclick="mostrarAba('inicio');fecharMenuMob()" class="tabbtn flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">🏠</span><span class="text-sm">Início</span></button>
+      <span id="mobAbaAtual" class="text-sm font-bold text-gray-800 truncate max-w-[45%]">🏠 Início</span>
+      <button onclick="abrirMenuMob()" class="flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">☰</span><span class="text-sm">Menu</span></button>
     </div>
   </nav>
+  <!-- Drawer do menu mobile (estilo Windows: oculto, abre ao clicar) -->
+  <div id="menuMobDrawer" class="md:hidden fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="fecharMenuMob()"></div>
+    <div class="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl max-h-[80vh] flex flex-col" style="padding-bottom:env(safe-area-inset-bottom)">
+      <div class="flex items-center justify-between px-5 py-4 border-b">
+        <span class="font-bold text-lg">📋 Módulos</span>
+        <button onclick="fecharMenuMob()" class="text-2xl text-gray-500 leading-none">×</button>
+      </div>
+      <div id="menuMobGrid" class="grid grid-cols-3 gap-2 p-4 overflow-y-auto"></div>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -1561,6 +1556,31 @@ function mostrarAba(aba){
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
   if(aba==='lancar') carregarNfeImportadas();
+  /* atualiza o rótulo do módulo atual na barra mobile */
+  const lbl = document.getElementById('mobAbaAtual');
+  if(lbl){
+    const mod = MODULOS.find(m=>m[0]===aba);
+    lbl.textContent = mod ? mod[1] : aba;
+  }
+}
+
+/* ================= MENU MOBILE (hambúrguer estilo Windows) ================= */
+function abrirMenuMob(){
+  const grid = document.getElementById('menuMobGrid');
+  const permitidos = modulosPermitidos();
+  grid.innerHTML = MODULOS.filter(m=>permitidos.includes(m[0])).map(m=>{
+    const [emoji, ...nome] = m[1].split(' ');
+    return `<button onclick="mostrarAba('${m[0]}');fecharMenuMob()" class="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border border-gray-100">
+      <span class="text-2xl">${emoji}</span>
+      <span class="text-[11px] font-semibold text-gray-700 text-center leading-tight">${nome.join(' ')}</span>
+    </button>`;
+  }).join('');
+  document.getElementById('menuMobDrawer').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function fecharMenuMob(){
+  document.getElementById('menuMobDrawer').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 /* ================= DASHBOARD ================= */
