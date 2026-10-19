@@ -6853,14 +6853,16 @@ async function verTrajetoTecnico(nome){
     const durMin = Math.round((new Date(iN.created_at)-new Date(i0.created_at))/60000);
     info.innerHTML = `
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm">
-        <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <div class="font-bold">🛣️ Trajeto de <b>${esc(nome)}</b> — hoje</div>
           <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="limparTrajeto()">✖️ Fechar</button>
         </div>
-        <div class="mt-1 text-gray-700">
-          🟢 Início ${trajetoHora(i0.created_at)} · 🔴 Agora ${trajetoHora(iN.created_at)} ·
-          📏 ~${distTotal.toFixed(1)} km · ⏱️ ${durMin>=60?Math.floor(durMin/60)+'h '+(durMin%60)+'min':durMin+' min'} ·
-          🛑 ${paradas.length} parada(s)
+        <div class="grid grid-cols-2 gap-1 text-gray-700">
+          <div>🟢 Início: <b>${trajetoHora(i0.created_at)}</b></div>
+          <div>🔴 Agora: <b>${trajetoHora(iN.created_at)}</b></div>
+          <div>📏 Distância: <b>~${distTotal.toFixed(1)} km</b></div>
+          <div>⏱️ Duração: <b>${durMin>=60?Math.floor(durMin/60)+'h '+(durMin%60)+'min':durMin+' min'}</b></div>
+          <div>🛑 Paradas: <b>${paradas.length}</b></div>
         </div>
       </div>`;
   }catch(e){
