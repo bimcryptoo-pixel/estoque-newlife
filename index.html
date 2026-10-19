@@ -5599,7 +5599,14 @@ function osEtiqFechar(){
   const box = document.getElementById('nosEtiqLista');
   if(box) box.classList.add('hidden');
   OS_ETIQ_ESCOLHEU_EM = Date.now();
-  document.getElementById('nosEtiq').blur();
+  const inp = document.getElementById('nosEtiq');
+  if(inp) inp.blur();
+}
+function osEtiqClickFora(e){
+  const box = document.getElementById('nosEtiqLista');
+  if(!box || box.classList.contains('hidden')) return;
+  if(e.target.closest('#nosEtiq') || e.target.closest('#nosEtiqLista')) return;
+  box.classList.add('hidden'); // clicou em outro campo do modal: fecha só a lista
 }
 function osEtiqEscolher(tag){
   const inp = document.getElementById('nosEtiq');
@@ -5680,7 +5687,7 @@ function openOsModal(html){
     m.id = 'modalOS';
     m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
     m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
-    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()"><div id="modalOSBody"></div></div>`;
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event)"><div id="modalOSBody"></div></div>`;
     m.onclick = ()=>closeOsModal();
     document.body.appendChild(m);
   }
