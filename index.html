@@ -5592,15 +5592,18 @@ function osEtiqRender(filtro){
 function osEtiqEscolher(tag){
   const inp = document.getElementById('nosEtiq');
   const partes = inp.value.split(',').map(s=>s.trim()).filter(s=>s);
-  if(partes[partes.length-1] && !ETIQUETAS_SUGERIDAS.includes(partes[partes.length-1].toUpperCase()) && partes[partes.length-1].toUpperCase()!==tag.toUpperCase()){
-    // usuário estava digitando algo parcial: substitui a última parte
-    partes[partes.length-1] = tag;
-  } else if(!partes.map(p=>p.toUpperCase()).includes(tag.toUpperCase())){
+  const tagU = tag.toUpperCase();
+  const sugeridas = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[]).map(e=>e.toUpperCase());
+  const ultima = partes.length? partes[partes.length-1].toUpperCase() : '';
+  if(ultima && !sugeridas.includes(ultima) && ultima!==tagU){
+    partes[partes.length-1] = tag; // substitui o que estava digitando
+  } else if(!partes.map(p=>p.toUpperCase()).includes(tagU)){
     partes.push(tag);
   }
   inp.value = partes.join(', ') + ', ';
+  const box = document.getElementById('nosEtiqLista');
+  if(box) box.classList.add('hidden'); // fecha a lista após escolher
   inp.focus();
-  osEtiqRender('');
 }
 document.addEventListener('click', e=>{
   const box = document.getElementById('nosEtiqLista');
