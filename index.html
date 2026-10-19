@@ -1178,7 +1178,7 @@
 
       <!-- ===== 🗺️ MAPA DA EQUIPE — tempo real ===== -->
       <section id="aba-mapaequipe" class="hidden">
-        <div class="card p-4 mb-3 max-w-6xl">
+        <div class="card p-4 mb-3 w-full xl:max-w-none max-w-6xl mx-auto">
           <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div class="font-bold text-lg">🗺️ Mapa da Equipe</div>
             <div class="flex gap-2 items-center">
@@ -1187,9 +1187,16 @@
             </div>
           </div>
           <div id="mapaEquipeAlertas" class="mb-3"></div>
-          <div id="mapaEquipe" class="rounded-xl border" style="height:420px;z-index:0"></div>
-          <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
-          <div id="mapaEquipeLista" class="grid md:grid-cols-3 gap-2 mt-3"></div>
+          <div class="flex flex-col xl:flex-row gap-3">
+            <div class="flex-1 min-w-0">
+              <div id="mapaEquipe" class="rounded-xl border xl:!h-[560px]" style="height:420px;z-index:0"></div>
+              <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
+            </div>
+            <div class="xl:w-80 shrink-0">
+              <div class="font-bold text-sm mb-2">👷 Equipe <span id="mapaEquipeCount" class="text-gray-500 font-normal"></span></div>
+              <div id="mapaEquipeLista" class="grid gap-2 xl:max-h-[560px] xl:overflow-y-auto pr-1"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -6807,13 +6814,22 @@ async function carregarMapaEquipe(){
     const inativos = (rows||[]).filter(r=>!r.ativa);
     document.getElementById('mapaEquipeAlertas').innerHTML = inativos.length
       ? `<div class="bg-red-50 border border-red-300 rounded-xl p-3 text-sm text-red-800 font-bold">📵 Localização desativada: ${inativos.map(r=>`${esc(r.tecnico_nome)} (${mapaTempoAtras(r.updated_at)})`).join(' · ')}</div>` : '';
-    document.getElementById('mapaEquipeLista').innerHTML = (rows||[]).map(r=>`
-      <div class="border rounded-xl p-2.5 text-sm flex items-center gap-2 ${r.ativa?'':'bg-red-50 border-red-200'}">
-        <div class="w-8 h-8 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0">${esc((r.tecnico_nome||'?').charAt(0))}</div>
-        <div class="min-w-0 flex-1"><b>${esc(r.tecnico_nome)}</b>
-          <div class="text-xs text-gray-500">${r.ativa?'📍':'📵'} ${mapaTempoAtras(r.updated_at)}${r.os_numero?` · OS <b>${esc(r.os_numero)}</b>`:''}</div>
+    const ordenados = (rows||[]).slice().sort((a,b)=> (b.ativa?1:0)-(a.ativa?1:0) || String(a.tecnico_nome||'').localeCompare(String(b.tecnico_nome||'')));
+    document.getElementById('mapaEquipeCount').textContent = `(${(rows||[]).length})`;
+    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map(r=>`
+      <div class="border rounded-xl p-2.5 text-sm ${r.ativa?'bg-white':'bg-red-50 border-red-200'}">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0 text-base">${esc((r.tecnico_nome||'?').charAt(0))}</div>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold truncate">${esc(r.tecnico_nome)}</div>
+            <div class="text-xs ${r.ativa?'text-green-700':'text-red-700'} font-semibold">${r.ativa?'📍 Ativo':'📵 GPS desativado'} <span class="text-gray-500 font-normal">· ${mapaTempoAtras(r.updated_at)}</span></div>
+          </div>
         </div>
-        <button class="btn-ghost !w-auto !py-1 !px-2 text-xs shrink-0" onclick="verTrajetoTecnico('${esc(r.tecnico_nome).replace(/'/g,"\\'")}')">🛣️ Trajeto</button>
+        ${r.os_numero?`<div class="text-xs text-gray-600 mt-1.5 ml-11">🔧 OS <b>${esc(r.os_numero)}</b></div>`:''}
+        <div class="flex gap-2 mt-2 ml-11">
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${esc(r.tecnico_nome).replace(/'/g,"\\'")}')">🛣️ Trajeto</button>
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${esc(r.tecnico_nome).replace(/'/g,"\\'")}')">📍 Localizar</button>
+        </div>
       </div>`).join('') || '<span class="text-gray-400 text-xs">Nenhum técnico com localização registrada ainda.</span>';
     info.textContent = `${(rows||[]).length} técnico(s) · atualizado agora`;
     if(MAPA_EQ_TIMER) clearInterval(MAPA_EQ_TIMER);
@@ -6903,6 +6919,19 @@ async function verTrajetoTecnico(nome){
 function limparTrajeto(){
   if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
   document.getElementById('mapaTrajetoInfo').classList.add('hidden');
+}
+async function mapaFocarTecnico(nome){
+  try{
+    const [r] = await apiGET(`tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(nome)}&select=lat,lng,tecnico_nome,ativa,updated_at,os_numero&limit=1`);
+    if(r && MAPA_EQ){
+      MAPA_EQ.setView([+r.lat, +r.lng], 15, { animate:true });
+      setTimeout(()=>{
+        L.popup().setLatLng([+r.lat, +r.lng])
+          .setContent(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍 Ativo':'📵 GPS desativado'} · ${mapaTempoAtras(r.updated_at)}${r.os_numero?`<br>OS <b>${esc(r.os_numero)}</b>`:''}`)
+          .openOn(MAPA_EQ);
+      }, 400);
+    }
+  }catch(e){ toast('Não foi possível localizar: '+e.message, 'erro'); }
 }
 async function carregarPainelTecnico(){
   const box = document.getElementById('tecLista');
