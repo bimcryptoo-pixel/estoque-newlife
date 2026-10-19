@@ -7243,7 +7243,7 @@ function imprimirOS(){
   <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>
   ${(d.anexos||[]).length?`<div class="sec"><span>Anexos</span></div><div>${anexoHtml}</div>`:''}
   ${o.assinatura_url?`<div class="sec"><span>Assinatura</span></div><div class="ass"><img src="${esc(o.assinatura_url)}"><div class="quem">Assinatura do cliente</div><div class="mut">Assinado em: ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div></div>`:''}
-  <div class="rodape"><span>Documento gerado pelo sistema NEW LIFE • Gestão Empresarial</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  <div class="rodape"><span>Documento gerado pelo sistema New Life Diagnóstico</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
   </body></html>`;
   let f = document.getElementById('printFrameOS');
