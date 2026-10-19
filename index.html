@@ -7651,17 +7651,17 @@ function imprimirOS(){
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
     *{box-sizing:border-box}
-    @page{ margin:22mm 12mm 18mm 12mm; }
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;margin:0;padding:0;line-height:1.45;}
-    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
+    @page{ size:A4; margin:18mm 14mm 18mm 14mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;margin:0;padding:6mm 4mm;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:14px;margin:4mm 0 16px;}
     .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .doc{text-align:right;}
     .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
     .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
-    .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#C1272D;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px;}
+    .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:16px 0 8px;border-bottom:1px solid #e5e5e5;padding-bottom:5px;break-after:avoid;page-break-after:avoid;}
     .sec .dir{font-size:11px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;}
-    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:10px 16px;margin-bottom:10px;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:10px 14px;margin-bottom:8px;break-inside:avoid;page-break-inside:avoid;}
     .card .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:2px;}
     .card .v{font-size:13px;}
     .linha{display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;}
@@ -7671,7 +7671,7 @@ function imprimirOS(){
     .card4 .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
     .card4 .v{font-size:13px;font-weight:600;margin-top:2px;}
     .mut{color:#888;font-size:12px;}
-    .totais{display:flex;gap:18px;align-items:center;justify-content:center;margin:16px 0;font-size:13px;flex-wrap:wrap;}
+    .totais{display:flex;gap:16px;align-items:center;justify-content:center;margin:14px 0;font-size:12.5px;flex-wrap:wrap;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:10px;break-inside:avoid;page-break-inside:avoid;}
     .totais b{font-size:15px;}
     .thumb{max-height:110px;border:1px solid #ddd;border-radius:8px;margin:0 8px 8px 0;}
     .ass{margin-top:6px;text-align:center;}
@@ -7681,7 +7681,7 @@ function imprimirOS(){
     .noprint{} @media print{ .noprint{display:none} }
   </style></head><body>
   <div class="topo">
-    <div class="marca"><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div></div>
+    <div class="marca"><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div><div style="font-size:10px;color:#888;letter-spacing:2px;margin-top:2px">GESTÃO EMPRESARIAL</div></div>
     <div class="doc"><h1>OS ${esc(o.numero)}</h1>${tipoNome?`<div class="tipo">${esc(tipoNome)}</div>`:''}</div>
   </div>
   <div class="sec"><span>Dados do cliente</span>${criacao?`<span class="dir">Ordem de serviço criada em ${criacao}</span>`:''}</div>
