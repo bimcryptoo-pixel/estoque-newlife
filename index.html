@@ -1335,9 +1335,7 @@
 
   <!-- NAV INFERIOR (mobile) -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="flex items-center justify-between px-4 py-2.5">
-      <button onclick="mostrarAba('inicio');fecharMenuMob()" class="tabbtn flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">🏠</span><span class="text-sm">Início</span></button>
-      <span id="mobAbaAtual" class="text-sm font-bold text-gray-800 truncate max-w-[45%]">🏠 Início</span>
+    <div class="flex items-center justify-center px-4 py-2.5">
       <button onclick="abrirMenuMob()" class="flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">☰</span><span class="text-sm">Menu</span></button>
     </div>
   </nav>
@@ -1556,12 +1554,6 @@ function mostrarAba(aba){
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
   if(aba==='lancar') carregarNfeImportadas();
-  /* atualiza o rótulo do módulo atual na barra mobile */
-  const lbl = document.getElementById('mobAbaAtual');
-  if(lbl){
-    const mod = MODULOS.find(m=>m[0]===aba);
-    lbl.textContent = mod ? mod[1] : aba;
-  }
 }
 
 /* ================= MENU MOBILE (hambúrguer estilo Windows) ================= */
