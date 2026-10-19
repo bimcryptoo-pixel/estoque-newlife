@@ -6794,6 +6794,32 @@ async function carregarMapaEquipe(){
       }
     }catch(e){}
     const rows = await apiGET('tecnico_localizacao?select=*&order=updated_at.desc');
+    /* 📊 dados extras da equipe: jornada (GPS) + desempenho (atividades de hoje) */
+    let jornadaMap = {}, desempenhoMap = {};
+    try{
+      const hoje0 = new Date(); hoje0.setHours(0,0,0,0);
+      const hojeISO = hoje0.toISOString().slice(0,10);
+      const [hist, atvs] = await Promise.all([
+        apiGET(`tecnico_localizacao_hist?created_at=gte.${hoje0.toISOString()}&select=tecnico_nome,created_at&order=created_at.asc&limit=5000`).catch(()=>[]),
+        apiGET(`os_atividades?data=gte.${hojeISO}&select=tecnico,status,inicio,fim&limit=2000`).catch(()=>[])
+      ]);
+      (hist||[]).forEach(h=>{
+        const n = h.tecnico_nome; if(!n) return;
+        if(!jornadaMap[n]) jornadaMap[n] = { ini: h.created_at, fim: h.created_at };
+        else { if(h.created_at < jornadaMap[n].ini) jornadaMap[n].ini = h.created_at; if(h.created_at > jornadaMap[n].fim) jornadaMap[n].fim = h.created_at; }
+      });
+      (atvs||[]).forEach(a=>{
+        const n = (a.tecnico||'').trim(); if(!n) return;
+        if(!desempenhoMap[n]) desempenhoMap[n] = { concluidas: 0, tempoMin: 0, nTempo: 0 };
+        if(a.status==='concluida'){
+          desempenhoMap[n].concluidas++;
+          if(a.inicio && a.fim){
+            const d = (new Date(a.fim)-new Date(a.inicio))/60000;
+            if(d>0 && d<1440){ desempenhoMap[n].tempoMin += d; desempenhoMap[n].nTempo++; }
+          }
+        }
+      });
+    }catch(e){}
     const info = document.getElementById('mapaEquipeInfo');
     const div = document.getElementById('mapaEquipe');
     if(typeof L === 'undefined'){ info.textContent = 'Mapa indisponível (Leaflet não carregou).'; return; }
@@ -6815,22 +6841,36 @@ async function carregarMapaEquipe(){
     document.getElementById('mapaEquipeAlertas').innerHTML = inativos.length
       ? `<div class="bg-red-50 border border-red-300 rounded-xl p-3 text-sm text-red-800 font-bold">📵 Localização desativada: ${inativos.map(r=>`${esc(r.tecnico_nome)} (${mapaTempoAtras(r.updated_at)})`).join(' · ')}</div>` : '';
     const ordenados = (rows||[]).slice().sort((a,b)=> (b.ativa?1:0)-(a.ativa?1:0) || String(a.tecnico_nome||'').localeCompare(String(b.tecnico_nome||'')));
-    document.getElementById('mapaEquipeCount').textContent = `(${(rows||[]).length})`;
-    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map(r=>`
+    const livres = ordenados.filter(r=>!r.os_numero).length;
+    document.getElementById('mapaEquipeCount').textContent = `(${(rows||[]).length} · 🟢 ${livres} livre(s))`;
+    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map(r=>{
+      const nome = r.tecnico_nome||'?';
+      const livre = !r.os_numero;
+      const jor = jornadaMap[nome];
+      const des = desempenhoMap[nome]||{concluidas:0,tempoMin:0,nTempo:0};
+      const tMed = des.nTempo? Math.round(des.tempoMin/des.nTempo) : null;
+      const escNome = esc(nome).replace(/'/g,"\\'");
+      return `
       <div class="border rounded-xl p-2.5 text-sm ${r.ativa?'bg-white':'bg-red-50 border-red-200'}">
         <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0 text-base">${esc((r.tecnico_nome||'?').charAt(0))}</div>
+          <div class="w-9 h-9 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0 text-base">${esc(nome.charAt(0))}</div>
           <div class="min-w-0 flex-1">
-            <div class="font-bold truncate">${esc(r.tecnico_nome)}</div>
+            <div class="font-bold truncate">${esc(nome)}</div>
             <div class="text-xs ${r.ativa?'text-green-700':'text-red-700'} font-semibold">${r.ativa?'📍 Ativo':'📵 GPS desativado'} <span class="text-gray-500 font-normal">· ${mapaTempoAtras(r.updated_at)}</span></div>
           </div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${livre?'bg-green-100 text-green-800':'bg-blue-100 text-blue-800'}">${livre?'🟢 Livre':'🔵 Ocupado'}</span>
         </div>
         ${r.os_numero?`<div class="text-xs text-gray-600 mt-1.5 ml-11">🔧 OS <b>${esc(r.os_numero)}</b></div>`:''}
-        <div class="flex gap-2 mt-2 ml-11">
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${esc(r.tecnico_nome).replace(/'/g,"\\'")}')">🛣️ Trajeto</button>
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${esc(r.tecnico_nome).replace(/'/g,"\\'")}')">📍 Localizar</button>
+        <div class="text-xs text-gray-500 mt-1 ml-11">
+          ${jor?`⏰ Jornada: <b>${trajetoHora(jor.ini)} → ${trajetoHora(jor.fim)}</b> · `:''}✅ Hoje: <b>${des.concluidas}</b> concluída(s)${tMed!=null?` · ⏱️ média <b>${tMed} min</b>`:''}
         </div>
-      </div>`).join('') || '<span class="text-gray-400 text-xs">Nenhum técnico com localização registrada ainda.</span>';
+        <div class="flex gap-2 mt-2 ml-11 flex-wrap">
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${escNome}')">🛣️ Trajeto</button>
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${escNome}')">📍 Localizar</button>
+          ${livre?`<button class="btn-ghost !w-auto !py-1 !px-2 text-xs !text-red-700 !border-red-300" onclick="designarOSPara('${escNome}')">📋 Designar OS</button>`:''}
+        </div>
+      </div>`;
+    }).join('') || '<span class="text-gray-400 text-xs">Nenhum técnico com localização registrada ainda.</span>';
     info.textContent = `${(rows||[]).length} técnico(s) · atualizado agora`;
     if(MAPA_EQ_TIMER) clearInterval(MAPA_EQ_TIMER);
     MAPA_EQ_TIMER = setInterval(()=>{ if(!document.getElementById('aba-mapaequipe').classList.contains('hidden')) carregarMapaEquipe(); }, 30000);
@@ -6932,6 +6972,40 @@ async function mapaFocarTecnico(nome){
       }, 400);
     }
   }catch(e){ toast('Não foi possível localizar: '+e.message, 'erro'); }
+}
+/* ================= 📋 DESIGNAR OS PELO MAPA ================= */
+async function designarOSPara(tecnicoNome){
+  try{
+    const abertas = await apiGET(`os_clientes?status=eq.aberta&select=id,numero,descricao_servico,clientes(nome)&order=created_at.desc&limit=50`);
+    if(!(abertas||[]).length){ toast('Nenhuma OS aberta aguardando designação.', 'erro'); return; }
+    const opcoes = abertas.map(o=>`<option value="${o.id}">${esc(o.numero)} — ${esc(o.clientes?.nome||'s/ cliente')} — ${esc((o.descricao_servico||'').slice(0,40))}</option>`).join('');
+    const html = `
+      <div class="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" id="designarModal" onclick="if(event.target===this)this.remove()">
+        <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl">
+          <div class="font-bold text-lg mb-1">📋 Designar OS para <b>${esc(tecnicoNome)}</b></div>
+          <div class="text-xs text-gray-500 mb-3">Escolha uma OS aberta para atribuir ao técnico.</div>
+          <select id="designarOsSel" class="inp text-sm mb-3">${opcoes}</select>
+          <div class="flex gap-2 justify-end">
+            <button class="btn-ghost !w-auto px-4" onclick="document.getElementById('designarModal').remove()">Cancelar</button>
+            <button class="btn-brand !w-auto px-4" onclick="designarOSConfirmar('${esc(tecnicoNome).replace(/'/g,"\\'")}')">Designar</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }catch(e){ toast('Erro: '+e.message, 'erro'); }
+}
+async function designarOSConfirmar(tecnicoNome){
+  try{
+    const osId = document.getElementById('designarOsSel').value;
+    if(!osId) return;
+    const hoje = new Date().toISOString().slice(0,10);
+    await apiPOST('os_atividades', { os_id: osId, tecnico: tecnicoNome, data: hoje, status: 'pendente' });
+    await apiPATCH('os_clientes', `id=eq.${osId}`, { status: 'em_atendimento' });
+    try{ await osLog(osId, `OS designada para ${tecnicoNome} pelo mapa da equipe`); }catch(e){}
+    document.getElementById('designarModal').remove();
+    toast(`✅ OS designada para ${tecnicoNome}!`, 'ok');
+    carregarMapaEquipe();
+  }catch(e){ toast('Erro ao designar: '+e.message, 'erro'); }
 }
 async function carregarPainelTecnico(){
   const box = document.getElementById('tecLista');
