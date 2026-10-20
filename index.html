@@ -1373,6 +1373,33 @@
 <script>
 /* ================= CONFIG ================= */
 const SUPA_URL = 'https://srenhrjrprufixoiqvlz.supabase.co';
+/* 🔄 TRAVA ANTI-CACHE (20/10/2026): o GitHub Pages serve o index.html com
+   max-age=600 — o celular do técnico rodava a versão ANTIGA por até 10 min
+   depois de uma publicação (foi assim que a OS concluiu sem assinatura no
+   teste: a trava já existia no servidor, mas não no aparelho dele).
+   A cada 60s (e ao voltar pra aba), confere o ETag da página com no-store;
+   se mudou, recarrega UMA vez — nunca no meio do fluxo de conclusão. */
+let __bootEtag = null;
+async function __checkVersion(){
+  try{
+    // TEC_FLUXO é declarado mais abaixo no script (let → TDZ): o typeof direto
+    // lançaria ReferenceError no boot. TDZ = fluxo ainda não existe = não está ativo.
+    let fluxoAtivo = false;
+    try{ fluxoAtivo = (typeof TEC_FLUXO !== 'undefined' && !!TEC_FLUXO); }catch(_){}
+    if(fluxoAtivo) return; // não interrompe conclusão em andamento
+    const r = await fetch(location.href.split('#')[0].split('?')[0], { method:'HEAD', cache:'no-store' });
+    const et = r.headers.get('etag') || r.headers.get('last-modified');
+    if(!et) return;
+    if(!__bootEtag){ __bootEtag = et; return; }
+    if(et !== __bootEtag && !sessionStorage.getItem('__reloaded_' + et)){
+      sessionStorage.setItem('__reloaded_' + et, '1');
+      location.reload();
+    }
+  }catch(_){}
+}
+__checkVersion();
+setInterval(__checkVersion, 60000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) __checkVersion(); });
 const SUPA_KEY = 'sb_publishable_e08JBryAm6Pxx3Pp4aVLag_V1yO4dYM';
 const HJSON = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
 const LINHAS = ['Coagulação','Gasometria','Hematologia','Bioquímica'];
