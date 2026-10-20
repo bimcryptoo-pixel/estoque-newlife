@@ -5965,6 +5965,11 @@ function renderOSDetalhe(){
   if(o.status==='aberta'||o.status==='em_atendimento') acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osCancelar()">❌ Cancelar OS</button>`;
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osEnviarEmail()">📧 Enviar por e-mail</button>`;
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="imprimirOS()">🖨️ Imprimir</button>`;
+  if(o.origem!=='fieldcontrol'){
+    acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirEditar()">✏️ Editar</button>`;
+    if(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')
+      acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm !text-red-600 !border-red-300" onclick="osConfirmarExcluir()">🗑️ Excluir</button>`;
+  }
 
   const tabs = OS_ABAS.map(([id,rot])=>{
     const n = { atividades:d.atividades.length, produtos:d.produtos.length, anexos:d.anexos.length,
@@ -6719,6 +6724,106 @@ async function osCancelar(){
     OS_CACHE = null;
     await carregarOSClientes();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- editar / excluir OS ----------
+   Regra: OSs importadas do Field Control (origem='fieldcontrol') são histórico
+   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir é só do admin. */
+function osEhEditavel(o){ return !!o && o.origem!=='fieldcontrol'; }
+function osDtLocalInput(iso){
+  if(!iso) return '';
+  const dt = new Date(iso); if(isNaN(dt.getTime())) return '';
+  const p = n=>String(n).padStart(2,'0');
+  return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
+function osAbrirEditar(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser editada.','erro'); return; }
+  const tipoOpts = (TIPOS_OS||[]).map(t=>`<option value="${t.id}" ${String(t.id)===String(o.tipo_os_id||'')?'selected':''}>${esc(t.descricao)}</option>`).join('');
+  openOsModal(`
+    <div class="font-bold mb-3">✏️ Editar OS ${esc(o.numero)}</div>
+    <label class="lbl">Descrição do serviço *</label>
+    <textarea id="eosDesc" class="inp text-sm mb-2" rows="3">${esc(o.descricao_servico||'')}</textarea>
+    ${OS_FIELD_PARIDADE?`
+    <label class="lbl">Tipo de OS</label>
+    <select id="eosTipo" class="inp text-sm mb-2"><option value="">— nenhum —</option>${tipoOpts}</select>
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="lbl">Prazo de resposta</label><input id="eosPrzResp" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_resposta)}"></div>
+      <div><label class="lbl">Prazo de solução</label><input id="eosPrzSol" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_solucao)}"></div>
+    </div>`:''}
+    ${OS_TEM_LOCAL?`
+    <label class="lbl">Prazo</label>
+    <input id="eosPrazo" type="date" class="inp text-sm mb-2" value="${esc(String(o.prazo||'').slice(0,10))}">`:''}
+    <label class="lbl">Valor dos serviços (R$)</label>
+    <input id="eosValor" class="inp text-sm mb-3" inputmode="decimal" value="${o.valor_servicos!=null?String(o.valor_servicos).replace('.',','):''}">
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" onclick="osSalvarEdicao()">Salvar alterações</button>
+    </div>`);
+}
+async function osSalvarEdicao(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser editada.','erro'); return; }
+  const descEl = document.getElementById('eosDesc');
+  const desc = descEl ? descEl.value.trim() : '';
+  if(!desc){ toast('Descreva o serviço.','erro'); return; }
+  try{
+    const valEl = document.getElementById('eosValor');
+    const vs = parseFloat(String(valEl?valEl.value:'').replace(/\./g,'').replace(',','.'))||0;
+    const body = { descricao_servico: desc, valor_servicos: vs, updated_at: new Date().toISOString() };
+    if(OS_FIELD_PARIDADE){
+      const tipoEl = document.getElementById('eosTipo');
+      if(tipoEl) body.tipo_os_id = tipoEl.value||null;
+      const pr = document.getElementById('eosPrzResp'), ps = document.getElementById('eosPrzSol');
+      if(pr) body.prazo_resposta = pr.value ? new Date(pr.value).toISOString() : null;
+      if(ps) body.prazo_solucao = ps.value ? new Date(ps.value).toISOString() : null;
+    }
+    if(OS_TEM_LOCAL){
+      const przEl = document.getElementById('eosPrazo');
+      if(przEl) body.prazo = przEl.value||null;
+    }
+    await apiPATCH('os_clientes', `id=eq.${o.id}`, body);
+    await osLog(o.id, 'editou a OS');
+    closeOsModal();
+    OS_CACHE = null;
+    toast(`OS ${o.numero} atualizada. ✓`,'ok');
+    await verOS(o.id);
+  }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
+}
+function osConfirmarExcluir(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); return; }
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Exclusão restrita ao administrador.','erro'); return; }
+  const cliNome = (o.clientes && o.clientes.nome) || '—';
+  openOsModal(`
+    <div class="font-bold mb-2 text-red-600">🗑️ Excluir OS ${esc(o.numero)}</div>
+    <p class="text-sm text-gray-700 mb-2">Tem certeza que quer excluir <b>definitivamente</b> a OS <b>${esc(o.numero)}</b> (${esc(cliNome)})?</p>
+    <p class="text-sm text-gray-600 mb-4">Serão apagados também: atividades, anexos, assinaturas, equipamentos vinculados, formulários, produtos, serviços, despesas, orçamentos, comentários e histórico desta OS. Produtos já baixados serão estornados ao estoque. <b>Essa ação não pode ser desfeita.</b></p>
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osExcluirDefinitivo()">🗑️ Excluir definitivamente</button>
+    </div>`);
+}
+async function osExcluirDefinitivo(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); closeOsModal(); return; }
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Exclusão restrita ao administrador.','erro'); closeOsModal(); return; }
+  try{
+    /* segurança (mesmo padrão de osCancelar/excluirPedido): estorna as baixas de estoque antes de apagar */
+    for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, o.numero);
+    const filhos = ['os_atividades','os_anexos','os_assinaturas','os_equipamentos','os_formularios','os_produtos','os_servicos','os_despesas','os_orcamentos','os_comentarios','os_historico'];
+    for(const t of filhos) await apiDELETE(t, `os_id=eq.${o.id}`);
+    await apiDELETE('os_clientes', `id=eq.${o.id}`);
+    closeOsModal();
+    OS_DETALHE = null;
+    OS_CACHE = null;
+    toast(`OS ${o.numero} excluída. ✓`,'ok');
+    await carregarOSClientes();
+  }catch(e){ toast('Erro ao excluir OS: '+e.message,'erro'); }
 }
 
 /* ---------- assinatura (pad) ---------- */
