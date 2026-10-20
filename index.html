@@ -243,10 +243,6 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <select id="selTema" class="inp !w-auto !py-1.5 !px-2 !text-xs" onchange="aplicarTema(this.value)" title="Tema do sistema">
-          <option value="claro">☀️ Claro</option>
-          <option value="escuro">🌙 Escuro</option>
-        </select>
         <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
         <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
       </div>
@@ -1449,7 +1445,11 @@ function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigi
 function corMarca(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#C1272D'; }
 function corMarcaEscura(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand-dark').trim() || '#9c1e23'; }
 function aplicarTema(t){
-  if(!['claro','escuro'].includes(t)) t='claro';
+  // SÓ TEMA CLARO (decisão do usuário, 20/10/2026): o tema escuro pintava o
+  // quadro de assinatura de preto e a caneta (preta) ficava invisível — o
+  // técnico "não conseguia assinar". Tema escuro REMOVIDO: qualquer valor
+  // salvo ('escuro' em aparelhos antigos) é normalizado para 'claro'.
+  t='claro';
   document.documentElement.setAttribute('data-theme', t);
   try{ localStorage.setItem('nl_tema', t); }catch(e){}
   const s=document.getElementById('selTema'); if(s) s.value=t;
@@ -7530,7 +7530,7 @@ function osAbrirAssinatura(osId){
   openOsModal(`
     <div class="font-bold mb-2">✍️ Assinatura</div>
     <div class="text-xs text-gray-500 mb-2">Assine no quadro abaixo (técnico ou responsável do cliente).</div>
-    <canvas id="osPad" width="460" height="180" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
+    <canvas id="osPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
     <div class="flex gap-2 mt-3">
       <button class="btn-ghost flex-1" onclick="osLimparPad()">Limpar</button>
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
@@ -8565,7 +8565,7 @@ function tecFluxoRender(){
   }else if(F.passo===3){
     corpo = `<div class="font-extrabold text-base mb-1">✍️ Assinatura do cliente</div>
       <div class="text-xs text-gray-500 mb-3">Entregue o celular ao responsável para assinar no quadro.</div>
-      <canvas id="tecFluxoPad" width="460" height="180" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
+      <canvas id="tecFluxoPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
       <input id="tecFluxoNome" class="inp text-base mb-3" placeholder="Nome de quem assinou">
       <button class="btn-brand w-full !py-3.5 text-base mb-2" id="tecBtnFinalizar" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
       <button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
