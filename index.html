@@ -226,6 +226,7 @@
     <label class="lbl" for="loginPass">Senha</label>
     <input id="loginPass" type="password" class="inp mb-4" autocomplete="current-password" placeholder="••••••">
     <button class="btn-brand" onclick="fazerLogin()">Entrar</button>
+    <button id="btnPasskeyLogin" class="btn-ghost w-full mt-2 hidden" onclick="entrarComPasskey()">🔑 Entrar com digital/rosto</button>
     <div id="loginErro" class="hidden text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2 mt-3"></div>
   </div>
 </div>
@@ -244,6 +245,7 @@
       </div>
       <div class="flex items-center gap-2">
         <span id="userNome" class="text-xs text-gray-600 font-semibold"></span>
+        <button onclick="segAbrirModal()" class="btn-ghost !py-1.5 !px-3 text-xs">🔐 Segurança</button>
         <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
       </div>
     </div>
@@ -1495,8 +1497,19 @@ function toast(msg, tipo, onClick){
   el._t = setTimeout(()=>{ __toastClick = null; el.className='hidden'; }, 3800);
 }
 
+/* 🔐 Projeto de segurança (Etapa 3 do PLANO): quando a sessão tem TOKEN
+   (login validado pela Edge Function `auth`), TODA chamada REST leva o
+   header x-session-token. Hoje o PostgREST ainda não valida esse header
+   (o aperto da RLS é etapa futura) — é inofensivo e já deixa o app pronto.
+   Sem token (sessão do caminho antigo/fallback), o header não vai e o
+   comportamento é exatamente o de sempre. */
+function headersREST(extra){
+  const h = { ...HJSON, ...(extra || {}) };
+  try{ if(typeof sessao !== 'undefined' && sessao && sessao.token) h['x-session-token'] = sessao.token; }catch(e){}
+  return h;
+}
 async function apiGET(path){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: HJSON });
+  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: headersREST() });
   if(!r.ok){ const t = await r.text(); throw new Error(`GET ${path} → ${r.status}: ${t.slice(0,200)}`); }
   return r.json();
 }
@@ -1514,7 +1527,7 @@ async function apiGETall(path){
 }
 async function apiPOST(table, body){
   const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
-    method:'POST', headers:{...HJSON, 'Prefer':'return=representation'}, body: JSON.stringify(body)
+    method:'POST', headers: headersREST({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
   if(!r.ok){ const t = await r.text(); throw new Error(`POST ${table} → ${r.status}: ${t.slice(0,300)}`); }
   const j = await r.json();
@@ -1522,7 +1535,7 @@ async function apiPOST(table, body){
 }
 async function apiPATCH(table, params, body){
   const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {
-    method:'PATCH', headers:{...HJSON, 'Prefer':'return=representation'}, body: JSON.stringify(body)
+    method:'PATCH', headers: headersREST({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
   if(!r.ok){ const t = await r.text(); throw new Error(`PATCH ${table} → ${r.status}: ${t.slice(0,300)}`); }
   return r.json();
@@ -1532,12 +1545,106 @@ async function apiPATCH(table, params, body){
 function salvarSessao(){ localStorage.setItem('nl_estoque_sessao', JSON.stringify(sessao)); }
 function lerSessao(){ try{ return JSON.parse(localStorage.getItem('nl_estoque_sessao')); }catch(e){ return null; } }
 
+/* ================= 🔐 AUTH VIA EDGE FUNCTION (projeto de segurança) =================
+   Contrato: seguranca/PLANO.md + seguranca/functions/auth/index.ts.
+   A função `auth` é a AUTORIDADE quando RESPONDE:
+     • { ok:true }                          → usa a resposta (sessão com token);
+     • erro de regra/credencial (HTTP 400/401/403/429 com corpo { erro })
+                                            → mostra o erro e NÃO tenta outro caminho;
+     • qualquer outro desfecho (falha de rede, 404 = função ainda não
+       implantada, 5xx, corpo fora do contrato) → INDISPONÍVEL: quem chamou
+       decide (o login cai no FALLBACK legado; as demais telas avisam).
+   O token viaja no header x-session-token — mesmo nome que a função e o
+   futuro aperto da RLS usam. */
+const AUTH_URL = SUPA_URL + '/functions/v1/auth';
+const AUTH_TIMEOUT_MS = 6000;
+async function authChamar(acao, corpo, token){
+  const headers = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
+  const tk = (token !== undefined) ? token : ((typeof sessao !== 'undefined' && sessao) ? sessao.token : null);
+  if(tk) headers['x-session-token'] = tk;
+  const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(()=>{ try{ ctrl.abort(); }catch(e){} }, AUTH_TIMEOUT_MS) : null;
+  let r;
+  try{
+    r = await fetch(AUTH_URL, { method:'POST', headers, body: JSON.stringify({ acao, ...(corpo || {}) }), signal: ctrl ? ctrl.signal : undefined });
+  }catch(e){ return { tipo:'indisponivel', motivo:'rede' }; }
+  finally{ if(timer) clearTimeout(timer); }
+  let j = null;
+  try{ j = await r.json(); }catch(e){ j = null; }
+  if(j && j.ok === true) return { tipo:'ok', dados:j, status:r.status };
+  if(j && typeof j.erro === 'string' && [400,401,403,429].includes(r.status)) return { tipo:'erro', mensagem:j.erro, status:r.status };
+  return { tipo:'indisponivel', motivo:'http-' + r.status };
+}
+
+/* ---------- WebAuthn no navegador: conversões (o servidor fala base64url) ---------- */
+function b64urlParaBytes(s){
+  if(typeof s !== 'string') return s;
+  const b64 = s.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4 - (s.length % 4)) % 4);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesParaB64url(buf){
+  const b = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf || []);
+  let bin = '';
+  for(let i=0;i<b.length;i++) bin += String.fromCharCode(b[i]);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function prepRegistroOpcoes(op){
+  const o = JSON.parse(JSON.stringify(op || {}));
+  if(typeof o.challenge === 'string') o.challenge = b64urlParaBytes(o.challenge);
+  if(o.user && typeof o.user.id === 'string') o.user.id = b64urlParaBytes(o.user.id);
+  (o.excludeCredentials || []).forEach(c=>{ if(c && typeof c.id === 'string') c.id = b64urlParaBytes(c.id); });
+  return o;
+}
+function prepLoginOpcoes(op){
+  const o = JSON.parse(JSON.stringify(op || {}));
+  if(typeof o.challenge === 'string') o.challenge = b64urlParaBytes(o.challenge);
+  (o.allowCredentials || []).forEach(c=>{ if(c && typeof c.id === 'string') c.id = b64urlParaBytes(c.id); });
+  return o;
+}
+/* Formato que o SimpleWebAuthn (servidor) espera: ids e campos da resposta
+   em base64url, + transports quando o navegador expõe. */
+function serializarCredencial(cred){
+  const r = cred.response || {};
+  const out = { id: cred.id, rawId: bytesParaB64url(cred.rawId), type: cred.type, response:{}, clientExtensionResults: (cred.getClientExtensionResults ? cred.getClientExtensionResults() : {}) };
+  if(r.clientDataJSON) out.response.clientDataJSON = bytesParaB64url(r.clientDataJSON);
+  if(r.attestationObject) out.response.attestationObject = bytesParaB64url(r.attestationObject);
+  if(r.authenticatorData) out.response.authenticatorData = bytesParaB64url(r.authenticatorData);
+  if(r.signature) out.response.signature = bytesParaB64url(r.signature);
+  if(r.userHandle) out.response.userHandle = bytesParaB64url(r.userHandle);
+  if(cred.authenticatorAttachment) out.authenticatorAttachment = cred.authenticatorAttachment;
+  if(r.getTransports){ try{ out.response.transports = r.getTransports(); }catch(e){} }
+  return out;
+}
+
+/* Monta a sessão a partir da resposta da função — MESMO formato da sessão
+   de sempre (id/nome/login/perfil/permissoes) + o token do servidor. */
+function montarSessaoAuth(dados){
+  const u = (dados && dados.usuario) || {};
+  sessao = { id: u.id, nome: u.nome, login: u.login, perfil: u.perfil, permissoes: u.permissoes || null, token: (dados && dados.token) || null };
+  salvarSessao();
+  // 📍 presença: técnico vinculado registra o ponto do login (evento + coordenadas)
+  if(u.tecnico_nome){ try{ TEC_GPS.nome = u.tecnico_nome; tecEventoLocal('login'); }catch(e){} }
+  entrarApp();
+}
+
 async function fazerLogin(){
   const login = document.getElementById('loginUser').value.trim();
   const senha = document.getElementById('loginPass').value;
   const box = document.getElementById('loginErro');
   box.classList.add('hidden');
   if(!login || !senha){ box.textContent='Informe usuário e senha.'; box.classList.remove('hidden'); return; }
+  /* 1) Caminho NOVO: Edge Function auth — senha conferida no servidor (hash). */
+  const r = await authChamar('login-senha', { login, senha }, null);
+  if(r.tipo === 'ok'){ montarSessaoAuth(r.dados); return; }
+  if(r.tipo === 'erro'){ box.textContent = r.mensagem; box.classList.remove('hidden'); return; }
+  /* 2) FALLBACK — TRANSIÇÃO DO PILOTO: a função auth está indisponível
+        (ainda não implantada ou fora do ar) → login legado, comparando a
+        senha na tabela usuarios como sempre foi. REMOVER este bloco quando
+        a função estiver implantada e o piloto validado (PLANO.md, Etapa 3+).
+        Se a função RESPONDEU (acima), ela é a autoridade e não se cai aqui. */
   try{
     let rows;
     try{ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,permissoes,tecnico_nome`); }
@@ -1550,7 +1657,162 @@ async function fazerLogin(){
     entrarApp();
   }catch(e){ box.textContent='Falha de conexão: '+e.message; box.classList.remove('hidden'); }
 }
-function fazerLogout(){ try{ tecGpsParar(); }catch(e){} sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload(); }
+
+/* Login com passkey (rosto/digital): opções → navigator.credentials.get →
+   verificação. O login digitado (se houver) direciona as credenciais;
+   vazio = modo descoberto (o aparelho oferece as passkeys do domínio). */
+async function entrarComPasskey(){
+  const box = document.getElementById('loginErro');
+  box.classList.add('hidden');
+  const login = document.getElementById('loginUser').value.trim();
+  const op = await authChamar('passkey-login-opcoes', login ? { login } : {}, null);
+  if(op.tipo === 'indisponivel'){ toast('A entrada com digital/rosto ainda não foi ativada neste servidor. Entre com sua senha.', 'alerta'); return; }
+  if(op.tipo === 'erro'){ box.textContent = op.mensagem; box.classList.remove('hidden'); return; }
+  let assercao = null;
+  try{
+    assercao = await navigator.credentials.get({ publicKey: prepLoginOpcoes(op.dados.opcoes) });
+  }catch(e){
+    /* usuário cancelou a biometria ou o aparelho recusou — mensagem suave */
+    toast('Entrada com digital/rosto cancelada. Você pode entrar com a senha.', 'alerta');
+    return;
+  }
+  if(!assercao){ toast('Nenhuma digital/rosto foi apresentada. Tente de novo ou entre com a senha.', 'alerta'); return; }
+  const ver = await authChamar('passkey-login-verificar', { resposta: serializarCredencial(assercao) }, null);
+  if(ver.tipo === 'ok'){ montarSessaoAuth(ver.dados); return; }
+  if(ver.tipo === 'erro'){ box.textContent = ver.mensagem; box.classList.remove('hidden'); return; }
+  toast('Não foi possível concluir a entrada com digital/rosto agora. Entre com sua senha.', 'alerta');
+}
+
+function fazerLogout(){
+  try{ tecGpsParar(); }catch(e){}
+  /* 🔐 Revoga a sessão NO SERVIDOR (best-effort: o keepalive faz a chamada
+     sobreviver ao reload e ela NUNCA bloqueia a saída local). */
+  try{
+    if(sessao && sessao.token){
+      fetch(AUTH_URL, { method:'POST', keepalive:true,
+        headers:{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type':'application/json', 'x-session-token': sessao.token },
+        body: JSON.stringify({ acao:'logout' }) }).catch(()=>{});
+    }
+  }catch(e){}
+  sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload();
+}
+
+/* ================= 🔐 MINHA SEGURANÇA (área logada — TODOS os perfis) =================
+   O botão fica no cabeçalho comum do app (ao lado do nome do usuário), fora
+   da navegação por módulos — por isso até o técnico restrito (só Minhas OS)
+   alcança. As cerimônias exigem sessão COM TOKEN: quem entrou pelo fallback
+   (caminho antigo) confirma a senha de novo (REAUTH via login-senha da
+   função) e o token obtido passa a valer na sessão. */
+function segFecharModal(){ const m = document.getElementById('segModal'); if(m) m.remove(); }
+function segAbrirModal(){
+  if(!sessao) return;
+  segFecharModal();
+  const temToken = !!sessao.token;
+  const temWebAuthn = !!window.PublicKeyCredential;
+  const rotuloPadrao = 'Passkey — ' + new Date().toLocaleDateString('pt-BR');
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 overflow-y-auto" id="segModal" onclick="if(event.target===this)segFecharModal()">
+    <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl my-8">
+      <div class="flex items-start justify-between mb-1">
+        <div class="font-bold text-lg">🔐 Minha segurança</div>
+        <button class="btn-ghost !py-1 !px-2 text-xs" onclick="segFecharModal()">✖️ Fechar</button>
+      </div>
+      <div class="text-sm text-gray-500 mb-4">${esc(sessao.nome || '')} · ${esc(sessao.login || '')}</div>
+      ${temToken ? `
+      <div class="font-bold text-sm mb-2">Rosto / digital (passkey)</div>
+      ${temWebAuthn ? `
+      <label class="lbl">Nome deste aparelho</label>
+      <div class="flex gap-2 mb-2">
+        <input id="segNomeDisp" class="inp text-sm" placeholder="Ex: Celular do Fabricio" value="${esc(rotuloPadrao)}">
+        <button class="btn-brand !w-auto shrink-0" onclick="segCadastrarPasskey()">🔑 Cadastrar</button>
+      </div>` : `
+      <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">Este navegador/aparelho não suporta rosto/digital (WebAuthn) — o cadastro de passkey não está disponível aqui.</div>`}
+      <div id="segListaPasskeys" class="grid gap-2 mb-4"><div class="text-sm text-gray-400">Carregando…</div></div>
+      <div class="font-bold text-sm mb-2">Trocar minha senha</div>
+      <label class="lbl">Senha atual</label>
+      <input id="segSenhaAtual" type="password" class="inp text-sm mb-2" autocomplete="current-password">
+      <label class="lbl">Nova senha (mínimo 8 caracteres)</label>
+      <input id="segSenhaNova" type="password" class="inp text-sm mb-3" autocomplete="new-password">
+      <button class="btn-ghost w-full" onclick="segTrocarSenha()">Trocar senha</button>
+      ` : `
+      <div class="text-sm text-gray-600 mb-3">Esta sessão entrou pelo caminho antigo (sem o servidor de segurança). Para cadastrar rosto/digital ou trocar a senha pelo caminho novo, confirme sua senha — você continua logado, só ganha o token da sessão nova.</div>
+      <label class="lbl">Sua senha</label>
+      <input id="segReauthSenha" type="password" class="inp text-sm mb-3" autocomplete="current-password" onkeydown="if(event.key==='Enter')segReauth()">
+      <button class="btn-brand" onclick="segReauth()">Confirmar e continuar</button>
+      `}
+    </div>
+  </div>`);
+  if(temToken) segCarregarPasskeys();
+}
+async function segReauth(){
+  const senha = document.getElementById('segReauthSenha')?.value || '';
+  if(!senha){ toast('Digite sua senha para continuar.', 'erro'); return; }
+  /* REAUTH: refaz o login-senha PELA FUNÇÃO só para obter o token de sessão
+     (o usuário é o mesmo e segue logado; o token entra na sessão salva). */
+  const r = await authChamar('login-senha', { login: sessao.login, senha }, null);
+  if(r.tipo === 'ok' && r.dados.token){
+    sessao.token = r.dados.token;
+    salvarSessao();
+    toast('Sessão confirmada no servidor de segurança. ✓', 'ok');
+    segAbrirModal();
+    return;
+  }
+  if(r.tipo === 'erro'){ toast(r.mensagem, 'erro'); return; }
+  toast('O servidor de segurança ainda não foi ativado neste ambiente. Tente mais tarde.', 'alerta');
+}
+async function segCarregarPasskeys(){
+  const box = document.getElementById('segListaPasskeys');
+  if(!box) return;
+  const r = await authChamar('listar-minhas-passkeys', {});
+  if(r.tipo !== 'ok'){ box.innerHTML = '<div class="text-sm text-gray-400">Não foi possível carregar suas passkeys agora.</div>'; return; }
+  const lista = r.dados.passkeys || [];
+  if(!lista.length){ box.innerHTML = '<div class="text-sm text-gray-400">Nenhuma passkey cadastrada ainda — cadastre a deste aparelho acima.</div>'; return; }
+  box.innerHTML = lista.map(p => `
+    <div class="flex items-center justify-between gap-2 border rounded-lg px-3 py-2">
+      <div class="min-w-0">
+        <div class="text-sm font-semibold truncate">${esc(p.nome_dispositivo || 'Passkey')}</div>
+        <div class="text-xs text-gray-500">cadastrada em ${fmtDataHora(p.created_at)}${p.ultimo_uso_em ? ' · último uso ' + fmtDataHora(p.ultimo_uso_em) : ''}</div>
+      </div>
+      <button class="btn-ghost !py-1 !px-2 text-xs shrink-0" onclick="segRemoverPasskey('${p.id}')">Remover</button>
+    </div>`).join('');
+}
+async function segCadastrarPasskey(){
+  if(!window.PublicKeyCredential){ toast('Este aparelho/navegador não suporta rosto/digital (WebAuthn).', 'erro'); return; }
+  const nome = (document.getElementById('segNomeDisp')?.value || '').trim();
+  const op = await authChamar('passkey-registro-opcoes', {});
+  if(op.tipo === 'indisponivel'){ toast('O cadastro de digital/rosto ainda não foi ativado neste servidor.', 'alerta'); return; }
+  if(op.tipo === 'erro'){ toast(op.mensagem, 'erro'); return; }
+  let cred = null;
+  try{
+    cred = await navigator.credentials.create({ publicKey: prepRegistroOpcoes(op.dados.opcoes) });
+  }catch(e){
+    /* cancelou a biometria ou o aparelho recusou — mensagem suave */
+    toast('Cadastro cancelado — nenhuma digital/rosto foi criada.', 'alerta');
+    return;
+  }
+  if(!cred){ toast('Cadastro cancelado — nenhuma digital/rosto foi criada.', 'alerta'); return; }
+  const ver = await authChamar('passkey-registro-verificar', { resposta: serializarCredencial(cred), nome_dispositivo: nome || undefined });
+  if(ver.tipo === 'ok'){ toast('Passkey cadastrada. ✓ Na próxima entrada, use "Entrar com digital/rosto".', 'ok'); segCarregarPasskeys(); return; }
+  if(ver.tipo === 'erro'){ toast(ver.mensagem, 'erro'); return; }
+  toast('Não foi possível concluir o cadastro agora. Tente de novo.', 'alerta');
+}
+async function segRemoverPasskey(id){
+  if(!confirm('Remover esta passkey? Neste aparelho você voltará a entrar com a senha.')) return;
+  const r = await authChamar('remover-minha-passkey', { credencial_id: id });
+  if(r.tipo === 'ok'){ toast('Passkey removida.', 'ok'); segCarregarPasskeys(); return; }
+  if(r.tipo === 'erro'){ toast(r.mensagem, 'erro'); return; }
+  toast('Não foi possível remover a passkey agora.', 'alerta');
+}
+async function segTrocarSenha(){
+  const atual = document.getElementById('segSenhaAtual')?.value || '';
+  const nova = document.getElementById('segSenhaNova')?.value || '';
+  if(!atual || !nova){ toast('Preencha a senha atual e a nova senha.', 'erro'); return; }
+  if(nova.length < 8){ toast('A nova senha precisa de no mínimo 8 caracteres.', 'erro'); return; }
+  const r = await authChamar('trocar-senha', { senha_atual: atual, senha_nova: nova });
+  if(r.tipo === 'ok'){ toast('Senha trocada. ✓ Suas outras sessões foram encerradas.', 'ok'); segFecharModal(); return; }
+  if(r.tipo === 'erro'){ toast(r.mensagem, 'erro'); return; }
+  toast('A troca de senha pelo servidor ainda não foi ativada neste ambiente.', 'alerta');
+}
 
 function entrarApp(){
   // sessões salvas antes de a sessão guardar o login: completa o campo (best-effort)
@@ -3903,7 +4165,7 @@ function fmtReais(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimu
 function pedidosBuscaDeb(){ clearTimeout(pedBuscaT); pedBuscaT=setTimeout(carregarPedidos, 400); }
 
 async function apiDELETE(table, params){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:HJSON });
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers: headersREST() });
   if(!r.ok){ const t = await r.text(); throw new Error(`DELETE ${table} → ${r.status}: ${t.slice(0,300)}`); }
 }
 
@@ -10154,6 +10416,9 @@ try{
 /* ================= INIT ================= */
 (function init(){
   try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ try{ aplicarTema('claro'); }catch(e2){ /* tema nunca pode travar o boot */ } }
+  /* 🔐 Botão "Entrar com digital/rosto": só aparece onde o aparelho/navegador
+     suporta WebAuthn. Sem suporte, a tela de login fica exatamente como sempre. */
+  try{ if(window.PublicKeyCredential) document.getElementById('btnPasskeyLogin')?.classList.remove('hidden'); }catch(e){}
   sessao = lerSessao();
   if(sessao && sessao.id){ entrarApp(); }
   // senão, fica na tela de login
