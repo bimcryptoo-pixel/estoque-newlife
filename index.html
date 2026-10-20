@@ -5954,6 +5954,8 @@ function osEquipRender(filtro){
   });
   const selId = document.getElementById('nosEquip').value;
   let html = `<button type="button" class="w-full text-left px-4 py-3 text-base hover:bg-gray-100 border-b border-gray-100 text-gray-500" onclick="osEquipEscolher('')">— nenhum —</button>`;
+  /* item fixo: cadastro rápido de equipamento sem sair da Nova OS */
+  html += `<button type="button" class="w-full text-left px-4 py-3 text-base font-bold text-brand hover:bg-red-50 border-b-2 border-gray-200" onclick="osCadRapEquipAbrir()">＋ Novo equipamento</button>`;
   html += lista.map(e=>{
     const txt = `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}`;
     const sel = String(e.id)===String(selId);
@@ -6001,10 +6003,12 @@ function osCliRender(filtro){
     return fmtCliNome(c.nome,c.tipo).toUpperCase().includes(filtro);
   });
   const selId = document.getElementById('nosCliente').value;
-  div.innerHTML = lista.map(c=>{
+  /* item fixo no TOPO: cadastro rápido sem sair da Nova OS (visível mesmo sem resultados) */
+  const btnNovoCli = `<button type="button" class="w-full text-left px-4 py-3 text-base font-bold text-brand hover:bg-red-50 border-b-2 border-gray-200" onclick="osCadRapClienteAbrir()">＋ Novo cliente</button>`;
+  div.innerHTML = btnNovoCli + (lista.map(c=>{
     const sel = String(c.id)===String(selId);
     return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="osCliEscolher('${c.id}')">${sel?'✅ ':''}${esc(fmtCliNome(c.nome,c.tipo))}</button>`;
-  }).join('') || '<div class="p-4 text-sm text-gray-400">Nenhum cliente encontrado.</div>';
+  }).join('') || '<div class="p-4 text-sm text-gray-400">Nenhum cliente encontrado.</div>');
 }
 function osCliEscolher(id){
   document.getElementById('nosCliente').value = id||'';
@@ -6020,6 +6024,138 @@ function osCliClickFora(e){
   if(!box || box.classList.contains('hidden')) return;
   if(e.target.closest('#nosCliBtn') || e.target.closest('#nosCliLista')) return;
   box.classList.add('hidden');
+}
+/* ============ cadastro rápido DENTRO da Nova OS (cliente/equipamento sem sair do formulário) ============
+   Sub-modal próprio (#modalCadRap, z-index acima do modalOS e dos dropdowns): abrir/fechar NÃO toca no
+   modal da OS — os campos já digitados permanecem intactos. Ao salvar, o registro novo é selecionado. */
+let OS_CAD_RAP_CLI_TRAVA = false, OS_CAD_RAP_EQ_TRAVA = false;
+function osCadRapAbrir(html){
+  osCadRapFechar();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" id="modalCadRap" style="z-index:10060" onclick="if(event.target===this)osCadRapFechar()" onkeydown="if(event.key==='Escape')osCadRapFechar()">
+      <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl my-8">${html}</div>
+    </div>`);
+}
+function osCadRapFechar(){ const m = document.getElementById('modalCadRap'); if(m) m.remove(); }
+function osCadRapClienteAbrir(){
+  const lista = document.getElementById('nosCliLista'); if(lista) lista.classList.add('hidden');
+  osCadRapAbrir(`
+    <div class="font-bold mb-3">＋ Novo cliente</div>
+    <div class="grid gap-2">
+      <div><label class="lbl">Nome *</label><input id="ncrNome" class="inp text-sm" placeholder="Nome do cliente"></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Tipo</label><select id="ncrTipo" class="inp text-sm">
+          <option value="cliente">cliente</option>
+          <option value="interno">interno (NEW LIFE)</option>
+          <option value="perda">perda (vencidos etc.)</option>
+        </select></div>
+        <div><label class="lbl">CNPJ/CPF</label><input id="ncrCnpj" class="inp text-sm" inputmode="numeric" placeholder="Documento"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">E-mail (envio da OS)</label><input id="ncrEmail" class="inp text-sm" type="email" placeholder="E-mail"></div>
+        <div><label class="lbl">Telefone</label><input id="ncrTel" class="inp text-sm" placeholder="Telefone"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Inscrição Estadual</label><input id="ncrIe" class="inp text-sm" inputmode="numeric"></div>
+        <div><label class="lbl">CEP</label><input id="ncrCep" class="inp text-sm" inputmode="numeric"></div>
+      </div>
+      <div><label class="lbl">Endereço</label><input id="ncrEnd" class="inp text-sm" placeholder="Rua/av"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <div><label class="lbl">Número</label><input id="ncrNum" class="inp text-sm"></div>
+        <div class="col-span-2"><label class="lbl">Bairro</label><input id="ncrBairro" class="inp text-sm"></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="col-span-2"><label class="lbl">Cidade</label><input id="ncrCidade" class="inp text-sm"></div>
+        <div><label class="lbl">UF</label><input id="ncrUf" class="inp text-sm" maxlength="2" value="CE"></div>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <button class="btn-ghost flex-1" onclick="osCadRapFechar()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" id="ncrBtnSalvar" onclick="osCadRapClienteSalvar()">Salvar e selecionar</button>
+    </div>`);
+  setTimeout(()=>{ const i = document.getElementById('ncrNome'); if(i) i.focus(); }, 50);
+}
+async function osCadRapClienteSalvar(){
+  if(OS_CAD_RAP_CLI_TRAVA) return;
+  const nome = document.getElementById('ncrNome').value.trim();
+  const tipo = document.getElementById('ncrTipo').value;
+  const cnpj = document.getElementById('ncrCnpj').value.trim()||null;
+  if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
+  if(duplicado('clientes', nome, 'Cliente')) return;
+  /* payload IDÊNTICO ao criarCliente() de Cadastros (+ telefone, coluna gravada no editor de cliente) */
+  const body = { nome, tipo, cnpj,
+    email: document.getElementById('ncrEmail').value.trim()||null,
+    telefone: document.getElementById('ncrTel').value.trim()||null,
+    ativo: true, cnpj_cpf: cnpj,
+    inscricao_estadual: document.getElementById('ncrIe').value.replace(/\D/g,'')||null,
+    endereco: document.getElementById('ncrEnd').value.trim()||null,
+    numero: document.getElementById('ncrNum').value.trim()||null,
+    bairro: document.getElementById('ncrBairro').value.trim()||null,
+    cidade: document.getElementById('ncrCidade').value.trim()||null,
+    uf: (document.getElementById('ncrUf').value.trim()||'CE').toUpperCase(),
+    cep: document.getElementById('ncrCep').value.replace(/\D/g,'')||null };
+  OS_CAD_RAP_CLI_TRAVA = true;
+  const btn = document.getElementById('ncrBtnSalvar');
+  if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
+  try{
+    const novo = await apiPOST('clientes', body);
+    await carregarClientesCache();
+    if(!(typeof CLIENTES!=='undefined'?CLIENTES:[]).some(c=>String(c.id)===String(novo.id)))
+      CLIENTES.push({ id:novo.id, nome:novo.nome, tipo:novo.tipo, cnpj:novo.cnpj, ativo:true });
+    osCadRapFechar();
+    osCliEscolher(novo.id);
+    toast('Cliente cadastrado e selecionado. ✓','ok');
+  }catch(e){
+    toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Cliente já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro');
+    if(btn){ btn.disabled = false; btn.textContent = 'Salvar e selecionar'; }
+  }finally{ OS_CAD_RAP_CLI_TRAVA = false; }
+}
+function osCadRapEquipAbrir(){
+  const cid = (document.getElementById('nosCliente')||{}).value||'';
+  const lista = document.getElementById('nosEquipLista'); if(lista) lista.classList.add('hidden');
+  if(!cid){ toast('Escolha o cliente antes de cadastrar o equipamento.','alerta'); return; }
+  const cli = (typeof CLIENTES!=='undefined'?CLIENTES:[]).find(c=>String(c.id)===String(cid));
+  osCadRapAbrir(`
+    <div class="font-bold mb-3">＋ Novo equipamento</div>
+    <div class="grid gap-2">
+      <div><label class="lbl">Cliente</label><div class="inp text-sm bg-gray-50">${esc(cli ? fmtCliNome(cli.nome, cli.tipo) : '—')}</div></div>
+      <div><label class="lbl">Nome *</label><input id="nerNome" class="inp text-sm" placeholder="Ex: ACL TOP 350"></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Nº de série</label><input id="nerSerie" class="inp text-sm" placeholder="Nº de série"></div>
+        <div><label class="lbl">Tipo</label><select id="nerTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select></div>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <button class="btn-ghost flex-1" onclick="osCadRapFechar()">Cancelar</button>
+      <button class="btn-brand flex-1 !w-auto" id="nerBtnSalvar" onclick="osCadRapEquipSalvar()">Salvar e selecionar</button>
+    </div>`);
+  setTimeout(()=>{ const i = document.getElementById('nerNome'); if(i) i.focus(); }, 50);
+}
+async function osCadRapEquipSalvar(){
+  if(OS_CAD_RAP_EQ_TRAVA) return;
+  const cliente_id = (document.getElementById('nosCliente')||{}).value||'';
+  if(!cliente_id){ toast('Escolha o cliente antes de cadastrar o equipamento.','alerta'); osCadRapFechar(); return; }
+  const nome = document.getElementById('nerNome').value.trim();
+  if(!nome){ toast('Informe o nome do equipamento.','erro'); return; }
+  /* mesmas colunas do cadastro embutido da Nova OS / osSalvarEquipamento */
+  const body = { cliente_id, nome,
+    numero_serie: document.getElementById('nerSerie').value.trim()||null,
+    tipo: document.getElementById('nerTipo').value||null };
+  OS_CAD_RAP_EQ_TRAVA = true;
+  const btn = document.getElementById('nerBtnSalvar');
+  if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
+  try{
+    const eq = await apiPOST('equipamentos', body);
+    await osCarregarEquips();
+    if(!OS_EQUIPS.some(e=>String(e.id)===String(eq.id)))
+      OS_EQUIPS.push({ id:eq.id, nome:eq.nome, numero_serie:eq.numero_serie });
+    osCadRapFechar();
+    osEquipEscolher(eq.id);
+    toast('Equipamento cadastrado e selecionado. ✓','ok');
+  }catch(e){
+    toast('Erro: '+e.message,'erro');
+    if(btn){ btn.disabled = false; btn.textContent = 'Salvar e selecionar'; }
+  }finally{ OS_CAD_RAP_EQ_TRAVA = false; }
 }
 /* ============ seletor de TIPO DE OS ============ */
 function osTipoAbrir(){
