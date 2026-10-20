@@ -566,9 +566,9 @@
           <div class="overflow-x-auto -mx-4 px-4">
             <table class="w-full text-sm">
               <thead><tr class="text-left text-xs text-gray-500 uppercase">
-                <th class="py-2 pr-2">Mês</th><th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th><th class="py-2 text-right">Qtd</th>
+                <th class="py-2 pr-2">Mês</th><th class="py-2 pr-2">Cliente</th><th class="py-2 pr-2">Produto</th><th class="py-2 pr-2">Linha</th><th class="py-2 text-right">Qtd</th><th class="py-2"></th>
               </tr></thead>
-              <tbody id="tbodyConsumo"><tr><td colspan="5" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
+              <tbody id="tbodyConsumo"><tr><td colspan="6" class="py-4 text-gray-400">Carregando…</td></tr></tbody>
             </table>
           </div>
           <div id="consumoMais" class="text-xs text-gray-400 mt-2"></div>
@@ -673,7 +673,7 @@
         <div id="invResumoWrap" class="card p-4 mb-4 hidden">
           <div class="flex items-center justify-between flex-wrap gap-2">
             <div class="text-sm">📝 <b id="invResumo">0</b> produto(s) com diferença</div>
-            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="confirmarInventario()">Confirmar inventário</button>
+            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="btnConfirmarInventario" onclick="confirmarInventario()">Confirmar inventário</button>
           </div>
         </div>
         <div class="card overflow-hidden">
@@ -1528,7 +1528,7 @@ async function fazerLogin(){
     entrarApp();
   }catch(e){ box.textContent='Falha de conexão: '+e.message; box.classList.remove('hidden'); }
 }
-function fazerLogout(){ sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload(); }
+function fazerLogout(){ try{ tecGpsParar(); }catch(e){} sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload(); }
 
 function entrarApp(){
   document.getElementById('telaLogin').classList.add('hidden');
@@ -1578,6 +1578,9 @@ function aplicarPermissoesNav(){
 function mostrarAba(aba){
   if(!podeAba(aba)){ toast('Módulo não liberado para o seu usuário.','erro'); return; }
   if(aba==='admin' && sessao.perfil!=='admin'){ toast('Acesso restrito ao administrador.','erro'); return; }
+  // 📍 GPS (pré-piloto): fora das telas de rastreio (Minhas OSs / Mapa), o timer de
+  //    coleta para — sem drenar bateria nem inflar o histórico fora do painel.
+  if(aba!=='ostecnico' && aba!=='mapaequipe'){ try{ tecGpsParar(); }catch(e){} }
   ABAS.forEach(a=>{
     document.getElementById('aba-'+a).classList.toggle('hidden', a!==aba);
   });
@@ -1733,14 +1736,19 @@ function invAtualizarDif(id){
     cel.className = 'py-2 pr-3 text-right tabular-nums ' + (dif===0?'text-gray-400':(dif>0?'text-green-700 font-bold':'text-red-700 font-bold')); }
   document.getElementById('invResumo').textContent = INV.rows.filter(x=>Number(INV.contados[x.id] ?? x.sistema) - x.sistema !== 0).length;
 }
+let INV_CONFIRMANDO = false; // trava anti-duplo-clique (pré-piloto)
 async function confirmarInventario(){
   if(sessao?.perfil !== 'admin'){ toast('Inventário restrito ao administrador.','erro'); return; }
   if(!INV) return;
+  if(INV_CONFIRMANDO) return;
   const difs = INV.rows
     .map(r=>({ ...r, contado: Number(INV.contados[r.id] ?? r.sistema), dif: Number(INV.contados[r.id] ?? r.sistema) - r.sistema }))
     .filter(r=>r.dif !== 0);
   if(!difs.length){ toast('Nenhuma diferença para ajustar.','alerta'); return; }
   if(!confirm(`Confirmar inventário de ${INV.local}?\n${difs.length} produto(s) com diferença serão ajustados.`)) return;
+  INV_CONFIRMANDO = true;
+  const btnInv = document.getElementById('btnConfirmarInventario');
+  if(btnInv){ btnInv.disabled = true; btnInv.textContent = 'Confirmando…'; }
   const obs = `[inventario] Contagem ${hojeISO()} — ${INV.local}`;
   let ok = 0, erros = [];
   for(const r of difs){
@@ -1753,28 +1761,32 @@ async function confirmarInventario(){
         for(const l of lotes){
           if(falta <= 0) break;
           const q = Math.min(Number(l.quantidade_atual), falta);
-          await apiPOST('movimentacoes', { tipo:'ajuste_saida', produto_id:r.id, lote_id:l.id, quantidade:q, data:hojeISO(), observacao:`${obs} — falta ${fmtQtd(-r.dif)} un` });
+          await apiPOST('movimentacoes', { tipo:'ajuste_saida', produto_id:r.id, lote_id:l.id, quantidade:q, data:hojeISO(), usuario_id:sessao.id, observacao:`${obs} — falta ${fmtQtd(-r.dif)} un` });
           await apiPATCH('lotes', `id=eq.${l.id}`, { quantidade_atual: Number(l.quantidade_atual)-q });
           falta -= q;
         }
       }else{
-        // SOBRA: entrada no lote mais próximo do vencimento (ou cria lote)
+        // SOBRA: mesma ordem da FALTA (pré-piloto) — movimentação primeiro, lote depois
         let lotes = await apiGET(`lotes?produto_id=eq.${r.id}&local=eq.${encodeURIComponent(INV.local)}&quantidade_atual=gt.0&select=id,numero_lote,validade,quantidade_atual&order=validade.asc`);
-        let loteId;
+        let loteId, saldoLote;
         if(lotes.length){
           loteId = lotes[0].id;
-          await apiPATCH('lotes', `id=eq.${loteId}`, { quantidade_atual: Number(lotes[0].quantidade_atual)+r.dif });
+          saldoLote = Number(lotes[0].quantidade_atual);
         }else{
-          const novo = await apiPOST('lotes', { produto_id:r.id, numero_lote:'INVENTARIO', validade:null, quantidade_atual:r.dif, local:INV.local });
+          const novo = await apiPOST('lotes', { produto_id:r.id, numero_lote:'INVENTARIO', validade:null, quantidade_atual:0, local:INV.local });
           loteId = novo.id;
+          saldoLote = 0;
         }
-        await apiPOST('movimentacoes', { tipo:'ajuste_entrada', produto_id:r.id, lote_id:loteId, quantidade:r.dif, data:hojeISO(), observacao:`${obs} — sobra ${fmtQtd(r.dif)} un` });
+        await apiPOST('movimentacoes', { tipo:'ajuste_entrada', produto_id:r.id, lote_id:loteId, quantidade:r.dif, data:hojeISO(), usuario_id:sessao.id, observacao:`${obs} — sobra ${fmtQtd(r.dif)} un` });
+        await apiPATCH('lotes', `id=eq.${loteId}`, { quantidade_atual: saldoLote + r.dif });
       }
       ok++;
     }catch(e){ erros.push(`${r.nome}: ${e.message}`); }
   }
   toast(erros.length ? `Inventário parcial: ${ok} ok, ${erros.length} erro(s).` : `Inventário confirmado: ${ok} ajuste(s).`, erros.length ? 'alerta' : 'ok');
   if(erros.length) console.warn('Inventário — erros:', erros);
+  INV_CONFIRMANDO = false;
+  if(btnInv){ btnInv.disabled = false; btnInv.textContent = 'Confirmar inventário'; }
   carregarInventario();
   carregarDashboard();
 }
@@ -2654,6 +2666,8 @@ async function rastreioBuscar(){
   try{
     const [lote] = await apiGET(`lotes?id=eq.${loteId}&select=numero_lote,validade,quantidade_atual,local`);
     const movs = await apiGET(`movimentacoes?lote_id=eq.${loteId}&select=*,usuarios(nome)&order=data.asc&order=created_at.asc`);
+    LOTE_RASTREIO = { id: loteId, ...lote, nMovs: movs.length };
+    const ehAdminLote = (typeof sessao!=='undefined' && sessao && sessao.perfil==='admin');
     let saldo = 0;
     const linhas = movs.map(m=>{
       const t = TIPOS[m.tipo]||{label:m.tipo,sinal:0};
@@ -2672,9 +2686,69 @@ async function rastreioBuscar(){
     box.innerHTML = `<div class="card p-4">
       <div class="font-bold mb-1">📦 ${esc(pNome)} — lote ${esc(lote.numero_lote)} <span class="text-xs font-semibold text-gray-500">· 📍 ${esc(lote.local||'Fortaleza')}</span></div>
       <div class="text-xs text-gray-500 mb-3">Validade: ${fmtData(lote.validade)} · Saldo atual: <b>${fmtQtd(lote.quantidade_atual)}</b> · ${movs.length} movimentação(ões)</div>
+      ${ehAdminLote?`<div class="flex gap-2 mb-3">
+        <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="abrirEditorLote()">✏️ Editar lote</button>
+        ${(Number(lote.quantidade_atual)===0 && movs.length===0)?`<button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs !text-red-600 !border-red-300" onclick="excluirLoteRastreio()">🗑️ Excluir lote</button>`:''}
+      </div>`:''}
       ${linhas || '<div class="text-sm text-gray-400">Nenhuma movimentação registrada.</div>'}
     </div>`;
   }catch(e){ box.innerHTML='<div class="card p-4 text-red-600 text-sm">Erro: '+esc(e.message)+'</div>'; }
+}
+
+/* ---------- ✏️ editar / excluir lote (admin, via Rastreio — pré-piloto) ---------- */
+let LOTE_RASTREIO = null;
+function abrirEditorLote(){
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Editar lote é restrito ao administrador.','erro'); return; }
+  const l = LOTE_RASTREIO; if(!l) return;
+  modalEdicaoCad('✏️ Editar lote', `
+    <div class="grid gap-2">
+      <div><label class="lbl">Nº do lote *</label><input id="edLoteNum" class="inp text-sm" value="${esc(l.numero_lote||'')}"></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Validade</label><input id="edLoteVal" type="date" class="inp text-sm" value="${esc(String(l.validade||'').slice(0,10))}"></div>
+        <div><label class="lbl">Local</label><select id="edLoteLocal" class="inp text-sm">${LOCAIS.map(x=>`<option ${x===(l.local||'Fortaleza')?'selected':''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div class="text-xs text-gray-400">Saldo não é editável aqui (use Inventário/Ajuste). Saldo atual: <b>${fmtQtd(l.quantidade_atual)}</b></div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="btn-ghost !w-auto px-4" onclick="fecharEdicaoCad()">Cancelar</button>
+      <button class="btn-brand !w-auto px-4" onclick="salvarEditorLote()">Salvar alterações</button>
+    </div>`);
+}
+async function salvarEditorLote(){
+  const l = LOTE_RASTREIO; if(!l) return;
+  const numero = document.getElementById('edLoteNum').value.trim();
+  if(!numero){ toast('Informe o nº do lote.','erro'); return; }
+  try{
+    await apiPATCH('lotes', `id=eq.${l.id}`, {
+      numero_lote: numero,
+      validade: document.getElementById('edLoteVal').value||null,
+      local: document.getElementById('edLoteLocal').value,
+    });
+    toast('Lote atualizado. ✓','ok');
+    fecharEdicaoCad();
+    await rastreioCarregarLotes();
+    document.getElementById('rLote').value = l.id;
+    rastreioBuscar();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function excluirLoteRastreio(){
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Excluir lote é restrito ao administrador.','erro'); return; }
+  const l = LOTE_RASTREIO; if(!l) return;
+  // reconfere no servidor: só exclui com saldo 0 E zero movimentações
+  try{
+    const [atual] = await apiGET(`lotes?id=eq.${l.id}&select=quantidade_atual`);
+    const movs = await apiGET(`movimentacoes?lote_id=eq.${l.id}&select=id&limit=1`);
+    if(!atual || Number(atual.quantidade_atual)!==0){ toast('Só é possível excluir lote com saldo 0.','erro'); return; }
+    if(movs.length){ toast('Este lote tem movimentações e não pode ser excluído.','erro'); return; }
+  }catch(e){ toast('Erro: '+e.message,'erro'); return; }
+  if(!confirm(`Excluir o lote ${l.numero_lote}? Ele está com saldo 0 e sem movimentações.`)) return;
+  try{
+    await apiDELETE('lotes', `id=eq.${l.id}`);
+    toast('Lote excluído. ✓','ok');
+    LOTE_RASTREIO = null;
+    document.getElementById('rastreioResult').innerHTML = '';
+    await rastreioCarregarLotes();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ================= EMPRÉSTIMOS ================= */
@@ -2735,7 +2809,7 @@ async function carregarAdmin(){
             <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
             ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}
             ${u.tecnico_nome?`<span class="badge bg-blue-100 text-blue-800 ml-1">👷 ${esc(u.tecnico_nome)}</span>`:''}</div>
-          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button><button class="text-xs font-bold underline mr-2 brand" onclick="vincularTecnico('${u.id}')">👷 técnico</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:''}
+          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button><button class="text-xs font-bold underline mr-2 brand" onclick="vincularTecnico('${u.id}')">👷 técnico</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:`<span class="shrink-0 whitespace-nowrap"><button class="text-xs text-green-700 font-bold underline" onclick="reativarUsuario('${u.id}')">reativar</button></span>`}
         </div>
         <div id="permBox-${u.id}" class="hidden mt-2 border rounded-xl p-3 bg-gray-50"></div>
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
@@ -2834,6 +2908,7 @@ async function criarUsuario(){
         perfil=document.getElementById('uPerfil').value,
         tecnico_nome=document.getElementById('uTecnico').value.trim()||null;
   if(!nome||!login||!senha){ toast('Preencha nome, login e senha.','erro'); return; }
+  if(senha.length<4){ toast('A senha precisa de no mínimo 4 caracteres.','erro'); return; } // mesma regra do editor de senhas (pré-piloto)
   try{
     await apiPOST('usuarios',{nome,login,senha,perfil,ativo:true,tecnico_nome});
     toast('Usuário criado. ✓','ok');
@@ -2846,6 +2921,13 @@ async function desativarUsuario(id){
   const nome = u ? u.nome : 'este usuário';
   if(!confirm(`Desativar o usuário ${nome}?`)) return;
   try{ await apiPATCH('usuarios',`id=eq.${id}`,{ativo:false}); toast('Usuário desativado.','ok'); carregarAdmin(); }
+  catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function reativarUsuario(id){
+  const u = (cacheUsuarios||[]).find(x=>x.id===id);
+  const nome = u ? u.nome : 'este usuário';
+  if(!confirm(`Reativar o usuário ${nome}?`)) return;
+  try{ await apiPATCH('usuarios',`id=eq.${id}`,{ativo:true}); toast('Usuário reativado. ✓','ok'); carregarAdmin(); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 /* ---------- Editor de senhas (admin) — 03/10/2026 ---------- */
@@ -2929,8 +3011,13 @@ function nomeFracao(id){
   return u ? u.nome : 'fração';
 }
 function linhaCadastro(item, tabela, detalhe){
-  const btnEditar = tabela==='produtos'
-    ? `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorProduto('${item.id}')">✏️ editar</button>` : '';
+  let btnEditar = '';
+  if(tabela==='produtos')
+    btnEditar = `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorProduto('${item.id}')">✏️ editar</button>`;
+  else if(tabela==='clientes')
+    btnEditar = `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorCliente('${item.id}')">✏️ editar</button>`;
+  else if(tabela==='fornecedores'||tabela==='transportadoras')
+    btnEditar = `<button class="text-xs font-bold underline shrink-0 text-blue-700 mr-2" onclick="abrirEditorFornTrans('${tabela}','${item.id}')">✏️ editar</button>`;
   return `<div class="flex items-center justify-between py-1.5 rowline">
     <div class="min-w-0"><b>${esc(item.nome)}</b> <span class="text-xs text-gray-500">${detalhe}</span>
     ${item.ativo?'':' <span class="badge bg-gray-200 text-gray-500">inativo</span>'}</div>
@@ -3004,6 +3091,124 @@ async function toggleCadastro(tabela, id, novoAtivo){
     if(tabela==='produtos'){ await carregarProdutosCache(); preencherDatalistProdutos(); }
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
+/* ---------- ✏️ editar cadastros: cliente / fornecedor / transportadora (pré-piloto) ---------- */
+function modalEdicaoCad(titulo, corpoHtml){
+  const old = document.getElementById('editarCadModal'); if(old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 overflow-y-auto" id="editarCadModal" onclick="if(event.target===this)this.remove()">
+      <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl my-8">
+        <div class="font-bold text-lg mb-3">${titulo}</div>
+        ${corpoHtml}
+      </div>
+    </div>`);
+}
+function fecharEdicaoCad(){ const m = document.getElementById('editarCadModal'); if(m) m.remove(); }
+let ED_CLI_ID = null;
+async function abrirEditorCliente(id){
+  try{
+    const [c] = await apiGET(`clientes?id=eq.${id}&select=*`);
+    if(!c){ toast('Cliente não encontrado.','erro'); return; }
+    ED_CLI_ID = id;
+    modalEdicaoCad('✏️ Editar cliente', `
+      <div class="grid gap-2">
+        <div><label class="lbl">Nome *</label><input id="edCliNome" class="inp text-sm" value="${esc(c.nome||'')}"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="lbl">Tipo</label><select id="edCliTipo" class="inp text-sm">
+            ${['cliente','interno','perda'].map(t=>`<option value="${t}" ${c.tipo===t?'selected':''}>${t==='cliente'?'cliente':t==='interno'?'interno (NEW LIFE)':'perda (vencidos etc.)'}</option>`).join('')}
+          </select></div>
+          <div><label class="lbl">CNPJ/CPF</label><input id="edCliCnpj" class="inp text-sm" value="${esc(c.cnpj||c.cnpj_cpf||'')}"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="lbl">E-mail (envio da OS)</label><input id="edCliEmail" class="inp text-sm" type="email" value="${esc(c.email||'')}"></div>
+          <div><label class="lbl">Telefone</label><input id="edCliTel" class="inp text-sm" value="${esc(c.telefone||'')}"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="lbl">Inscrição Estadual</label><input id="edCliIe" class="inp text-sm" value="${esc(c.inscricao_estadual||'')}"></div>
+          <div><label class="lbl">CEP</label><input id="edCliCep" class="inp text-sm" value="${esc(c.cep||'')}"></div>
+        </div>
+        <div><label class="lbl">Endereço</label><input id="edCliEnd" class="inp text-sm" value="${esc(c.endereco||'')}"></div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="lbl">Número</label><input id="edCliNum" class="inp text-sm" value="${esc(c.numero||'')}"></div>
+          <div class="col-span-2"><label class="lbl">Bairro</label><input id="edCliBairro" class="inp text-sm" value="${esc(c.bairro||'')}"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-2"><label class="lbl">Cidade</label><input id="edCliCidade" class="inp text-sm" value="${esc(c.cidade||'')}"></div>
+          <div><label class="lbl">UF</label><input id="edCliUf" class="inp text-sm" maxlength="2" value="${esc(c.uf||'CE')}"></div>
+        </div>
+        <label class="flex items-center gap-2 text-sm mt-1"><input type="checkbox" id="edCliAtivo" ${c.ativo!==false?'checked':''}> Cadastro ativo</label>
+      </div>
+      <div class="flex gap-2 justify-end mt-4">
+        <button class="btn-ghost !w-auto px-4" onclick="fecharEdicaoCad()">Cancelar</button>
+        <button class="btn-brand !w-auto px-4" onclick="salvarEditorCliente()">Salvar alterações</button>
+      </div>`);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function salvarEditorCliente(){
+  if(!ED_CLI_ID) return;
+  const nome = document.getElementById('edCliNome').value.trim();
+  if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
+  const dup = (CLIENTES||[]).find(x=>x.id!==ED_CLI_ID && normNome(x.nome)===normNome(nome));
+  if(dup){ toast('⚠️ Já existe outro cliente com esse nome.','alerta'); return; }
+  const cnpj = document.getElementById('edCliCnpj').value.trim()||null;
+  const body = {
+    nome,
+    tipo: document.getElementById('edCliTipo').value,
+    cnpj, cnpj_cpf: cnpj,
+    email: document.getElementById('edCliEmail').value.trim()||null,
+    telefone: document.getElementById('edCliTel').value.trim()||null,
+    inscricao_estadual: document.getElementById('edCliIe').value.replace(/\D/g,'')||null,
+    cep: document.getElementById('edCliCep').value.replace(/\D/g,'')||null,
+    endereco: document.getElementById('edCliEnd').value.trim()||null,
+    numero: document.getElementById('edCliNum').value.trim()||null,
+    bairro: document.getElementById('edCliBairro').value.trim()||null,
+    cidade: document.getElementById('edCliCidade').value.trim()||null,
+    uf: (document.getElementById('edCliUf').value.trim()||'CE').toUpperCase(),
+    ativo: document.getElementById('edCliAtivo').checked,
+  };
+  try{
+    await apiPATCH('clientes', `id=eq.${ED_CLI_ID}`, body);
+    toast('Cliente atualizado. ✓','ok');
+    ED_CLI_ID = null;
+    fecharEdicaoCad();
+    await carregarClientesCache();
+    carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+let ED_FT = null; // {tabela, id} do editor de fornecedor/transportadora
+function abrirEditorFornTrans(tabela, id){
+  const item = fonteCad(tabela).find(x=>x.id===id);
+  if(!item){ toast('Cadastro não encontrado.','erro'); return; }
+  ED_FT = { tabela, id };
+  const rotulo = tabela==='fornecedores' ? 'fornecedor' : 'transportadora';
+  modalEdicaoCad(`✏️ Editar ${rotulo}`, `
+    <div class="grid gap-2">
+      <div><label class="lbl">Nome *</label><input id="edFtNome" class="inp text-sm" value="${esc(item.nome||'')}"></div>
+      <div><label class="lbl">Contato</label><input id="edFtContato" class="inp text-sm" value="${esc(item.contato||'')}"></div>
+      <div><label class="lbl">CNPJ</label><input id="edFtCnpj" class="inp text-sm" value="${esc(item.cnpj||'')}"></div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="btn-ghost !w-auto px-4" onclick="fecharEdicaoCad()">Cancelar</button>
+      <button class="btn-brand !w-auto px-4" onclick="salvarEditorFornTrans()">Salvar alterações</button>
+    </div>`);
+}
+async function salvarEditorFornTrans(){
+  if(!ED_FT) return;
+  const nome = document.getElementById('edFtNome').value.trim();
+  if(!nome){ toast('Informe o nome.','erro'); return; }
+  const dup = fonteCad(ED_FT.tabela).find(x=>x.id!==ED_FT.id && normNome(x.nome)===normNome(nome));
+  if(dup){ toast('⚠️ Já existe outro cadastro com esse nome.','alerta'); return; }
+  try{
+    await apiPATCH(ED_FT.tabela, `id=eq.${ED_FT.id}`, {
+      nome,
+      contato: document.getElementById('edFtContato').value.trim()||null,
+      cnpj: document.getElementById('edFtCnpj').value.trim()||null,
+    });
+    toast('Cadastro atualizado. ✓','ok');
+    ED_FT = null;
+    fecharEdicaoCad();
+    carregarCadastros();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
 let EP_ID = null;
 function abrirEditorProduto(id){
   const p = (CAD.produtos||[]).find(x=>x.id===id);
@@ -3033,6 +3238,9 @@ async function salvarProduto(){
   if(!EP_ID) return;
   const nome = document.getElementById('epNome').value.trim();
   if(!nome){ toast('Informe o nome do produto.','erro'); return; }
+  // trava de duplicado também na EDIÇÃO (pré-piloto): outro produto com o mesmo nome normalizado
+  const dupProd = (CAD.produtos||[]).find(x=>x.id!==EP_ID && normNome(x.nome)===normNome(nome));
+  if(dupProd){ toast(`⚠️ Produto já cadastrado${dupProd.ativo?'':' (inativo — busque e reative)'}.`,'alerta'); return; }
   const aliqRaw = document.getElementById('epAliqIcms').value.replace(',','.').trim();
   const fr = document.getElementById('epFracionavel').checked;
   const fpuRaw = String(document.getElementById('epFracoesPorUn').value||'').replace(',','.').trim();
@@ -3244,9 +3452,12 @@ async function carregarConsumo(){
     desenharBarras('chProduto', topEntries(porProd,10), true, false);
     desenharBarras('chMes', Object.entries(porMes).sort((a,b)=>a[0]<b[0]?-1:1), false, true);
     const hist = rows.slice(0,150);
-    document.getElementById('tbodyConsumo').innerHTML = hist.map(r=>
-      `<tr class="rowline"><td class="py-2 pr-2 whitespace-nowrap">${String(r.mes).padStart(2,'0')}/${r.ano}</td><td class="py-2 pr-2">${esc(fmtCliNome(r.clientes.nome, r.clientes.tipo))}</td><td class="py-2 pr-2">${esc(r.produtos.nome)}</td><td class="py-2 pr-2 text-gray-500">${esc(r.produtos.linha)}</td><td class="py-2 text-right font-bold">${r.quantidade.toLocaleString('pt-BR')}</td></tr>`
-    ).join('') || '<tr><td colspan="5" class="py-4 text-gray-400">Nenhum registro no período.</td></tr>';
+    document.getElementById('tbodyConsumo').innerHTML = hist.map(r=>{
+      // lançamento MANUAL = não veio de um pedido (pedidos gravam observacao '[pedido N] ...') — só manual pode editar/excluir aqui (pré-piloto)
+      const manual = !String(r.observacao||'').startsWith('[pedido ');
+      return `<tr class="rowline"><td class="py-2 pr-2 whitespace-nowrap">${String(r.mes).padStart(2,'0')}/${r.ano}</td><td class="py-2 pr-2">${esc(fmtCliNome(r.clientes.nome, r.clientes.tipo))}</td><td class="py-2 pr-2">${esc(r.produtos.nome)}</td><td class="py-2 pr-2 text-gray-500">${esc(r.produtos.linha)}</td><td class="py-2 text-right font-bold">${r.quantidade.toLocaleString('pt-BR')}</td><td class="py-2 pl-2 whitespace-nowrap text-right">${manual?`<button class="text-xs text-blue-700 font-bold underline mr-2" onclick="editarConsumoManual('${r.id}')">✏️</button><button class="text-xs text-red-700 font-bold underline" onclick="excluirConsumoManual('${r.id}')">🗑️</button>`:''}</td></tr>`;
+    }
+    ).join('') || '<tr><td colspan="6" class="py-4 text-gray-400">Nenhum registro no período.</td></tr>';
     document.getElementById('consumoMais').textContent =
       rows.length>150 ? `Mostrando 150 de ${rows.length.toLocaleString('pt-BR')} registros.` : `${rows.length} registros.`;
   }catch(e){ toast('Erro ao carregar consumo: '+e.message,'erro'); }
@@ -3423,6 +3634,54 @@ async function lancarConsumo(){
     document.getElementById('lcObs').value='';
     document.getElementById('lcProduto').value='';
     CONSUMO_CACHE=null;
+    carregarConsumo();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
+/* ---------- consumo MANUAL: editar / excluir (pré-piloto) ---------- */
+let ED_CONS_ID = null;
+function editarConsumoManual(id){
+  const r = (CONSUMO_CACHE||[]).find(x=>x.id===id); if(!r) return;
+  if(String(r.observacao||'').startsWith('[pedido ')){ toast('Consumo de pedido se corrige pelo próprio pedido (desfazer/cancelar).','alerta'); return; }
+  ED_CONS_ID = id;
+  modalEdicaoCad('✏️ Editar consumo manual', `
+    <div class="text-sm text-gray-600 mb-2">${esc(r.clientes?fmtCliNome(r.clientes.nome,r.clientes.tipo):'')} · ${esc(r.produtos?r.produtos.nome:'')}</div>
+    <div class="grid gap-2">
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Mês</label><input id="edConsMes" type="month" class="inp text-sm" value="${r.ano}-${String(r.mes).padStart(2,'0')}"></div>
+        <div><label class="lbl">Quantidade *</label><input id="edConsQtd" type="number" min="1" class="inp text-sm" value="${r.quantidade}"></div>
+      </div>
+      <div><label class="lbl">Observação</label><input id="edConsObs" class="inp text-sm" value="${esc(r.observacao||'')}"></div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button class="btn-ghost !w-auto px-4" onclick="fecharEdicaoCad()">Cancelar</button>
+      <button class="btn-brand !w-auto px-4" onclick="salvarConsumoManual()">Salvar alterações</button>
+    </div>`);
+}
+async function salvarConsumoManual(){
+  if(!ED_CONS_ID) return;
+  const qtd = parseInt(document.getElementById('edConsQtd').value,10);
+  const mesV = document.getElementById('edConsMes').value;
+  if(!qtd||qtd<=0){ toast('Informe uma quantidade válida.','erro'); return; }
+  if(!mesV){ toast('Informe o mês.','erro'); return; }
+  const [ano,mes] = mesV.split('-').map(Number);
+  try{
+    await apiPATCH('consumo', `id=eq.${ED_CONS_ID}`, { quantidade:qtd, ano, mes, observacao: document.getElementById('edConsObs').value.trim()||null });
+    toast('Consumo atualizado. ✓','ok');
+    ED_CONS_ID = null;
+    fecharEdicaoCad();
+    CONSUMO_CACHE = null;
+    carregarConsumo();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function excluirConsumoManual(id){
+  const r = (CONSUMO_CACHE||[]).find(x=>x.id===id); if(!r) return;
+  if(String(r.observacao||'').startsWith('[pedido ')){ toast('Consumo de pedido se corrige pelo próprio pedido (desfazer/cancelar).','alerta'); return; }
+  if(!confirm(`Excluir este lançamento de consumo?\n${r.quantidade} un · ${String(r.mes).padStart(2,'0')}/${r.ano} · ${r.produtos?r.produtos.nome:''}`)) return;
+  try{
+    await apiDELETE('consumo', `id=eq.${id}`);
+    toast('Lançamento excluído. ✓','ok');
+    CONSUMO_CACHE = null;
     carregarConsumo();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -3897,9 +4156,15 @@ async function verPedido(id){
   }catch(e){ toast('Erro ao abrir pedido: '+e.message,'erro'); }
 }
 
+const PED_STATUS_TRAVA = {}; // anti-duplo-clique por pedido (pré-piloto)
 async function mudarStatusPedido(id, novo){
+  if(PED_STATUS_TRAVA[id]) return; // duplo clique: a 1ª transição já está em voo
   const permitidos = [...(PED_PROX[(PED_DETALHE_ATUAL&&PED_DETALHE_ATUAL.pedido.status)]||[]).map(x=>x[0])];
   if(!permitidos.includes(novo)){ toast('Transição de status inválida.','erro'); return; }
+  PED_STATUS_TRAVA[id] = true;
+  const det = document.getElementById('pedDetalhe');
+  const btns = det ? [...det.querySelectorAll('button')] : [];
+  btns.forEach(b=>{ b.disabled = true; });
   try{
     if(novo==='faturado') await baixarEstoquePedido(id); /* baixa automática; se falhar, não fatura */
     await apiPATCH('pedidos', `id=eq.${id}`, { status:novo, updated_at:new Date().toISOString() });
@@ -3908,6 +4173,10 @@ async function mudarStatusPedido(id, novo){
     await verPedido(id);
     PED_CACHE = null;
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+  finally{
+    delete PED_STATUS_TRAVA[id];
+    btns.forEach(b=>{ b.disabled = false; });
+  }
 }
 async function cancelarPedido(id){
   if(!confirm('Cancelar este pedido?\nSe houver baixa de estoque vinculada, ela será estornada.')) return;
@@ -3936,6 +4205,9 @@ async function estornarBaixaPedido(id){
   if(!ativas.length) return 0;
   const hoje = hojeISO();
   for(const m of ativas){
+    /* MARCA PRIMEIRO (pré-piloto): grava [estornado] ANTES de creditar — se algo
+       falhar no meio, a retentativa não credita o mesmo item 2× */
+    await apiPATCH('movimentacoes', `id=eq.${m.id}`, { observacao: `${m.observacao||''} [estornado em ${hoje}]` });
     const ehFracao = /\[fra[cç][aã]o:/i.test(String(m.observacao||''));
     if(ehFracao){
       /* baixa fracionada: devolve as frações ao lote (o kit continua aberto — não dá pra "desabrir") */
@@ -3951,7 +4223,6 @@ async function estornarBaixaPedido(id){
       quantidade:m.quantidade, data:hoje,
       observacao:`[estorno pedido ${ped.numero}] Estorno da baixa automática de ${fmtData(hoje)}`
     });
-    await apiPATCH('movimentacoes', `id=eq.${m.id}`, { observacao: `${m.observacao||''} [estornado em ${hoje}]` });
   }
   /* remove o consumo automático lançado no faturamento (volta limpo se refaturar) */
   const obsCons = `[pedido ${ped.numero}] baixa automática`;
@@ -3987,11 +4258,22 @@ async function baixarEstoquePedido(id){
   const rows = await apiGET(`pedidos?id=eq.${id}&select=*,clientes(id,nome)`);
   const ped = rows[0];
   if(!ped) throw new Error('Pedido não encontrado.');
-  /* idempotência: já baixado antes? (ignora baixas estornadas) */
-  const ja = await apiGET(`movimentacoes?tipo=eq.saida_pedido&observacao=like.*${encodeURIComponent(ped.numero)}*&select=id,observacao&limit=20`);
+  /* idempotência: já baixado antes? (ignora baixas estornadas)
+     ⚠️ SEMPRE com os colchetes '[pedido N]' (pré-piloto): sem eles, a busca por
+     substring faz PED-2026-0001 "herdar" a baixa de PED-2026-00010 e pular a baixa. */
+  const ja = await apiGET(`movimentacoes?tipo=eq.saida_pedido&observacao=like.*${encodeURIComponent('[pedido '+ped.numero+']')}*&select=id,observacao&limit=20`);
   if(ja.filter(m=>!String(m.observacao||'').includes('[estornado')).length) return;
-  const itens = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,fracionavel,fracao_unidade_id,fracoes_por_unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
-  if(!itens.length) throw new Error('Pedido sem itens para baixar.');
+  const itensBrutos = await apiGET(`pedidos_itens?pedido_id=eq.${id}&select=*,produtos(id,nome,unidade,fracionavel,fracao_unidade_id,fracoes_por_unidade),lotes(id,numero_lote,validade,quantidade_atual,local)&order=created_at.asc`);
+  if(!itensBrutos.length) throw new Error('Pedido sem itens para baixar.');
+  /* agrega itens repetidos (pré-piloto): o mesmo produto+lote+tipo de baixa em 2 linhas
+     planejaria contra o MESMO retrato de saldo e baixaria em dobro/negativo */
+  const itensMap = {};
+  for(const it of itensBrutos){
+    const chave = `${it.produto_id}|${it.lote_id||''}|${it.tipo_baixa||'unidade'}`;
+    if(itensMap[chave]) itensMap[chave].quantidade = Number(itensMap[chave].quantidade||0) + Number(it.quantidade||0);
+    else itensMap[chave] = { ...it };
+  }
+  const itens = Object.values(itensMap);
   const nomeCli = ped.clientes ? ped.clientes.nome : (ped.setor_destino || null);
   const baixas = []; /* {produto_id, lote_id, qtd, fracao, nome_fracao} */
   const aberturas = []; /* {produto_id, lote_id, fpu, nome_fracao, und_base} — kits a abrir */
@@ -4061,8 +4343,19 @@ async function baixarEstoquePedido(id){
       anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
     });
   }
-  /* 2) baixas */
+  /* 2) baixas — revalida o saldo de cada lote ANTES de gravar (pré-piloto):
+     saldo que mudou desde o planejamento aborta com erro claro, sem negativo silencioso */
   for(const b of baixas){
+    let saldoExec = null, dispExec = null;
+    if(b.fracao){
+      const fr = await getLoteFracoes(b.lote_id);
+      dispExec = Number((fr&&fr.fracoes_disponiveis)||0);
+      if(dispExec < b.qtd) throw new Error(`Frações insuficientes no lote ao executar a baixa (restam ${fmtQtd(dispExec)}). Faturamento interrompido — confira o estoque e tente de novo.`);
+    } else {
+      const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
+      saldoExec = Number((l&&l.quantidade_atual)||0);
+      if(saldoExec < b.qtd) throw new Error(`Saldo insuficiente no lote ao executar a baixa (restam ${fmtQtd(saldoExec)}, precisa ${fmtQtd(b.qtd)}). Faturamento interrompido — confira o estoque e tente de novo.`);
+    }
     await apiPOST('movimentacoes', {
       tipo:'saida_pedido', produto_id:b.produto_id, lote_id:b.lote_id, quantidade:b.qtd, data:hoje,
       cliente:nomeCli, responsavel:ped.responsavel||null,
@@ -4071,13 +4364,8 @@ async function baixarEstoquePedido(id){
         : `[pedido ${ped.numero}] Baixa automática — faturamento do pedido ${ped.numero}`,
       anexo_url:null, usuario_id:uid, fornecedor_id:null, transportadora_id:null
     });
-    if(b.fracao){
-      const fr = await getLoteFracoes(b.lote_id);
-      await setLoteFracoes(b.lote_id, Math.max(0, Number((fr&&fr.fracoes_disponiveis)||0) - b.qtd));
-    } else {
-      const [l] = await apiGET(`lotes?id=eq.${b.lote_id}&select=quantidade_atual`);
-      await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) - b.qtd });
-    }
+    if(b.fracao) await setLoteFracoes(b.lote_id, dispExec - b.qtd);
+    else await apiPATCH('lotes', `id=eq.${b.lote_id}`, { quantidade_atual: saldoExec - b.qtd });
   }
   /* registra o consumo (alimenta os módulos Consumo e Contratos) — idempotente */
   if(ped.cliente_id){
@@ -5615,7 +5903,7 @@ function novaOS(){
     <input id="nosValor" class="inp text-sm mb-3" inputmode="decimal" placeholder="0,00">
     <div class="flex gap-2">
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
-      <button class="btn-brand flex-1 !w-auto" onclick="salvarOS()">Criar OS</button>
+      <button class="btn-brand flex-1 !w-auto" id="btnSalvarOS" onclick="salvarOS()">Criar OS</button>
     </div>`);
 }
 function osTipoChanged(t){
@@ -5835,11 +6123,29 @@ document.addEventListener('click', e=>{
   }
 });
 
+/* Parse de valor monetário no padrão BR (adendo piloto):
+   "150,50" → 150.5 · "150.50" → 150.5 · "1.234,56" → 1234.56 · "1.234" → 1234.
+   Com vírgula, os pontos são milhar; sem vírgula, grupo(s) de 3 dígitos após o
+   ponto são milhar; senão o ponto é decimal. O parse antigo removia TODOS os
+   pontos e fazia "150.50" virar 15050. */
+function parseValorBR(v){
+  let s = String(v==null?'':v).trim().replace(/[^\d.,]/g,'');
+  if(!s) return 0;
+  if(s.includes(',')) s = s.replace(/\./g,'').replace(',','.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,'');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+let SALVAR_OS_TRAVA = false; // anti-duplo-clique (adendo piloto)
 async function salvarOS(){
+  if(SALVAR_OS_TRAVA) return;
   const cliente_id = document.getElementById('nosCliente').value;
   const descricao = document.getElementById('nosDesc').value.trim();
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!descricao){ toast('Descreva o serviço.','erro'); return; }
+  SALVAR_OS_TRAVA = true;
+  const btnSalvarOS = document.getElementById('btnSalvarOS');
+  if(btnSalvarOS){ btnSalvarOS.disabled = true; btnSalvarOS.textContent = 'Salvando…'; }
   let equipamento_id = document.getElementById('nosEquip').value || null;
   const eqNome = document.getElementById('nosEqNome').value.trim();
   try{
@@ -5852,7 +6158,7 @@ async function salvarOS(){
       equipamento_id = eq.id;
     }
     const numero = await proximoNumeroOS();
-    const vs = parseFloat(String(document.getElementById('nosValor').value).replace(/\./g,'').replace(',','.'))||0;
+    const vs = parseValorBR(document.getElementById('nosValor').value);
     const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
     const tipo_os_id = document.getElementById('nosTipo').value||null;
     const etiquetas = String(document.getElementById('nosEtiq').value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
@@ -5879,7 +6185,11 @@ async function salvarOS(){
     OS_CACHE = null;
     toast(`OS ${numero} criada. ✓`,'ok');
     await verOS(os.id);
-  }catch(e){ toast('Erro ao criar OS: '+e.message,'erro'); }
+  }catch(e){
+    toast('Erro ao criar OS: '+e.message,'erro');
+    if(btnSalvarOS){ btnSalvarOS.disabled = false; btnSalvarOS.textContent = 'Criar OS'; }
+  }
+  finally{ SALVAR_OS_TRAVA = false; }
 }
 
 /* ---------- modal genérico ---------- */
@@ -6000,6 +6310,8 @@ function renderOSDetalhe(){
   if(o.status==='aberta'||o.status==='em_atendimento') acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osCancelar()">❌ Cancelar OS</button>`;
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osEnviarEmail()">📧 Enviar por e-mail</button>`;
   acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="imprimirOS()">🖨️ Imprimir</button>`;
+  if((o.status==='concluida'||o.status==='cancelada') && o.origem!=='fieldcontrol' && typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')
+    acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osReabrir()">↩️ Reabrir</button>`;
   if(o.origem!=='fieldcontrol'){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirEditar()">✏️ Editar</button>`;
     if(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')
@@ -6215,6 +6527,7 @@ function osAbaAtividades(d){
     <div class="md:col-span-2 text-xs font-bold text-gray-500 uppercase" id="osAtvTitulo">＋ Nova atividade</div>
     <div><label class="lbl">Técnico *</label>${TEC_LIST.length?`<select id="osAtvTec" class="inp text-sm">${tecOptions('')}</select>`:`<input id="osAtvTec" class="inp text-sm" placeholder="Nome do técnico">`}</div>
     <div><label class="lbl">Data *</label><input id="osAtvData" type="date" class="inp text-sm" value="${hojeISO()}"></div>
+    <div><label class="lbl">Status</label><select id="osAtvStatus" class="inp text-sm">${Object.entries(ATV_TEC_STATUS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select><div class="text-[11px] text-gray-400">Na edição, dá pra reabrir voltando para Pendente.</div></div>
     <div><label class="lbl">Início</label><input id="osAtvIni" type="time" class="inp text-sm"></div>
     <div><label class="lbl">Fim</label><input id="osAtvFim" type="time" class="inp text-sm"></div>
     <div class="md:col-span-2"><label class="lbl">Descrição da conclusão</label><textarea id="osAtvDesc" class="inp text-sm" rows="2"></textarea></div>
@@ -6432,14 +6745,47 @@ function osAbaFormularios(d){
 }
 
 function osAbaAssinaturas(d){
+  const o = d.os;
   const sigs = d.assinaturas||[];
-  if(!sigs.length) return '<span class="text-gray-400 text-xs">Nenhuma assinatura registrada nesta OS.</span>';
-  return `<div class="grid gap-3">` + sigs.map(s=>`
+  const ehAdmin = (typeof sessao!=='undefined' && sessao && sessao.perfil==='admin');
+  const urlsListadas = new Set(sigs.map(s=>s.url).filter(Boolean));
+  const cards = [];
+  // assinatura gravada direto na OS (coleta do escritório) que não está em os_assinaturas
+  if(o.assinatura_url && !urlsListadas.has(o.assinatura_url)){
+    cards.push(`
+    <div class="border rounded-xl p-4 bg-white">
+      <img src="${esc(o.assinatura_url)}" class="max-w-full h-auto max-h-40 bg-white border rounded-lg mb-2">
+      <div class="text-sm">Assinatura registrada na OS</div>
+      <div class="text-xs text-gray-500">${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''}</div>
+      ${ehAdmin?`<button class="text-xs text-red-600 font-bold underline mt-1" onclick="osRemoverAssinatura(null,'${esc(o.assinatura_url)}')">🗑️ remover assinatura</button>`:''}
+    </div>`);
+  }
+  cards.push(...sigs.map(s=>`
     <div class="border rounded-xl p-4 bg-white">
       <img src="${esc(s.url)}" class="max-w-full h-auto max-h-40 bg-white border rounded-lg mb-2">
       <div class="text-sm">Assinatura de <b>${esc(s.nome_assinante||'—')}</b></div>
       <div class="text-xs text-gray-500">${s.created_at?new Date(s.created_at).toLocaleString('pt-BR'):''} · coletada no celular do técnico</div>
-    </div>`).join('') + `</div>`;
+      ${ehAdmin?`<button class="text-xs text-red-600 font-bold underline mt-1" onclick="osRemoverAssinatura('${s.id}','${esc(s.url)}')">🗑️ remover assinatura</button>`:''}
+    </div>`));
+  if(!cards.length) return '<span class="text-gray-400 text-xs">Nenhuma assinatura registrada nesta OS.</span>';
+  return `<div class="grid gap-3">` + cards.join('') + `</div>`;
+}
+async function osRemoverAssinatura(sigId, url){
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Remover assinatura é restrito ao administrador.','erro'); return; }
+  const d = OS_DETALHE; if(!d) return;
+  if(!confirm('Remover esta assinatura da OS? Sem assinatura, a OS não pode ser finalizada.')) return;
+  try{
+    if(sigId) await apiDELETE('os_assinaturas', `id=eq.${sigId}`);
+    if(url){
+      // a mesma URL pode existir em outra linha de os_assinaturas — limpa todas
+      const outras = (d.assinaturas||[]).filter(s=>s.url===url && s.id!==sigId);
+      for(const s of outras) await apiDELETE('os_assinaturas', `id=eq.${s.id}`);
+      if(d.os.assinatura_url===url) await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { assinatura_url:null, assinatura_em:null });
+    }
+    await osLog(d.os.id, 'removeu uma assinatura da OS (admin)');
+    toast('Assinatura removida. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 function osAbaAnexos(d){
@@ -6619,6 +6965,7 @@ function osLimparAtividade(){
   document.getElementById('osAtvId').value='';
   document.getElementById('osAtvTitulo').textContent='＋ Nova atividade';
   ['osAtvTec','osAtvData','osAtvIni','osAtvFim','osAtvDesc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value = id==='osAtvData'?hojeISO():''; });
+  const selSt = document.getElementById('osAtvStatus'); if(selSt) selSt.value='pendente';
 }
 async function osSalvarAtividade(){
   const d = OS_DETALHE; if(!d) return;
@@ -6633,8 +6980,16 @@ async function osSalvarAtividade(){
     fim: document.getElementById('osAtvFim').value||null,
     descricao_conclusao: document.getElementById('osAtvDesc').value.trim()||null,
   };
+  if(id){ const selSt = document.getElementById('osAtvStatus'); if(selSt) body.status = selSt.value; } // edição pode reabrir (pré-piloto)
   try{
-    if(id){ await apiPATCH('os_atividades', `id=eq.${id}`, body); await osLog(d.os.id, `editou a atividade de ${tecnico}`); }
+    if(id){
+      await apiPATCH('os_atividades', `id=eq.${id}`, body);
+      await osLog(d.os.id, `editou a atividade de ${tecnico}`);
+      if(body.status==='concluida'){
+        const novoStatus = await osFecharSeTudoConcluido(d.os.id);
+        if(novoStatus==='sem_assinatura') toast('Atividade salva, mas falta a assinatura do cliente para fechar a OS.','alerta');
+      }
+    }
     else{ await apiPOST('os_atividades', { os_id:d.os.id, status:'pendente', ...body }); await osLog(d.os.id, `agendou atividade para ${tecnico} em ${fmtData(data)}`); }
     toast('Atividade salva. ✓','ok');
     await verOS(d.os.id);
@@ -6653,6 +7008,7 @@ function osEditarAtividade(id){
   document.getElementById('osAtvIni').value = (a.inicio||'').slice(0,5);
   document.getElementById('osAtvFim').value = (a.fim||'').slice(0,5);
   document.getElementById('osAtvDesc').value = a.descricao_conclusao||'';
+  const selSt2 = document.getElementById('osAtvStatus'); if(selSt2) selSt2.value = a.status||'pendente';
   document.getElementById('osAtvTitulo').scrollIntoView({behavior:'smooth',block:'center'});
 }
 /* Fecha a OS por completo quando a última atividade é concluída (regra 20/10/2026):
@@ -6676,6 +7032,9 @@ async function osFecharSeTudoConcluido(osId){
     if(!atvs.length || !atvs.every(a=>['concluida','cancelada'].includes(a.status))) return os.status;
     if(!(await osTemAssinatura(osId))) return 'sem_assinatura'; // 🖊️ sem assinatura, a OS NÃO fecha
     await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'concluida', updated_at:new Date().toISOString() });
+    // libera o técnico no mapa da equipe (mesmo padrão do fluxo do celular):
+    // limpa o vínculo de quem estiver apontando para esta OS
+    try{ await apiPATCH('tecnico_localizacao', `os_id=eq.${osId}`, { os_id:null, os_numero:null }); }catch(_){}
     await osLog(osId, 'concluiu a OS (última atividade concluída)');
     osEnviarEmailAuto(osId); // 📧 envio automático ao cliente
     return 'concluida';
@@ -6709,7 +7068,9 @@ async function osCarregarLotes(){
       : '<option value="">— sem saldo —</option>';
   }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
 }
+let OS_ADD_PROD_TRAVA = false; // trava anti-duplo-clique (pré-piloto)
 async function osAdicionarProduto(){
+  if(OS_ADD_PROD_TRAVA) return;
   const d = OS_DETALHE; if(!d) return;
   const produto_id = document.getElementById('osProdSel').value;
   const lote_id = document.getElementById('osLoteSel').value;
@@ -6718,6 +7079,7 @@ async function osAdicionarProduto(){
   if(!produto_id){ toast('Escolha o produto.','erro'); return; }
   if(!lote_id){ toast('Escolha o lote.','erro'); return; }
   if(!(qtd>0)){ toast('Informe a quantidade.','erro'); return; }
+  OS_ADD_PROD_TRAVA = true;
   try{
     const [l] = await apiGET(`lotes?id=eq.${lote_id}&select=quantidade_atual,numero_lote`);
     const saldo = Number((l&&l.quantidade_atual)||0);
@@ -6737,12 +7099,16 @@ async function osAdicionarProduto(){
     toast('Produto adicionado e estoque baixado. ✓','ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+  finally{ OS_ADD_PROD_TRAVA = false; }
 }
 async function osEstornarProdutoOS(item, osNumero){
-  /* devolve o saldo e marca a baixa original como estornada */
+  /* devolve o saldo e marca a baixa original como estornada.
+     IDEMPOTENTE (pré-piloto): o crédito ao lote só acontece quando existe uma
+     movimentação ainda NÃO estornada — chamar 2× não devolve 2×. */
   const movs = await apiGET(`movimentacoes?tipo=eq.saida_os&produto_id=eq.${item.produto_id}&lote_id=eq.${item.lote_id}&select=id,observacao&order=created_at.desc&limit=30`);
   const mov = (movs||[]).find(m=>String(m.observacao||'').includes(osNumero) && !String(m.observacao||'').includes('[estornado]'));
-  if(mov) await apiPATCH('movimentacoes', `id=eq.${mov.id}`, { observacao: (mov.observacao||'')+' [estornado]' });
+  if(!mov) return; // já estornado (ou sem baixa): nada a devolver
+  await apiPATCH('movimentacoes', `id=eq.${mov.id}`, { observacao: (mov.observacao||'')+' [estornado]' });
   const [l] = await apiGET(`lotes?id=eq.${item.lote_id}&select=quantidade_atual`);
   await apiPATCH('lotes', `id=eq.${item.lote_id}`, { quantidade_atual: Number((l&&l.quantidade_atual)||0) + Number(item.quantidade) });
 }
@@ -6762,6 +7128,12 @@ async function osRemoverProduto(id){
 /* ---------- status ---------- */
 async function osTrocarStatus(st){
   const d = OS_DETALHE; if(!d) return;
+  // 🖊️ Regra 20/10/2026 (pré-piloto): concluir pelo escritório TAMBÉM exige a assinatura
+  //    do cliente — sem ela, bloqueia com o mesmo aviso clicável do fluxo do celular.
+  if(st==='concluida' && !(await osTemAssinatura(d.os.id))){
+    toast('⚠️ Falta a assinatura do cliente: a OS só é finalizada com a assinatura. Toque para assinar.', 'erro', ()=>{ osAbrirAssinatura(d.os.id); });
+    return;
+  }
   try{
     await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:st, updated_at:new Date().toISOString() });
     await osLog(d.os.id, st==='concluida' ? 'concluiu a OS' : st==='em_atendimento' ? 'iniciou o atendimento da OS' : `alterou o status da OS para ${st}`);
@@ -6770,9 +7142,20 @@ async function osTrocarStatus(st){
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
+async function osReabrir(){
+  const d = OS_DETALHE; if(!d) return;
+  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Reabrir OS é restrito ao administrador.','erro'); return; }
+  if(!confirm(`Reabrir a OS ${d.os.numero}? Ela volta para "em atendimento".`)) return;
+  try{
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:'em_atendimento', updated_at:new Date().toISOString() });
+    await osLog(d.os.id, 'reabriu a OS (admin)');
+    toast('OS reaberta. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
 async function osConcluir(){
   const d = OS_DETALHE; if(!d) return;
-  const pend = (d.atividades||[]).filter(a=>a.status!=='concluida').length;
+  const pend = (d.atividades||[]).filter(a=>a.status!=='concluida' && a.status!=='cancelada').length;
   if(pend && !confirm(`Há ${pend} atividade(s) pendente(s).\nConcluir a OS mesmo assim?`)) return;
   await osTrocarStatus('concluida');
 }
@@ -6805,8 +7188,11 @@ function osAbrirEditar(){
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser editada.','erro'); return; }
   const tipoOpts = (TIPOS_OS||[]).map(t=>`<option value="${t.id}" ${String(t.id)===String(o.tipo_os_id||'')?'selected':''}>${esc(t.descricao)}</option>`).join('');
+  const cliOptsEditar = (CLIENTES||[]).map(c=>`<option value="${c.id}" ${String(c.id)===String(o.cliente_id)?'selected':''}>${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
   openOsModal(`
     <div class="font-bold mb-3">✏️ Editar OS ${esc(o.numero)}</div>
+    <label class="lbl">Cliente</label>
+    <select id="eosCliente" class="inp text-sm mb-2">${cliOptsEditar}</select>
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="eosDesc" class="inp text-sm mb-2" rows="3">${esc(o.descricao_servico||'')}</textarea>
     ${OS_FIELD_PARIDADE?`
@@ -6833,10 +7219,20 @@ async function osSalvarEdicao(){
   const descEl = document.getElementById('eosDesc');
   const desc = descEl ? descEl.value.trim() : '';
   if(!desc){ toast('Descreva o serviço.','erro'); return; }
+  // trocar o cliente da OS (pré-piloto): só com confirmação explícita
+  const cliEl = document.getElementById('eosCliente');
+  const novoCliente = cliEl ? cliEl.value : null;
+  let trocouCliente = false;
+  if(novoCliente && String(novoCliente)!==String(o.cliente_id)){
+    const nc = (CLIENTES||[]).find(c=>String(c.id)===String(novoCliente));
+    if(!confirm(`Trocar o cliente desta OS para "${nc?nc.nome:'o selecionado'}"?\n\nO e-mail de conclusão e os equipamentos passam a ser os do novo cliente.`)) return;
+    trocouCliente = true;
+  }
   try{
     const valEl = document.getElementById('eosValor');
-    const vs = parseFloat(String(valEl?valEl.value:'').replace(/\./g,'').replace(',','.'))||0;
+    const vs = parseValorBR(valEl ? valEl.value : '');
     const body = { descricao_servico: desc, valor_servicos: vs, updated_at: new Date().toISOString() };
+    if(trocouCliente) body.cliente_id = novoCliente;
     if(OS_FIELD_PARIDADE){
       const tipoEl = document.getElementById('eosTipo');
       if(tipoEl) body.tipo_os_id = tipoEl.value||null;
@@ -6849,7 +7245,7 @@ async function osSalvarEdicao(){
       if(przEl) body.prazo = przEl.value||null;
     }
     await apiPATCH('os_clientes', `id=eq.${o.id}`, body);
-    await osLog(o.id, 'editou a OS');
+    await osLog(o.id, trocouCliente ? 'editou a OS e trocou o cliente' : 'editou a OS');
     closeOsModal();
     OS_CACHE = null;
     toast(`OS ${o.numero} atualizada. ✓`,'ok');
@@ -6925,6 +7321,8 @@ async function osSalvarAssinatura(){
   if(!osId) return;
   const cv = document.getElementById('osPad');
   if(!cv) return;
+  // 🖊️ pad em branco NÃO é assinatura (pré-piloto): bloqueia antes de subir qualquer coisa
+  if(typeof tecPadVazio==='function' && tecPadVazio(cv)){ toast('⚠️ Desenhe a assinatura no quadro antes de salvar.','erro'); return; }
   try{
     const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
     if(!blob) throw new Error('Falha ao gerar imagem.');
@@ -6936,6 +7334,8 @@ async function osSalvarAssinatura(){
     const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
     const agora = new Date().toISOString();
     await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url:url, assinatura_em:agora });
+    // registra também em os_assinaturas (a aba ✍️ Assinaturas lê dessa tabela — mesmo padrão do celular)
+    try{ await apiPOST('os_assinaturas', { os_id:osId, url, nome_assinante:null }); }catch(_){}
     await osLog(osId, 'coletou a assinatura do cliente');
     closeOsModal();
     toast('Assinatura salva. ✓','ok');
@@ -6967,7 +7367,19 @@ async function osUploadAnexo(input){
 }
 async function osExcluirAnexo(id){
   if(!confirm('Excluir este anexo?')) return;
-  try{ await apiDELETE('os_anexos', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  const d = OS_DETALHE; if(!d) return;
+  const an = (d.anexos||[]).find(a=>a.id===id);
+  try{
+    await apiDELETE('os_anexos', `id=eq.${id}`);
+    // apaga também o arquivo no storage (política recibos_delete — mesmo padrão de tecFluxoFotoDel)
+    const chave = an && an.url ? String(an.url).split('/object/public/recibos/')[1] : null;
+    if(chave){
+      await fetch(`${SUPA_URL}/storage/v1/object/recibos/${chave}`, {
+        method:'DELETE', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY }
+      }).catch(()=>{});
+    }
+    await verOS(d.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -7222,7 +7634,7 @@ async function carregarMapaEquipe(){
     try{
       if(typeof sessao!=='undefined' && sessao && sessao.id){
         const [me] = await apiGET(`usuarios?id=eq.${sessao.id}&select=tecnico_nome,nome`);
-        const meuNomeTec = me && (me.tecnico_nome || me.nome);
+        const meuNomeTec = me && me.tecnico_nome; // só quem tem tecnico_nome vinculado é rastreado (pré-piloto)
         if(meuNomeTec && TEC_GPS.nome !== meuNomeTec) tecGpsIniciar(meuNomeTec);
       }
     }catch(e){}
@@ -7247,8 +7659,11 @@ async function carregarMapaEquipe(){
         if(a.status==='concluida'){
           desempenhoMap[n].concluidas++;
           if(a.inicio && a.fim){
-            const d = (new Date(a.fim)-new Date(a.inicio))/60000;
-            if(d>0 && d<1440){ desempenhoMap[n].tempoMin += d; desempenhoMap[n].nTempo++; }
+            // inicio/fim são "HH:MM" (coluna time): new Date("08:00") é Invalid Date → NaN.
+            // Parse manual de HH:MM, igual ao do comparativo (adendo piloto).
+            const minOfHHMM = s => { const m = String(s||'').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; };
+            const mi = minOfHHMM(a.inicio), mf = minOfHHMM(a.fim);
+            if(mi!==null && mf!==null){ const dd = mf>=mi ? mf-mi : mf-mi+1440; if(dd>0 && dd<1440){ desempenhoMap[n].tempoMin += dd; desempenhoMap[n].nTempo++; } }
           }
         }
       });
@@ -7322,6 +7737,7 @@ async function carregarMapaEquipe(){
 }
 /* ================= 🛣️ TRAJETO DO TÉCNICO (linha do tempo do deslocamento) ================= */
 let MAPA_TRAJETO_LAYER = null;
+let MAPA_PRESENCA_LAYER = null; /* marcadores 🔑/📱 do trajeto exibido (não acumular — pré-piloto) */
 let MAPA_TRAJETO_DATA = null; /* última data consultada no trajeto (AAAA-MM-DD) — preserva o seletor entre atualizações da lista */
 let MAPA_TRAJETO_PDF = null; /* dados do último trajeto exibido — base do 📄 PDF do dia */
 function mapaHojeFortaleza(){ return new Date(Date.now()-3*3600000).toISOString().slice(0,10); }
@@ -7344,13 +7760,14 @@ async function verTrajetoTecnico(nome, dataISO){
     if(!MAPA_EQ){ info.innerHTML = '<div class="text-sm text-red-600">Abra o mapa primeiro.</div>'; return; }
     // limpa trajeto anterior
     if(MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
+    if(MAPA_PRESENCA_LAYER){ MAPA_EQ.removeLayer(MAPA_PRESENCA_LAYER); MAPA_PRESENCA_LAYER = null; }
     // dia em America/Fortaleza (UTC-3 fixo): 00:00 local = 03:00Z
     const diaIni = new Date(dia + 'T00:00:00-03:00');
     const diaFim = new Date(diaIni.getTime() + 86400000);
     const encNome = encodeURIComponent(nome);
     const colsAtv = 'id,os_id,tecnico,data,inicio,fim,descricao_conclusao,status';
     const [pts, atvsData, atvsSemData] = await Promise.all([
-      apiGET(`tecnico_localizacao_hist?tecnico_nome=eq.${encNome}&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=lat,lng,os_numero,created_at&order=created_at.asc&limit=2000`).catch(()=>[]),
+      apiGET(`tecnico_localizacao_hist?tecnico_nome=eq.${encNome}&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=lat,lng,precisao,os_numero,created_at&order=created_at.asc&limit=2000`).catch(()=>[]),
       apiGET(`os_atividades?tecnico=eq.${encNome}&data=eq.${dia}&select=${colsAtv}&order=inicio.asc`).catch(()=>[]),
       // atividades sem "data" preenchida mas criadas no dia (ex.: abertas pelo celular)
       apiGET(`os_atividades?tecnico=eq.${encNome}&data=is.null&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=${colsAtv}&order=created_at.asc`).catch(()=>[])
@@ -7436,7 +7853,7 @@ async function verTrajetoTecnico(nome, dataISO){
           L.circleMarker([e.lat, e.lng], { radius:9, color:'#fff', weight:2, fillColor:'#7c3aed', fillOpacity:1 })
             .bindPopup(`<b>${e.ic||''}</b> ${e.txt||''}<br>${e.hora||''}`).addTo(gP);
         });
-        if(algum) gP.addTo(MAPA_EQ);
+        if(algum){ gP.addTo(MAPA_EQ); MAPA_PRESENCA_LAYER = gP; }
       }catch(e){}
     }
     // OSs concluídas no dia (p/ o resumo do 📄 PDF do dia)
@@ -7541,6 +7958,7 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca){
 }
 function limparTrajeto(){
   if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
+  if(MAPA_EQ && MAPA_PRESENCA_LAYER){ MAPA_EQ.removeLayer(MAPA_PRESENCA_LAYER); MAPA_PRESENCA_LAYER = null; }
   MAPA_TRAJETO_PDF = null;
   document.getElementById('mapaTrajetoInfo').classList.add('hidden');
 }
@@ -7714,25 +8132,38 @@ async function designarOSPara(tecnicoNome){
           <select id="designarOsSel" class="inp text-sm mb-3">${opcoes}</select>
           <div class="flex gap-2 justify-end">
             <button class="btn-ghost !w-auto px-4" onclick="document.getElementById('designarModal').remove()">Cancelar</button>
-            <button class="btn-brand !w-auto px-4" onclick="designarOSConfirmar('${esc(tecnicoNome).replace(/'/g,"\\'")}')">Designar</button>
+            <button class="btn-brand !w-auto px-4" id="designarBtnConfirmar" onclick="designarOSConfirmar('${esc(tecnicoNome).replace(/'/g,"\\'")}')">Designar</button>
           </div>
         </div>
       </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
   }catch(e){ toast('Erro: '+e.message, 'erro'); }
 }
+let DESIGNAR_TRAVA = false; // anti-duplo-clique (pré-piloto)
 async function designarOSConfirmar(tecnicoNome){
+  if(DESIGNAR_TRAVA) return;
+  const btn = document.getElementById('designarBtnConfirmar');
   try{
     const osId = document.getElementById('designarOsSel').value;
     if(!osId) return;
-    const hoje = new Date().toISOString().slice(0,10);
+    DESIGNAR_TRAVA = true;
+    if(btn){ btn.disabled = true; btn.textContent = 'Designando…'; }
+    // reconfere: a OS precisa continuar ABERTA antes de criar a atividade
+    const [osAtual] = await apiGET(`os_clientes?id=eq.${osId}&select=id,status`);
+    if(!osAtual) throw new Error('OS não encontrada.');
+    if(osAtual.status!=='aberta') throw new Error('Esta OS não está mais aberta (status atual: '+osAtual.status+'). Atualize o mapa e tente outra.');
+    const hoje = mapaHojeFortaleza(); // data LOCAL (America/Fortaleza) — toISOString (UTC) gravaria "amanhã" após 21h (adendo piloto)
     await apiPOST('os_atividades', { os_id: osId, tecnico: tecnicoNome, data: hoje, status: 'pendente' });
     await apiPATCH('os_clientes', `id=eq.${osId}`, { status: 'em_atendimento' });
     try{ await osLog(osId, `OS designada para ${tecnicoNome} pelo mapa da equipe`); }catch(e){}
     document.getElementById('designarModal').remove();
     toast(`✅ OS designada para ${tecnicoNome}!`, 'ok');
     carregarMapaEquipe();
-  }catch(e){ toast('Erro ao designar: '+e.message, 'erro'); }
+  }catch(e){
+    toast('Erro ao designar: '+e.message, 'erro');
+    if(btn){ btn.disabled = false; btn.textContent = 'Designar'; }
+  }
+  finally{ DESIGNAR_TRAVA = false; }
 }
 async function carregarPainelTecnico(){
   const box = document.getElementById('tecLista');
@@ -7741,15 +8172,39 @@ async function carregarPainelTecnico(){
     let tnome = (typeof sessao!=='undefined' && sessao) ? sessao.nome : '';
     try{
       const [me] = await apiGET(`usuarios?id=eq.${sessao.id}&select=tecnico_nome,nome`);
-      if(me) tnome = me.tecnico_nome || me.nome || tnome;
+      // só o tecnico_nome vinculado vale (pré-piloto): o nome de login NÃO vira técnico
+      if(me && me.tecnico_nome) tnome = me.tecnico_nome;
     }catch(e){}
     document.getElementById('tecNome').textContent = 'Técnico: ' + tnome;
     tecGpsIniciar(tnome); // rastreamento em tempo real
     tecEventoMinhasOS(); // 📍 presença ao abrir o módulo (com dedupe de 30 min)
-    const atvs = await apiGET(
-      'os_atividades?tecnico=ilike.*'+encodeURIComponent(tnome)+'*&status=not.in.(concluida,cancelada)' +
-      '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))' +
-      '&order=data.asc,created_at.asc&limit=200'
+    // busca por IGUALDADE (pré-piloto): ilike com curingas fazia "Fabio" enxergar
+    // as atividades de "Fabio Filho". Se o eq vier vazio, busca ampla + filtro
+    // por igualdade normalizada (trim + caixa) no cliente.
+    const selAtv = '*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))';
+    const ordAtv = '&order=data.asc,created_at.asc&limit=200';
+    let atvs = await apiGET(
+      'os_atividades?tecnico=eq.'+encodeURIComponent(tnome)+'&status=not.in.(concluida,cancelada)' +
+      '&select=' + selAtv + ordAtv
+    );
+    if(!(atvs||[]).length){
+      const amplas = await apiGET(
+        'os_atividades?status=not.in.(concluida,cancelada)&select=' + selAtv + ordAtv
+      ).catch(()=>[]);
+      const alvo = String(tnome||'').trim().toLowerCase();
+      atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo);
+    }
+    // JANELA DE 60 DIAS (adendo piloto): a importação do Field deixou centenas de
+    // atividades 'pendente' legadas (2021–2026) com o nome completo do técnico.
+    // Sem janela, um técnico cadastrado com esse nome veria dezenas de fantasmas.
+    // Regra: só entra atividade com data OU created_at nos últimos 60 dias —
+    // designações novas têm data=hoje e created_at=agora, nunca somem.
+    const corteTs = Date.now() - 60*24*3600*1000;
+    const cdJanela = new Date(corteTs);
+    const corteData = `${cdJanela.getFullYear()}-${String(cdJanela.getMonth()+1).padStart(2,'0')}-${String(cdJanela.getDate()).padStart(2,'0')}`;
+    atvs = (atvs||[]).filter(a =>
+      (a.data && String(a.data).slice(0,10) >= corteData) ||
+      (a.created_at && new Date(a.created_at).getTime() >= corteTs)
     );
     let fotoCount = {};
     try{
@@ -7841,7 +8296,7 @@ function tecFluxoRender(){
       <div class="text-xs text-gray-500 mb-3">Entregue o celular ao responsável para assinar no quadro.</div>
       <canvas id="tecFluxoPad" width="460" height="180" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
       <input id="tecFluxoNome" class="inp text-base mb-3" placeholder="Nome de quem assinou">
-      <button class="btn-brand w-full !py-3.5 text-base mb-2" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
+      <button class="btn-brand w-full !py-3.5 text-base mb-2" id="tecBtnFinalizar" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
       <button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
       <button class="w-full text-sm text-gray-500 mt-2" onclick="tecFluxoVoltar()">← Voltar</button>`;
   }
@@ -7850,7 +8305,11 @@ function tecFluxoRender(){
 }
 function tecFluxoAvancar(){
   const F = TEC_FLUXO; if(!F) return;
-  if(F.passo===1){ F.obs = document.getElementById('tecFluxoObs').value; }
+  if(F.passo===1){
+    F.obs = document.getElementById('tecFluxoObs').value;
+    // descrição vazia NÃO avança (pré-piloto): é o texto que vai pra OS e pro cliente
+    if(!String(F.obs||'').trim()){ toast('⚠️ Descreva o serviço executado antes de avançar.','erro'); return; }
+  }
   if(F.passo<3){ F.passo++; tecFluxoRender(); }
 }
 function tecFluxoVoltar(){ if(TEC_FLUXO && TEC_FLUXO.passo>1){ TEC_FLUXO.passo--; tecFluxoRender(); } }
@@ -7906,8 +8365,10 @@ async function tecFluxoFotoDel(i){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
   tecFluxoRender();
 }
+let TEC_FINALIZANDO = false; // trava anti-reentrada (toque duplo) — pré-piloto
 async function tecFluxoFinalizar(){
   const F = TEC_FLUXO; if(!F) return;
+  if(TEC_FINALIZANDO) return; // toque duplo: a 1ª execução já está em voo
   if(!tecGpsPodeAgir()) return;
   const nome = (document.getElementById('tecFluxoNome')||{}).value||'';
   const cv = document.getElementById('tecFluxoPad');
@@ -7917,11 +8378,13 @@ async function tecFluxoFinalizar(){
     toast('⚠️ Falta a assinatura do cliente: a OS só é finalizada com a assinatura. Toque para assinar.', 'erro', ()=>{ if(TEC_FLUXO){ TEC_FLUXO.passo = 3; tecFluxoRender(); } });
     return;
   }
+  TEC_FINALIZANDO = true;
+  const btnFin = document.getElementById('tecBtnFinalizar');
+  if(btnFin){ btnFin.disabled = true; btnFin.textContent = 'Concluindo…'; }
   try{
-    // 1) salva observação + conclui atividade
-    await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
-    // 2) assinatura (se desenhou) — ANTES de fechar a OS (regra 20/10/2026:
-    //    sem assinatura salva, a OS não pode fechar; upload tem que ter sucesso)
+    // 1) assinatura PRIMEIRO (pré-piloto): o upload tem que ter sucesso ANTES de concluir
+    //    qualquer coisa — se a rede de campo falhar, a atividade continua na lista do
+    //    técnico e ele consegue tentar de novo (antes, concluía e a atividade sumia).
     let sigUrl = null;
     const padDesenhado = cv && !tecPadVazio(cv);
     if(padDesenhado){
@@ -7935,6 +8398,8 @@ async function tecFluxoFinalizar(){
       await apiPATCH('os_clientes', `id=eq.${F.osId}`, { assinatura_url:sigUrl, assinatura_em:new Date().toISOString() });
       try{ await apiPOSTsafe('os_assinaturas', { os_id:F.osId, url:sigUrl, nome_assinante:nome.trim()||null }); }catch(_){}
     }
+    // 2) salva observação + conclui atividade (só depois da assinatura salva)
+    await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
     // 3) FECHA A OS quando todas as atividades estiverem concluídas + libera o técnico no mapa
     //    (correção 20/10/2026: o fluxo só concluía a atividade e a OS ficava "em atendimento" pra sempre)
     try{
@@ -7967,6 +8432,11 @@ async function tecFluxoFinalizar(){
         <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
       </div>`);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
+  finally{
+    TEC_FINALIZANDO = false;
+    const b = document.getElementById('tecBtnFinalizar');
+    if(b){ b.disabled = false; b.textContent = '🎉 Concluir atendimento'; }
+  }
 }
 function tecPadVazio(cv){
   const d = cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;
@@ -7985,6 +8455,7 @@ async function tecMudarStatusSilent(id, novo, obs){
 }
 async function tecMudarStatus(id, novo, obs){
   try{
+    if(novo==='cancelada' && !confirm('Cancelar esta atividade?')) return;
     if((novo==='a_caminho'||novo==='em_atendimento') && !tecGpsPodeAgir()) return;
     const [a] = await apiGET(`os_atividades?id=eq.${id}&select=id,os_id,inicio,fim,status`);
     if(!a) throw new Error('Atividade não encontrada.');
@@ -8002,7 +8473,8 @@ async function tecMudarStatus(id, novo, obs){
           { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:a.os_id, os_numero:os?os.numero:null }) }).catch(()=>{});
       }catch(e){}
     }
-    if(TEC_GPS.nome && novo==='concluida'){
+    if(TEC_GPS.nome && (novo==='concluida' || novo==='cancelada')){
+      // concluir OU cancelar libera o técnico no mapa (pré-piloto)
       fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
         { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
     }
@@ -8061,42 +8533,80 @@ async function osTelaEquipamentos(){
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
       <div class="font-bold text-lg">⚙️ Equipamentos</div><div></div>
     </div>
-    <div class="grid gap-2 md:grid-cols-5 mb-3">
+    <div class="grid gap-2 md:grid-cols-3 mb-3">
       <select id="eqCliente" class="inp text-sm"><option value="">— cliente —</option>${cliOpts}</select>
       <input id="eqNome" class="inp text-sm" placeholder="Nome (ex: ACL TOP 350)">
       <input id="eqSerie" class="inp text-sm" placeholder="Nº de série">
       <select id="eqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
-      <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarEquipamento()">＋ Adicionar</button>
+      <input id="eqObs" class="inp text-sm" placeholder="Setor / observação">
+      <div class="flex gap-2">
+        <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="eqBtnSalvar" onclick="osSalvarEquipamento()">＋ Adicionar</button>
+        <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqBtnCancelarEd" onclick="osCancelarEdicaoEquipamento()">Cancelar edição</button>
+      </div>
     </div>
     <div class="mb-2"><select id="eqFiltroCli" class="inp text-sm !w-auto" onchange="osListarEquipamentos()"><option value="">Todos os clientes</option>${cliOpts}</select></div>
     <div id="eqLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
   await osListarEquipamentos();
 }
+let EQ_LISTA = [];
+let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
 async function osListarEquipamentos(){
   const fc = (document.getElementById('eqFiltroCli')||{}).value || '';
   try{
     const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${fc?`&cliente_id=eq.${fc}`:''}&order=created_at.desc&limit=300`);
+    EQ_LISTA = eqs;
     document.getElementById('eqLista').innerHTML = eqs.length ? eqs.map(e=>`
       <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap">
         <div class="flex-1 min-w-[180px]">
           <b>${esc(e.nome)}</b> <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}</span>
           <div class="text-xs text-gray-500">${esc(e.clientes?fmtCliNome(e.clientes.nome,e.clientes.tipo):'—')}</div>
         </div>
+        <button class="text-xs text-blue-700 font-bold" onclick="osEditarEquipamento('${e.id}')">✏️ editar</button>
         <button class="text-xs text-red-700 font-bold" onclick="osExcluirEquipamento('${e.id}')">🗑️</button>
       </div>`).join('') : '<span class="text-gray-400 text-sm">Nenhum equipamento.</span>';
   }catch(e){ document.getElementById('eqLista').innerHTML = '<span class="text-red-600 text-sm">Erro: '+esc(e.message)+'</span>'; }
+}
+function osEditarEquipamento(id){
+  const e = (EQ_LISTA||[]).find(x=>x.id===id); if(!e) return;
+  EQ_EDIT_ID = id;
+  document.getElementById('eqCliente').value = e.cliente_id||'';
+  document.getElementById('eqNome').value = e.nome||'';
+  document.getElementById('eqSerie').value = e.numero_serie||'';
+  const selTipo = document.getElementById('eqTipo');
+  if(e.tipo && ![...selTipo.options].some(op=>op.value===e.tipo)){ const op = document.createElement('option'); op.textContent = e.tipo; selTipo.appendChild(op); }
+  selTipo.value = e.tipo||'';
+  document.getElementById('eqObs').value = e.observacao||'';
+  document.getElementById('eqBtnSalvar').textContent = '💾 Salvar alterações';
+  document.getElementById('eqBtnCancelarEd').classList.remove('hidden');
+  document.getElementById('eqNome').focus();
+}
+function osCancelarEdicaoEquipamento(){
+  EQ_EDIT_ID = null;
+  ['eqNome','eqSerie','eqObs'].forEach(i=>{ const el = document.getElementById(i); if(el) el.value=''; });
+  const c = document.getElementById('eqCliente'); if(c) c.value='';
+  const t = document.getElementById('eqTipo'); if(t) t.value='';
+  const b = document.getElementById('eqBtnSalvar'); if(b) b.textContent = '＋ Adicionar';
+  const bc = document.getElementById('eqBtnCancelarEd'); if(bc) bc.classList.add('hidden');
 }
 async function osSalvarEquipamento(){
   const cliente_id = document.getElementById('eqCliente').value;
   const nome = document.getElementById('eqNome').value.trim();
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!nome){ toast('Informe o nome do equipamento.','erro'); return; }
+  const body = { cliente_id, nome,
+    numero_serie: document.getElementById('eqSerie').value.trim()||null,
+    tipo: document.getElementById('eqTipo').value||null,
+    observacao: document.getElementById('eqObs').value.trim()||null };
   try{
-    await apiPOST('equipamentos', { cliente_id, nome,
-      numero_serie: document.getElementById('eqSerie').value.trim()||null,
-      tipo: document.getElementById('eqTipo').value||null });
-    toast('Equipamento cadastrado. ✓','ok');
-    document.getElementById('eqNome').value=''; document.getElementById('eqSerie').value='';
+    if(EQ_EDIT_ID){
+      await apiPATCH('equipamentos', `id=eq.${EQ_EDIT_ID}`, body);
+      toast('Equipamento atualizado. ✓','ok');
+      osCancelarEdicaoEquipamento();
+    }else{
+      await apiPOST('equipamentos', body);
+      toast('Equipamento cadastrado. ✓','ok');
+      document.getElementById('eqNome').value=''; document.getElementById('eqSerie').value=''; document.getElementById('eqObs').value='';
+    }
     await osListarEquipamentos();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -8110,7 +8620,9 @@ async function osExcluirEquipamento(id){
 /* ---------- envio automático da OS por e-mail ao concluir ---------- */
 async function osEnviarEmailAuto(osId){
   try{
-    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,clientes(email)`);
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,email_enviado_em,clientes(email)`);
+    // dedupe (pré-piloto): se esta OS já teve o e-mail registrado como enviado, NÃO reenvia
+    if(os && os.email_enviado_em) return;
     const email = os && os.clientes && (os.clientes.email||'').trim();
     if(!email) return; // sem e-mail cadastrado: silencioso
     const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
@@ -8120,8 +8632,14 @@ async function osEnviarEmailAuto(osId){
     });
     if(r.ok){
       await osLog(osId, `enviou a OS por e-mail automaticamente para ${email}`);
+    }else{
+      // falha NÃO bloqueia a conclusão, mas fica registrada no histórico da OS
+      try{ await osLog(osId, `⚠️ e-mail automático falhou (HTTP ${r.status}) — reenvie manualmente pela ficha da OS`); }catch(_){}
     }
-  }catch(e){ /* não bloqueia a conclusão se o e-mail falhar */ }
+  }catch(e){
+    /* não bloqueia a conclusão se o e-mail falhar — mas registra no histórico */
+    try{ await osLog(osId, '⚠️ e-mail automático falhou — reenvie manualmente pela ficha da OS'); }catch(_){}
+  }
 }
 async function osEnviarEmail(){
   const d = OS_DETALHE; if(!d) return;
@@ -8148,6 +8666,9 @@ async function osEnviarEmail(){
 function imprimirOS(){
   const d = OS_DETALHE; if(!d){ toast('Abra uma OS para imprimir.','erro'); return; }
   const o = d.os, cli = o.clientes||{}, tot = osTotal(d);
+  // REGRA DOS VÍNCULOS (20/10, igual à Edge Function): seções Vínculos e Totais
+  // só aparecem quando há cobrança (total > 0) — OS sem valor não mostra R$ 0,00.
+  const temCobranca = (tot.total||0) > 0;
   const doc = cli.cnpj_cpf||cli.cnpj||'';
   const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
   const endOS = o.endereco_os || endCli;
@@ -8241,9 +8762,9 @@ function imprimirOS(){
   </div>
   <div class="sec"><span>Informações de atendimento</span></div>
   ${atvBlocks}
-  <div class="sec"><span>Vínculos</span></div>
+  ${temCobranca?`<div class="sec"><span>Vínculos</span></div>
   ${vincHtml}
-  <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>
+  <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>`:''}
   ${(()=>{ const sigs=[]; const sigVistas=new Set();
     /* DESDUPLICAÇÃO (20/10/2026): a MESMA assinatura existe em os_clientes.assinatura_url
        E em os_assinaturas (o fluxo do celular salva nas duas) — a impressão mostra 1 vez só. */
@@ -8275,7 +8796,7 @@ function imprimirOS(){
 }
 /* ================= INIT ================= */
 (function init(){
-  try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ aplicarTema('claro'); }
+  try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ try{ aplicarTema('claro'); }catch(e2){ /* tema nunca pode travar o boot */ } }
   sessao = lerSessao();
   if(sessao && sessao.id){ entrarApp(); }
   // senão, fica na tela de login
