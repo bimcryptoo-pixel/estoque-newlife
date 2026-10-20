@@ -10440,6 +10440,15 @@ try{
      suporta WebAuthn. Sem suporte, a tela de login fica exatamente como sempre. */
   try{ if(window.PublicKeyCredential) document.getElementById('btnPasskeyLogin')?.classList.remove('hidden'); }catch(e){}
   sessao = lerSessao();
+  /* 🔐 VIRADA DE SEGURANÇA (modalidade 1): com o banco fechado, sessão salva
+     sem token (de antes do fechamento) não lê mais nada — abriria o app com as
+     listas vazias, parecendo que os dados sumiram. Em vez disso, encerra a
+     sessão antiga com limpeza e pede um login novo (que já emite o token). */
+  if(sessao && sessao.id && !sessao.token){
+    try{ localStorage.removeItem('nl_estoque_sessao'); }catch(e){}
+    sessao = null;
+    setTimeout(()=>{ try{ toast('🔐 O sistema foi atualizado por segurança. Entre de novo, por favor — é rapidinho.','ok'); }catch(e){} }, 600);
+  }
   if(sessao && sessao.id){ entrarApp(); }
   // senão, fica na tela de login
 })();
