@@ -268,7 +268,7 @@
       <button data-aba="osclientes" onclick="mostrarAba('osclientes')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🔧 OS Clientes</button>
       <button data-aba="ospainel" onclick="mostrarAba('ospainel')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📊 Painel OS</button>
       <button data-aba="mapaequipe" onclick="mostrarAba('mapaequipe')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗺️ Mapa Equipe</button>
-      <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📱 Minhas OSs</button>
+      <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📱 Minhas OS</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
@@ -1209,14 +1209,26 @@
       <section id="aba-ostecnico" class="hidden">
         <div class="card p-4 mb-3 max-w-2xl">
           <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div class="font-bold text-lg">📱 Minhas OSs</div>
-            <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarPainelTecnico()">🔄 Atualizar</button>
+            <div class="font-bold text-lg">📱 Minhas OS</div>
+            <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="tecAtualizarPainel()">🔄 Atualizar</button>
           </div>
           <div id="tecNome" class="text-xs text-gray-500 mb-2"></div>
           <div id="tecGpsBar"></div>
           <div id="tecOfflineBar" class="hidden text-xs font-bold rounded-lg px-3 py-2 mb-2" style="background:#fef3c7;color:#92400e"></div>
           <div id="tecPendBar" class="hidden text-xs font-bold rounded-lg px-3 py-2 mb-2 cursor-pointer" style="background:#ffedd5;color:#9a3412" onclick="nlSync(true)" title="Toque para tentar enviar agora"></div>
+          <div id="tecAbas" class="flex gap-2 mb-3">
+            <button id="tecAbaAbertas" type="button" class="btn-brand flex-1 !py-2 text-sm" onclick="tecAba('abertas')">📋 Abertas</button>
+            <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
+          </div>
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
+          <div id="tecConcWrap" class="hidden">
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+              <input type="date" id="tecConcData" class="inp !w-auto text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecConcLimparFiltro()">Limpar</button>
+              <span id="tecConcCount" class="text-xs text-gray-500 font-bold"></span>
+            </div>
+            <div id="tecConcLista" class="grid gap-3"></div>
+          </div>
           <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
         </div>
       </section>
@@ -1565,7 +1577,7 @@ const MODULOS = [
   ['rastreio','🔍 Rastreio de lote'],['emprestimos','🤝 Empréstimos'],['consumo','📊 Consumo'],
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
-  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ospainel','📊 Painel OS'],['mapaequipe','🗺️ Mapa Equipe'],['ostecnico','📱 Minhas OSs'],
+  ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ospainel','📊 Painel OS'],['mapaequipe','🗺️ Mapa Equipe'],['ostecnico','📱 Minhas OS'],
   ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
@@ -6023,7 +6035,7 @@ function novaOS(){
     <textarea id="nosDesc" class="inp text-sm mb-2" rows="3" placeholder="Descreva o chamado…"></textarea>
     <label class="lbl">Valor dos serviços (R$)</label>
     <input id="nosValor" class="inp text-sm mb-3" inputmode="decimal" placeholder="0,00">
-    <label class="lbl">👷 Técnico responsável (opcional)</label>
+    <label class="lbl">👷 Técnico responsável (obrigatório)</label>
     ${osSelectTecnicoHTML('nosTecnico','')}
     <div class="flex gap-2">
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
@@ -6404,6 +6416,10 @@ async function salvarOS(){
   const descricao = document.getElementById('nosDesc').value.trim();
   if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
   if(!descricao){ toast('Descreva o serviço.','erro'); return; }
+  // 🔒 regra do Fabio (20/10/2026): Nova OS só grava COM técnico responsável
+  // selecionado — a validação roda antes de QUALQUER escrita (equipamento/OS).
+  const tecObrigEl = document.getElementById('nosTecnico');
+  if(!tecObrigEl || !tecObrigEl.value){ toast('Selecione o técnico responsável para gravar a OS.','erro'); return; }
   SALVAR_OS_TRAVA = true;
   const btnSalvarOS = document.getElementById('btnSalvarOS');
   if(btnSalvarOS){ btnSalvarOS.disabled = true; btnSalvarOS.textContent = 'Salvando…'; }
@@ -8264,7 +8280,7 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca){
   });
   // 📍 eventos de presença (pedido 20/10/2026): login no sistema + abertura do Minhas OSs
   (presenca||[]).forEach(ev=>{
-    const lbl = ev.evento==='login' ? 'Login no sistema' : 'Abriu Minhas OSs';
+    const lbl = ev.evento==='login' ? 'Login no sistema' : 'Abriu Minhas OS';
     const icE = ev.evento==='login' ? '🔑' : '📱';
     // ponto GPS mais próximo do evento (até 5 min) — vem da captura do tecEventoLocal
     let best = null, bestMs = 5*60000;
@@ -8499,6 +8515,7 @@ async function carregarPainelTecnico(){
       // só o tecnico_nome vinculado vale (pré-piloto): o nome de login NÃO vira técnico
       if(me && me.tecnico_nome) tnome = me.tecnico_nome;
     }catch(e){}
+    TEC_TNOME = tnome; // usado pela aba Concluídas (histórico do técnico)
     document.getElementById('tecNome').textContent = 'Técnico: ' + tnome;
     tecGpsIniciar(tnome); // rastreamento em tempo real
     tecEventoMinhasOS(); // 📍 presença ao abrir o módulo (com dedupe de 30 min)
@@ -8560,6 +8577,109 @@ async function carregarPainelTecnico(){
       box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📴 Sem internet e ainda não há dados salvos neste aparelho.<br>Conecte-se uma vez para carregar suas OSs.</div>';
     }
   }
+}
+/* ================= 📑 ABAS DO PAINEL DO TÉCNICO — Abertas × Concluídas (20/10/2026) =================
+   Pedido do Fabio: o painel (agora "Minhas OS") ganha a aba ✅ Concluídas —
+   o histórico do próprio técnico, por data, SOMENTE visualização. A aba
+   📋 Abertas é o comportamento de sempre (consulta, trava, offline e GPS
+   intocados). A busca das concluídas é PRÓPRIA e roda a cada abertura da
+   aba (e no Atualizar com a aba ativa): mesmo casamento por tecnico_nome
+   do painel (eq → fallback amplo + igualdade normalizada trim+caixa). */
+let TEC_ABA = 'abertas';      // aba ativa do painel: 'abertas' | 'concluidas'
+let TEC_TNOME = '';           // tecnico_nome resolvido (carregarPainelTecnico)
+let TEC_CONC = [];            // cache das concluídas carregadas
+let TEC_CONC_FILTRO = '';     // filtro de data da aba Concluídas (aaaa-mm-dd)
+function tecAtualizarPainel(){
+  if(TEC_ABA==='concluidas') tecCarregarConcluidas();
+  else carregarPainelTecnico();
+}
+function tecAba(qual){
+  TEC_ABA = (qual==='concluidas') ? 'concluidas' : 'abertas';
+  const bA = document.getElementById('tecAbaAbertas'), bC = document.getElementById('tecAbaConcluidas');
+  const lA = document.getElementById('tecLista'), wC = document.getElementById('tecConcWrap');
+  if(bA) bA.className = (TEC_ABA==='abertas' ? 'btn-brand' : 'btn-ghost') + ' flex-1 !py-2 text-sm';
+  if(bC) bC.className = (TEC_ABA==='concluidas' ? 'btn-brand' : 'btn-ghost') + ' flex-1 !py-2 text-sm';
+  if(lA) lA.classList.toggle('hidden', TEC_ABA!=='abertas');
+  if(wC) wC.classList.toggle('hidden', TEC_ABA!=='concluidas');
+  if(TEC_ABA==='concluidas') tecCarregarConcluidas();
+}
+async function tecCarregarConcluidas(){
+  const lista = document.getElementById('tecConcLista');
+  if(!lista) return;
+  lista.innerHTML = '<span class="text-gray-400 text-sm">Carregando…</span>';
+  try{
+    // mesmo casamento do painel: tecnico_nome vinculado (o nome de login NÃO vira técnico)
+    let tnome = TEC_TNOME;
+    if(!tnome){
+      tnome = (typeof sessao!=='undefined' && sessao) ? sessao.nome : '';
+      try{
+        const [me] = await apiGET(`usuarios?id=eq.${sessao.id}&select=tecnico_nome,nome`);
+        if(me && me.tecnico_nome) tnome = me.tecnico_nome;
+      }catch(e){}
+      TEC_TNOME = tnome;
+    }
+    const selAtv = '*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))';
+    let atvs = await apiGET(
+      'os_atividades?tecnico=eq.'+encodeURIComponent(tnome)+'&status=eq.concluida' +
+      '&select=' + selAtv + '&order=data.desc,created_at.desc&limit=200'
+    );
+    if(!(atvs||[]).length){
+      const amplas = await apiGET(
+        'os_atividades?status=eq.concluida&select=' + selAtv + '&order=data.desc,created_at.desc&limit=1000'
+      ).catch(()=>[]);
+      const alvo = String(tnome||'').trim().toLowerCase();
+      atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo).slice(0,200);
+    }
+    TEC_CONC = atvs || [];
+    tecRenderConcluidas();
+  }catch(e){
+    // 📴 sem conexão: o histórico precisa de rede (a aba Abertas segue com o snapshot dela)
+    TEC_CONC = [];
+    const cnt = document.getElementById('tecConcCount'); if(cnt) cnt.textContent = '';
+    lista.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📴 Sem internet — o histórico precisa de conexão.</div>';
+  }
+}
+function tecRenderConcluidas(){
+  const lista = document.getElementById('tecConcLista');
+  if(!lista) return;
+  const cnt = document.getElementById('tecConcCount');
+  let atvs = TEC_CONC || [];
+  const total = atvs.length;
+  if(TEC_CONC_FILTRO) atvs = atvs.filter(a=>String(a.data||'').slice(0,10)===TEC_CONC_FILTRO);
+  if(cnt) cnt.textContent = atvs.length + (atvs.length===1 ? ' concluída' : ' concluídas') + (TEC_CONC_FILTRO && total!==atvs.length ? ` (de ${total} no total)` : '');
+  if(!atvs.length){
+    lista.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">Nenhuma OS concluída encontrada.</div>';
+    return;
+  }
+  lista.innerHTML = atvs.map(a=>{
+    const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
+    const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+    return `
+    <div class="border rounded-xl p-3 bg-white">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="font-black text-brand">${esc(os.numero||'')}</div>
+        ${atvTecBadge('concluida')}
+      </div>
+      <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
+      ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
+      <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+      ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
+      ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
+      ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+    </div>`;
+  }).join('');
+}
+function tecConcFiltrar(v){
+  TEC_CONC_FILTRO = v || '';
+  tecRenderConcluidas();
+}
+function tecConcLimparFiltro(){
+  const inp = document.getElementById('tecConcData');
+  if(inp) inp.value = '';
+  TEC_CONC_FILTRO = '';
+  tecRenderConcluidas();
 }
 /* ================= 🔒 TRAVA DE FLUXO OBRIGATÓRIO — PAINEL DO TÉCNICO (20/10/2026) =================
    Regra do Fabio: enquanto a atividade está pendente, o atendimento
