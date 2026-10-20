@@ -1543,7 +1543,7 @@ async function fazerLogin(){
     try{ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,permissoes,tecnico_nome`); }
     catch(e){ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,tecnico_nome`); }
     if(!rows.length || rows[0].senha !== senha){ box.textContent='Usuário ou senha inválidos.'; box.classList.remove('hidden'); return; }
-    sessao = { id: rows[0].id, nome: rows[0].nome, perfil: rows[0].perfil, permissoes: rows[0].permissoes || null };
+    sessao = { id: rows[0].id, nome: rows[0].nome, login: rows[0].login, perfil: rows[0].perfil, permissoes: rows[0].permissoes || null };
     salvarSessao();
     // 📍 presença: técnico vinculado registra o ponto do login (evento + coordenadas)
     if(rows[0].tecnico_nome){ TEC_GPS.nome = rows[0].tecnico_nome; tecEventoLocal('login'); }
@@ -1553,6 +1553,10 @@ async function fazerLogin(){
 function fazerLogout(){ try{ tecGpsParar(); }catch(e){} sessao=null; localStorage.removeItem('nl_estoque_sessao'); location.reload(); }
 
 function entrarApp(){
+  // sessões salvas antes de a sessão guardar o login: completa o campo (best-effort)
+  if(sessao && !sessao.login && sessao.id){
+    apiGET(`usuarios?id=eq.${sessao.id}&select=login`).then(rs=>{ if(rs && rs[0] && rs[0].login){ sessao.login = rs[0].login; salvarSessao(); } }).catch(()=>{});
+  }
   document.getElementById('telaLogin').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
@@ -6604,7 +6608,7 @@ function renderOSDetalhe(){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osReabrir()">↩️ Reabrir</button>`;
   if(o.origem!=='fieldcontrol'){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirEditar()">✏️ Editar</button>`;
-    if(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')
+    if(podeExcluirOS())
       acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm !text-red-600 !border-red-300" onclick="osConfirmarExcluir()">🗑️ Excluir</button>`;
   }
 
@@ -7467,8 +7471,15 @@ async function osCancelar(){
 
 /* ---------- editar / excluir OS ----------
    Regra: OSs importadas do Field Control (origem='fieldcontrol') são histórico
-   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir é só do admin. */
+   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir é EXCLUSIVO do Fabio
+   (pelo login, não pelo cargo — ver podeExcluirOS). */
 function osEhEditavel(o){ return !!o && o.origem!=='fieldcontrol'; }
+/* Trava de pessoa (20/10/2026): excluir OS é exclusivo do Fabio. A trava é no
+   LOGIN dele de propósito: um futuro segundo admin NÃO poderá excluir OS. */
+function podeExcluirOS(){
+  return typeof sessao!=='undefined' && !!sessao && sessao.perfil==='admin'
+    && String(sessao.login||'').trim().toLowerCase()==='fabio';
+}
 function osDtLocalInput(iso){
   if(!iso) return '';
   const dt = new Date(iso); if(isNaN(dt.getTime())) return '';
@@ -7593,10 +7604,10 @@ async function osSalvarEdicao(){
   }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
 }
 function osConfirmarExcluir(){
+  if(!podeExcluirOS()){ toast('🔒 Excluir OS é exclusivo do Fabio.','erro'); return; }
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); return; }
-  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Exclusão restrita ao administrador.','erro'); return; }
   const cliNome = (o.clientes && o.clientes.nome) || '—';
   openOsModal(`
     <div class="font-bold mb-2 text-red-600">🗑️ Excluir OS ${esc(o.numero)}</div>
@@ -7608,10 +7619,10 @@ function osConfirmarExcluir(){
     </div>`);
 }
 async function osExcluirDefinitivo(){
+  if(!podeExcluirOS()){ toast('🔒 Excluir OS é exclusivo do Fabio.','erro'); closeOsModal(); return; }
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); closeOsModal(); return; }
-  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Exclusão restrita ao administrador.','erro'); closeOsModal(); return; }
   try{
     /* segurança (mesmo padrão de osCancelar/excluirPedido): estorna as baixas de estoque antes de apagar */
     for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, o.numero);
