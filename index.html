@@ -1114,7 +1114,10 @@
         <div id="osListaBox" class="card p-4 mb-3 w-full xl:max-w-none max-w-6xl mx-auto">
           <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div class="font-bold text-lg">🔧 OS Clientes</div>
-            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
+            <div class="flex gap-2 flex-wrap">
+              <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirClientes()">👥 Clientes</button>
+              <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
+            </div>
           </div>
           <div class="flex gap-2 mb-3" id="osFiltroSituacao">
             <button data-sit="aberto" onclick="osMudarSituacao('aberto')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm font-bold">📌 Em aberto</button>
@@ -5854,6 +5857,90 @@ function renderOSLista(){
     (OS_TEM_MAIS ? `<button class="btn-ghost text-sm mt-1" onclick="osCarregarPagina()">Mostrar mais</button>` : '');
 }
 
+/* ---------- 👥 Clientes (atalho do módulo OS Clientes) ----------
+   Lista os clientes ATIVOS com busca e botão Editar VISÍVEL, reusando o
+   editor do módulo Cadastros (abrirEditorCliente/salvarEditorCliente).
+   O editor abre num modal próprio (#editarCadModal, z-9999) POR CIMA desta
+   lista (que fica no #modalOS); um MutationObserver detecta o fechamento
+   do editor (salvar ou cancelar) e recarrega esta lista. */
+let OSCLI_LISTA = { aberta:false, busca:'', itens:[] };
+let OSCLI_OBSERVER = null;
+function osCliNormTxt(s){
+  return String(s||'').toLowerCase().trim()
+    .replace(/[áàâãä]/g,'a').replace(/[éèêë]/g,'e').replace(/[íìîï]/g,'i')
+    .replace(/[óòôõö]/g,'o').replace(/[úùûü]/g,'u').replace(/ç/g,'c').replace(/ñ/g,'n');
+}
+async function osAbrirClientes(){
+  OSCLI_LISTA.aberta = true;
+  OSCLI_LISTA.busca = '';
+  openOsModal(`
+    <div class="font-bold text-lg mb-1">👥 Clientes</div>
+    <div class="text-xs text-gray-500 mb-3">Localize o cliente e toque em ✏️ Editar para completar ou corrigir o cadastro — é o mesmo editor do módulo Cadastros.</div>
+    <input id="osCliListaBusca" class="inp text-sm mb-2" placeholder="🔎 Buscar por nome ou cidade…" oninput="OSCLI_LISTA.busca=this.value;osRenderListaClientes()">
+    <div id="osCliListaCont" class="text-xs text-gray-500 mb-2"></div>
+    <div id="osCliListaBox" class="grid gap-2 max-h-[55vh] overflow-y-auto pr-1"><div class="text-sm text-gray-400 p-2">Carregando…</div></div>
+    <div class="flex justify-end mt-4"><button class="btn-ghost !w-auto px-4" onclick="osFecharListaClientes()">Fechar</button></div>`);
+  osCliObservarEditor();
+  await osRecarregarListaClientes();
+}
+async function osRecarregarListaClientes(){
+  try{
+    await carregarClientesCache(); /* mantém o global CLIENTES fresco p/ Nova OS e filtros */
+    /* esta lista usa select detalhado: o cache compartilhado só traz id/nome/tipo/cnpj/ativo */
+    const rows = await apiGET('clientes?select=id,nome,tipo,telefone,email,cidade,uf,ativo&order=nome.asc');
+    OSCLI_LISTA.itens = (rows||[]).filter(c=>c.ativo!==false);
+  }catch(e){
+    OSCLI_LISTA.itens = [];
+    toast('Erro ao carregar clientes: '+e.message,'erro');
+  }
+  osRenderListaClientes();
+}
+function osRenderListaClientes(){
+  const box = document.getElementById('osCliListaBox'); if(!box) return;
+  const cont = document.getElementById('osCliListaCont');
+  const q = osCliNormTxt(OSCLI_LISTA.busca);
+  const filtrados = OSCLI_LISTA.itens.filter(c=>!q || osCliNormTxt(c.nome).includes(q) || osCliNormTxt(c.cidade).includes(q));
+  if(cont) cont.textContent = filtrados.length + ' cliente(s)' + (filtrados.length!==OSCLI_LISTA.itens.length ? ' de ' + OSCLI_LISTA.itens.length : '');
+  if(!filtrados.length){
+    box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">Nenhum cliente encontrado.</div>';
+    return;
+  }
+  const LIM = 100;
+  box.innerHTML = filtrados.slice(0, LIM).map(c=>{
+    const det = [ (c.tipo && c.tipo!=='cliente') ? c.tipo : '', c.cidade ? (c.cidade + (c.uf ? '/'+c.uf : '')) : '', c.telefone || '' ].filter(Boolean).join(' · ');
+    return `<div class="border rounded-xl p-3 bg-white flex items-center gap-2">
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-sm truncate">${esc(fmtCliNome(c.nome, c.tipo))}</div>
+        ${det?`<div class="text-xs text-gray-500 truncate">${esc(det)}</div>`:''}
+      </div>
+      <button class="btn-ghost !w-auto !py-2 !px-3 text-sm shrink-0" onclick="osEditarClienteDaLista('${c.id}')">✏️ Editar</button>
+    </div>`;
+  }).join('') + (filtrados.length>LIM ? `<div class="text-xs text-gray-400 text-center py-1">Mostrando ${LIM} de ${filtrados.length} — refine a busca.</div>` : '');
+}
+function osEditarClienteDaLista(id){
+  /* reusa o editor existente (Cadastros); o observador atualiza a lista quando ele fechar */
+  abrirEditorCliente(id);
+}
+function osFecharListaClientes(){
+  OSCLI_LISTA.aberta = false;
+  closeOsModal();
+}
+function osCliObservarEditor(){
+  if(OSCLI_OBSERVER) return;
+  let tinhaEditor = false;
+  OSCLI_OBSERVER = new MutationObserver(()=>{
+    const tem = !!document.getElementById('editarCadModal');
+    if(tinhaEditor && !tem){
+      const modal = document.getElementById('modalOS');
+      const box = document.getElementById('osCliListaBox');
+      if(OSCLI_LISTA.aberta && box && modal && modal.style.display!=='none') osRecarregarListaClientes();
+      else OSCLI_LISTA.aberta = false;
+    }
+    tinhaEditor = tem;
+  });
+  OSCLI_OBSERVER.observe(document.body, { childList:true });
+}
+
 /* ---------- nova OS ---------- */
 async function proximoNumeroOS(){
   const ano = new Date().getFullYear();
@@ -8474,8 +8561,80 @@ async function carregarPainelTecnico(){
     }
   }
 }
+/* ================= 🔒 TRAVA DE FLUXO OBRIGATÓRIO — PAINEL DO TÉCNICO (20/10/2026) =================
+   Regra do Fabio: enquanto a atividade está pendente, o atendimento
+   OBRIGATORIAMENTE começa pelo deslocamento — Iniciar, Assinatura e Foto
+   ficam TRAVADOS até o técnico tocar em 🚗 A caminho. Três camadas:
+   (1) visual (botão apagado com 🔒), (2) clique interceptado mostrando o
+   aviso da regra, (3) guardas nas funções (defesa em profundidade).
+   O estado que vale é o EXIBIDO no card (overlay otimista do modo offline
+   incluso — mesma conta do render): se já existe transição pendente de
+   sync, o status cru 'pendente' NÃO bloqueia ninguém. */
+let TEC_ATIVIDADES = [];   // última lista renderizada no painel (lookup da trava e das guardas)
+const TRAVA_TITULO = 'Primeiro toque em 🚗 A caminho — o atendimento começa pelo deslocamento.';
+const TRAVA_CSS = '.tec-travado{opacity:.45;filter:grayscale(.4);cursor:not-allowed}';
+(function tecTravaStyle(){
+  try{
+    if(!document.getElementById('tecTravaStyle')){
+      const s = document.createElement('style');
+      s.id = 'tecTravaStyle';
+      s.textContent = TRAVA_CSS;
+      (document.head || document.documentElement).appendChild(s);
+    }
+  }catch(e){}
+})();
+function tecStatusExibido(a){
+  if(!a) return '';
+  const ov = TEC_OVERLAY[a.id];
+  return (ov && ov.status) || a.status || '';
+}
+function tecBloqueado(a){
+  if(!a) return false;
+  const st = tecStatusExibido(a);
+  // 'agendada' entra junto: o render trata pendente/agendada como o MESMO
+  // estado inicial (mesmos botões) — o fluxo obrigatório é idêntico.
+  return st==='pendente' || st==='agendada';
+}
+function tecAvisoTrava(){
+  toast('🚗 Primeiro toque em "A caminho" — o atendimento começa pelo deslocamento.','alerta');
+}
+function tecAtvPorId(id){
+  if(id==null) return null;
+  return (TEC_ATIVIDADES||[]).find(x=>String(x.id)===String(id)) || null;
+}
+function tecAtvPorOs(osId){
+  if(osId==null) return null;
+  return (TEC_ATIVIDADES||[]).find(x=>
+    String(x.os_id||'')===String(osId) ||
+    String((x.os_clientes && x.os_clientes.id)||'')===String(osId)
+  ) || null;
+}
+/* Assinatura a partir do PAINEL passa por este wrapper (a trava mora aqui);
+   o osAbrirAssinatura original segue intocado p/ o escritório. */
+function tecAssinaturaAbrir(osId){
+  const a = tecAtvPorOs(osId);
+  if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
+  osAbrirAssinatura(osId);
+}
+/* Clique em botão travado NÃO executa a ação: mostra o aviso da regra.
+   Listener em CAPTURA no document — roda antes do onclick inline do botão;
+   sem `disabled` de propósito (o clique precisa chegar aqui p/ avisar). */
+document.addEventListener('click', function(ev){
+  const t = ev.target;
+  const el = (t && t.closest) ? t.closest('[data-atv][data-act]') : null;
+  if(!el) return;
+  const a = tecAtvPorId(el.getAttribute('data-atv'));
+  if(a && tecBloqueado(a)){
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    tecAvisoTrava();
+  }
+}, true);
+
 function renderPainelTecnico(atvs, fotoCount){
   fotoCount = fotoCount||{};
+  TEC_ATIVIDADES = atvs || [];
   const box = document.getElementById('tecLista');
   if(!atvs.length){
     box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
@@ -8490,12 +8649,18 @@ function renderPainelTecnico(atvs, fotoCount){
     const pendSt = !!ovSt || TEC_PEND.statusAtvs.has(a.id);
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
     let btns = '';
+    // 🔒 fluxo obrigatório: pendente/agendada sem A caminho → Iniciar,
+    //    Assinatura e Foto nascem travados (visual + clique interceptado).
+    const trav = tecBloqueado(a);
+    const clsTrav = trav ? ' tec-travado' : '';
+    const lkTrav = trav ? '🔒 ' : '';
+    const attrTrav = trav ? ` title="${TRAVA_TITULO}" aria-disabled="true"` : '';
     if(pendConc){ /* 📴 conclusão aguardando envio: ações bloqueadas até sincronizar */ }
     else if(stExib==='pendente'||stExib==='agendada'){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Iniciar</button>`;
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="iniciar"${attrTrav} onclick="tecMudarStatus('${a.id}','em_atendimento')">${lkTrav}▶️ Iniciar</button>`;
     }else if(stExib==='a_caminho'){
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
+      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
     }else if(stExib==='em_atendimento'){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
@@ -8504,8 +8669,8 @@ function renderPainelTecnico(atvs, fotoCount){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }
     if(!pendConc){
-    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="osAbrirAssinatura('${os.id}')">✍️ Assinatura</button>`;
-    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecFotoOS('${os.id}')">📷 Foto</button>`;
+    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
+    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
     btns += `<button class="text-xs text-red-700 font-bold px-2" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌</button>`;
     }
     return `
@@ -8532,6 +8697,9 @@ function renderPainelTecnico(atvs, fotoCount){
 /* ---------- fluxo guiado de conclusão (3 passos) ---------- */
 let TEC_FLUXO = null;
 function tecConcluirModal(atvId, osId){
+  // 🔒 fluxo obrigatório: pendente/agendada sem A caminho não abre a conclusão
+  const __aTravConc = tecAtvPorId(atvId);
+  if(__aTravConc && tecBloqueado(__aTravConc)){ tecAvisoTrava(); return; }
   // 📴 esta atividade já foi concluída neste aparelho e está aguardando envio:
   //    não reabre o fluxo (evita concluir a mesma atividade 2×).
   if(TEC_PEND.conclusaoAtvs.has(atvId)){
@@ -8597,6 +8765,11 @@ function tecFluxoInitPad(){
 function tecFluxoLimparPad(){ const cv=document.getElementById('tecFluxoPad'); if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
 async function tecFluxoFotoUp(input){
   const F = TEC_FLUXO;
+  // 🔒 fluxo obrigatório: atividade resolvível pelo fluxo e travada → foto não entra
+  if(F && F.atvId){
+    const __aTravFoto = tecAtvPorId(F.atvId);
+    if(__aTravFoto && tecBloqueado(__aTravFoto)){ tecAvisoTrava(); if(input) input.value=''; return; }
+  }
   if(!F || !input.files || !input.files[0]){ if(input) input.value=''; return; }
   const file = input.files[0];
   input.value='';
@@ -8829,6 +9002,19 @@ async function tecMudarStatusSilent(id, novo, obs){
   await tecSincronizarOS(a.os_id);
 }
 async function tecMudarStatus(id, novo, obs){
+  // 🔒 fluxo obrigatório (defesa em profundidade): pendente/agendada sem
+  //    A caminho não inicia nem pausa. 🚗 A caminho e ❌ cancelar seguem
+  //    livres — esta guarda NUNCA interfere neles.
+  if(novo==='em_atendimento' || novo==='pausada'){
+    const __aTravSt = tecAtvPorId(id);
+    if(__aTravSt && tecBloqueado(__aTravSt)){ tecAvisoTrava(); return; }
+  }
+  // 📴 offline: se a transição p/ em_atendimento JÁ está enfileirada neste
+  //    aparelho (overlay), um 2º toque/chamada não enfileira de novo.
+  if(novo==='em_atendimento'){
+    const __ovTrav = TEC_OVERLAY[id];
+    if(__ovTrav && __ovTrav.status==='em_atendimento') return;
+  }
   try{
     if(novo==='cancelada' && !confirm('Cancelar esta atividade?')) return;
     if((novo==='a_caminho'||novo==='em_atendimento') && !tecGpsPodeAgir()) return;
@@ -8877,6 +9063,9 @@ async function tecMudarStatus(id, novo, obs){
 /* ---------- fotos do atendimento (técnico em campo) ---------- */
 let TEC_FOTO_OS = null;
 function tecFotoOS(osId){
+  // 🔒 fluxo obrigatório: foto avulsa só depois do 🚗 A caminho
+  const __aTravFotoOS = tecAtvPorOs(osId);
+  if(__aTravFotoOS && tecBloqueado(__aTravFotoOS)){ tecAvisoTrava(); return; }
   TEC_FOTO_OS = osId;
   const inp = document.getElementById('tecFotoInput');
   if(inp) inp.click(); else toast('Não foi possível abrir a câmera.','erro');
