@@ -5760,6 +5760,33 @@ function tecOptions(sel){
   return (TEC_LIST||[]).map(t=>`<option value="${esc(t.tecnico_nome)}"${t.tecnico_nome===sel?' selected':''}>${esc(t.tecnico_nome)}</option>`).join('');
 }
 
+/* ---------- designação de técnico na OS (criar/editar) ---------- */
+let OS_TEC_CACHE = null, OS_TEC_CACHE_EM = 0;
+async function osCarregarTecnicos(){
+  if(OS_TEC_CACHE && (Date.now()-OS_TEC_CACHE_EM) < 60000) return OS_TEC_CACHE;
+  const lista = await apiGET('usuarios?tecnico_nome=not.is.null&ativo=eq.true&select=id,nome,tecnico_nome&order=tecnico_nome.asc');
+  OS_TEC_CACHE = lista||[];
+  OS_TEC_CACHE_EM = Date.now();
+  return OS_TEC_CACHE;
+}
+function osSelectTecnicoHTML(idEl, selecionado){
+  const lista = (OS_TEC_CACHE && OS_TEC_CACHE.length) ? OS_TEC_CACHE : (TEC_LIST||[]);
+  const sel = selecionado||'';
+  let h = `<option value=""${!sel?' selected':''}>— Sem técnico —</option>`;
+  h += lista.map(t=>`<option value="${esc(t.tecnico_nome)}"${t.tecnico_nome===sel?' selected':''}>${esc(t.tecnico_nome)}</option>`).join('');
+  if(sel && !lista.some(t=>t.tecnico_nome===sel)) h += `<option value="${esc(sel)}" selected>${esc(sel)}</option>`;
+  return `<select id="${idEl}" class="inp text-sm mb-2">${h}</select>`;
+}
+function osRefreshSelectTecnico(idEl){
+  osCarregarTecnicos().then(()=>{
+    const s = document.getElementById(idEl); if(!s) return;
+    const v = s.value;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = osSelectTecnicoHTML(idEl, v);
+    if(tmp.firstChild) s.replaceWith(tmp.firstChild);
+  }).catch(()=>{});
+}
+
 function osStatusBadge(st){
   const s = OS_STATUS[st] || OS_STATUS.aberta;
   return `<span style="${s.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${s.label}</span>`;
@@ -5909,10 +5936,13 @@ function novaOS(){
     <textarea id="nosDesc" class="inp text-sm mb-2" rows="3" placeholder="Descreva o chamado…"></textarea>
     <label class="lbl">Valor dos serviços (R$)</label>
     <input id="nosValor" class="inp text-sm mb-3" inputmode="decimal" placeholder="0,00">
+    <label class="lbl">👷 Técnico responsável (opcional)</label>
+    ${osSelectTecnicoHTML('nosTecnico','')}
     <div class="flex gap-2">
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
       <button class="btn-brand flex-1 !w-auto" id="btnSalvarOS" onclick="salvarOS()">Criar OS</button>
     </div>`);
+  osRefreshSelectTecnico('nosTecnico');
 }
 function osTipoChanged(t){
   if(!t){
@@ -6323,11 +6353,24 @@ async function salvarOS(){
       body.endereco_os = endEl?endEl.value.trim()||null:null;
       body.prazo = przEl&&przEl.value?przEl.value:null;
     }
+    const tecSelEl = document.getElementById('nosTecnico');
+    const tecnicoSel = tecSelEl ? tecSelEl.value : '';
     const os = await apiPOST('os_clientes', body);
     await osLog(os.id, `criou a OS ${numero}`);
+    let designado = '', designFalhou = '';
+    if(tecnicoSel){
+      try{
+        await apiPOST('os_atividades', { os_id: os.id, tecnico: tecnicoSel, data: mapaHojeFortaleza(), status:'pendente' });
+        await apiPATCH('os_clientes', `id=eq.${os.id}`, { status:'em_atendimento' });
+        await osLog(os.id, `OS designada para ${tecnicoSel} na criação`);
+        designado = tecnicoSel;
+      }catch(e){ designFalhou = e.message; }
+    }
     closeOsModal();
     OS_CACHE = null;
-    toast(`OS ${numero} criada. ✓`,'ok');
+    if(designado) toast(`OS ${numero} criada e designada para ${designado}. ✓`,'ok');
+    else if(designFalhou) toast(`OS ${numero} criada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
+    else toast(`OS ${numero} criada. ✓`,'ok');
     await verOS(os.id);
   }catch(e){
     toast('Erro ao criar OS: '+e.message,'erro');
@@ -6519,6 +6562,7 @@ function osAbaGeral(d){
   const editavel = o.status!=='concluida' && o.status!=='cancelada';
   const iniNome = (cli.nome||'?').trim().charAt(0).toUpperCase();
   const mapsUrl = endOS ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endOS)}` : null;
+  const atvTec = (d.atividades||[]).find(a=>!['concluida','cancelada'].includes(a.status) && a.tecnico);
   // ---- linha do tempo das atividades
   const tlAtv = d.atividades.length ? d.atividades.map(a=>{
     const st = ATV_TEC_STATUS[a.status]||ATV_TEC_STATUS.pendente;
@@ -6563,6 +6607,7 @@ function osAbaGeral(d){
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo de OS</div><b>${esc(o.tipos_os?o.tipos_os.descricao:'—')}</b></div>
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Prazo</div><b>${o.prazo_solucao?fmtData((o.prazo_solucao||'').slice(0,10)):'—'}</b></div>
     </div>
+    ${atvTec?`<div class="text-sm mb-2">👷 Técnico: <b>${esc(atvTec.tecnico)}</b></div>`:''}
     <div class="bg-gray-50 rounded-lg p-2 text-sm"><div class="text-[10px] text-gray-500 uppercase">Descrição</div><div class="whitespace-pre-wrap">${esc(o.descricao_servico||'—')}</div></div>
   </div>
   <div class="border rounded-xl p-4 mb-3 bg-white">
@@ -7327,16 +7372,29 @@ function osDtLocalInput(iso){
   const p = n=>String(n).padStart(2,'0');
   return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}`;
 }
-function osAbrirEditar(){
+let OS_EDIT_TEC = null; /* designação atual da OS no modal de edição: {atvId, tecnico, status} */
+async function osAbrirEditar(){
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser editada.','erro'); return; }
+  OS_EDIT_TEC = null;
+  try{
+    const atvs = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id,tecnico,status,created_at&order=created_at.asc`);
+    const a0 = (atvs||[])[0];
+    if(a0) OS_EDIT_TEC = { atvId: a0.id, tecnico: a0.tecnico||'', status: a0.status };
+  }catch(e){
+    const a0 = (d.atividades||[]).filter(a=>!['concluida','cancelada'].includes(a.status))[0];
+    if(a0) OS_EDIT_TEC = { atvId: a0.id, tecnico: a0.tecnico||'', status: a0.status };
+  }
+  await osCarregarTecnicos().catch(()=>{});
   const tipoOpts = (TIPOS_OS||[]).map(t=>`<option value="${t.id}" ${String(t.id)===String(o.tipo_os_id||'')?'selected':''}>${esc(t.descricao)}</option>`).join('');
   const cliOptsEditar = (CLIENTES||[]).map(c=>`<option value="${c.id}" ${String(c.id)===String(o.cliente_id)?'selected':''}>${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
   openOsModal(`
     <div class="font-bold mb-3">✏️ Editar OS ${esc(o.numero)}</div>
     <label class="lbl">Cliente</label>
     <select id="eosCliente" class="inp text-sm mb-2">${cliOptsEditar}</select>
+    <label class="lbl">👷 Técnico responsável</label>
+    ${osSelectTecnicoHTML('eosTecnico', OS_EDIT_TEC ? OS_EDIT_TEC.tecnico : '')}
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="eosDesc" class="inp text-sm mb-2" rows="3">${esc(o.descricao_servico||'')}</textarea>
     ${OS_FIELD_PARIDADE?`
@@ -7363,6 +7421,16 @@ async function osSalvarEdicao(){
   const descEl = document.getElementById('eosDesc');
   const desc = descEl ? descEl.value.trim() : '';
   if(!desc){ toast('Descreva o serviço.','erro'); return; }
+  // designação de técnico: compara a seleção com a atividade aberta atual (OS_EDIT_TEC)
+  const tecEl = document.getElementById('eosTecnico');
+  const tecAtual = OS_EDIT_TEC ? (OS_EDIT_TEC.tecnico||'') : '';
+  const tecNovo = tecEl ? tecEl.value : tecAtual;
+  const tecMudou = tecEl ? (tecNovo !== tecAtual) : false;
+  // remover o técnico de atividade JÁ INICIADA aborta o salvamento inteiro (nada é gravado)
+  if(tecMudou && !tecNovo && OS_EDIT_TEC && OS_EDIT_TEC.status!=='pendente'){
+    toast(`Atividade já iniciada por ${tecAtual} — não é possível remover o técnico; você pode trocá-lo por outro.`,'erro');
+    return;
+  }
   // trocar o cliente da OS (pré-piloto): só com confirmação explícita
   const cliEl = document.getElementById('eosCliente');
   const novoCliente = cliEl ? cliEl.value : null;
@@ -7390,9 +7458,34 @@ async function osSalvarEdicao(){
     }
     await apiPATCH('os_clientes', `id=eq.${o.id}`, body);
     await osLog(o.id, trocouCliente ? 'editou a OS e trocou o cliente' : 'editou a OS');
+    // designação SÓ depois da edição salva; falha aqui não se esconde (toast específico)
+    let designFalhou = '';
+    if(tecMudou){
+      try{
+        if(tecNovo){
+          if(OS_EDIT_TEC){
+            await apiPATCH('os_atividades', `id=eq.${OS_EDIT_TEC.atvId}`, { tecnico: tecNovo });
+            await osLog(o.id, tecAtual ? `técnico alterado de ${tecAtual} para ${tecNovo}` : `OS designada para ${tecNovo}`);
+          } else {
+            await apiPOST('os_atividades', { os_id: o.id, tecnico: tecNovo, data: mapaHojeFortaleza(), status:'pendente' });
+            if(o.status==='aberta') await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'em_atendimento' });
+            await osLog(o.id, `OS designada para ${tecNovo}`);
+          }
+        } else {
+          // remoção: a trava acima garante atividade 'pendente' (não iniciada)
+          await apiDELETE('os_atividades', `id=eq.${OS_EDIT_TEC.atvId}`);
+          const restantes = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id`);
+          if((!restantes || !restantes.length) && o.status==='em_atendimento'){
+            await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'aberta' });
+          }
+          await osLog(o.id, 'designação de técnico removida');
+        }
+      }catch(e){ designFalhou = e.message; }
+    }
     closeOsModal();
     OS_CACHE = null;
-    toast(`OS ${o.numero} atualizada. ✓`,'ok');
+    if(designFalhou) toast(`OS ${o.numero} atualizada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
+    else toast(`OS ${o.numero} atualizada. ✓`,'ok');
     await verOS(o.id);
   }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
 }
