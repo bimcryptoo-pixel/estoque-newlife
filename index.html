@@ -7385,14 +7385,14 @@ function osAbaAnexos(d){
                    || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(String(urlDe(a)).split('?')[0]);
   const fotos  = (d.anexos||[]).filter(ehFoto);
   const outros = (d.anexos||[]).filter(a=>!ehFoto(a));
-  const fotoCard = a=>`
+  const fotoCard = (a,i)=>`
     <div class="border rounded-xl overflow-hidden bg-white">
       <a href="${esc(urlDe(a))}" target="_blank" title="Abrir a foto em tamanho real" class="block">
         <img src="${esc(urlDe(a))}" alt="${esc(a.nome||'foto do atendimento')}" class="w-full h-56 sm:h-64 lg:h-80 object-contain block bg-gray-100"
              onerror="this.outerHTML='<div class=&quot;h-56 sm:h-64 lg:h-80 flex items-center justify-center text-4xl bg-gray-50&quot;>📎</div>'">
       </a>
       <div class="flex items-center gap-2 px-2 py-1.5">
-        <span class="text-xs text-gray-600 truncate flex-1">${esc(a.nome||'foto')}</span>
+        <span class="text-xs font-bold text-gray-600 tracking-wide flex-1">FOTO ${i+1}</span>
         ${editavel?`<button class="text-xs text-red-700 font-bold shrink-0" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
       </div>
     </div>`;
