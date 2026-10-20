@@ -6620,10 +6620,27 @@ function osEditarAtividade(id){
   document.getElementById('osAtvDesc').value = a.descricao_conclusao||'';
   document.getElementById('osAtvTitulo').scrollIntoView({behavior:'smooth',block:'center'});
 }
+/* Fecha a OS por completo quando a última atividade é concluída (regra 20/10/2026):
+   concluir a atividade NÃO deixa a OS "em atendimento" — a OS vira "concluída" de verdade,
+   com e-mail automático ao cliente. Vale pro escritório e pro celular. */
+async function osFecharSeTudoConcluido(osId){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,status`);
+    if(!os || os.status==='concluida' || os.status==='cancelada') return os && os.status;
+    const atvs = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
+    if(!atvs.length || !atvs.every(a=>['concluida','cancelada'].includes(a.status))) return os.status;
+    await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'concluida', updated_at:new Date().toISOString() });
+    await osLog(osId, 'concluiu a OS (última atividade concluída)');
+    osEnviarEmailAuto(osId); // 📧 envio automático ao cliente
+    return 'concluida';
+  }catch(e){ return null; }
+}
 async function osToggleAtividade(id){
   try{
     await apiPATCH('os_atividades', `id=eq.${id}`, { status:'concluida' });
     await osLog(OS_DETALHE.os.id, 'concluiu uma atividade');
+    const novoStatus = await osFecharSeTudoConcluido(OS_DETALHE.os.id);
+    if(novoStatus==='concluida') toast('OS concluída por completo. ✓','ok');
     await verOS(OS_DETALHE.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -7822,12 +7839,21 @@ function imprimirOS(){
   <div class="sec"><span>Vínculos</span></div>
   ${vincHtml}
   <div class="totais"><span>Valor total dos serviços: <b>${fmtReais(tot.vs+tot.vserv)}</b></span><span>+</span><span>Valor total dos produtos: <b>${fmtReais(tot.vp)}</b></span><span>=</span><span>Valor total da atividade: <b>${fmtReais(tot.total)}</b></span></div>
-  ${(()=>{ const sigs=[];
-    if(o.assinatura_url) sigs.push({url:o.assinatura_url, nome:'Cliente', em:o.assinatura_em});
-    (d.assinaturas||[]).forEach(s=>sigs.push({url:s.url||s.arquivo_url, nome:s.nome_assinante||'Cliente', em:s.created_at}));
-    if(!sigs.length) return '';
-    return `<div class="sec"><span>Assinatura${sigs.length>1?'s':''}</span></div>
-    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px">` + sigs.map(s=>`
+  ${(()=>{ const sigs=[]; const sigVistas=new Set();
+    /* DESDUPLICAÇÃO (20/10/2026): a MESMA assinatura existe em os_clientes.assinatura_url
+       E em os_assinaturas (o fluxo do celular salva nas duas) — a impressão mostra 1 vez só. */
+    const chaveSig=u=>{ const s=String(u||'').trim(); try{ return decodeURIComponent(s); }catch(_){ return s; } };
+    const addSig=(url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
+    addSig(o.assinatura_url,'Cliente',o.assinatura_em);
+    (d.assinaturas||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
+    /* REGRA DO USUÁRIO (20/10/2026): a impressão mostra SOMENTE 1 campo de assinatura —
+       a MAIS RECENTE. Vale p/ a duplicata acima E p/ assinaturas de eventos diferentes. */
+    let sigFinal=null;
+    for(const s of sigs){ if(!sigFinal){ sigFinal=s; continue; } const tS=new Date(s.em||0).getTime(), tF=new Date(sigFinal.em||0).getTime(); if(tS>=tF) sigFinal=s; }
+    const sigs1=sigFinal?[sigFinal]:[];
+    if(!sigs1.length) return '';
+    return `<div class="sec"><span>Assinatura${sigs1.length>1?'s':''}</span></div>
+    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px">` + sigs1.map(s=>`
       <div class="ass" style="margin-top:0;min-width:220px;flex:1;max-width:320px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
       ${s.em?`<div class="mut">Assinado em: ${new Date(s.em).toLocaleString('pt-BR')}</div>`:''}</div>`).join('') + `</div>`;
   })()}
