@@ -7289,6 +7289,12 @@ async function verTrajetoTecnico(nome, dataISO){
       const oss = await apiGET(`os_clientes?id=in.(${osIds.join(',')})&select=id,numero,status,updated_at`).catch(()=>[]);
       (oss||[]).forEach(o=>{ numMap[o.id] = o; });
     }
+    // 📜 histórico oficial do dia (os_historico): tudo que aconteceu nas OSs do técnico
+    //    — assinatura coletada, e-mail enviado, atendimento concluído etc. (pedido 20/10/2026)
+    let historico = [];
+    if(osIds.length){
+      historico = await apiGET(`os_historico?os_id=in.(${osIds.join(',')})&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=created_at,evento,os_id&order=created_at.asc&limit=500`).catch(()=>[]);
+    }
     // —— desenha o trajeto no mapa (se houver pontos GPS no dia) ——
     let paradas = [], resumoHtml = '';
     if((pts||[]).length){
@@ -7337,7 +7343,7 @@ async function verTrajetoTecnico(nome, dataISO){
       resumoHtml = `<div class="text-sm text-gray-500">📭 Sem deslocamentos GPS registrados nesta data.</div>`;
     }
     // —— linha do tempo cronológica do dia ——
-    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap);
+    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap, historico);
     const tlHtml = evs.length ? `
       <div class="mt-3">
         <div class="font-bold text-sm mb-2">📜 Linha do tempo — ${diaFmt}</div>
@@ -7363,7 +7369,7 @@ async function verTrajetoTecnico(nome, dataISO){
    os_atividades (inicio/fim + status — a tabela NÃO guarda histórico de status,
    então os eventos de atividade derivam de inicio/fim) e os_clientes.updated_at
    (conclusão da OS no dia). */
-function mapaEventosDia(dia, pts, paradas, atvs, numMap){
+function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico){
   const evs = [];
   const minOf = t => { const m = String(t||'').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; };
   const ST_IC = { a_caminho:'🚗', em_atendimento:'▶️', pausada:'⏸️', concluida:'✅', pendente:'⏳', agendada:'🗓️', cancelada:'❌' };
@@ -7391,10 +7397,20 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap){
       evs.push({ hora:'', min:null, ic: ST_IC[a.status]||'📌', txt:`<b>Atividade</b>${osTxt} — <b>${ST_LB[a.status]||esc(a.status)}</b>` });
     }
   });
+  // 📜 eventos oficiais do dia (os_historico) — o arquivo do que aconteceu nas OSs
+  const histConcluiu = new Set();
+  (historico||[]).forEach(h=>{
+    const oc = numMap[h.os_id];
+    const osTxt = oc && oc.numero ? ` <b>OS ${esc(oc.numero)}</b> — ` : ' ';
+    const ev = String(h.evento || '');
+    if(/conclui/i.test(ev)) histConcluiu.add(h.os_id);
+    const ic = /assinatura/i.test(ev) ? '✍️' : /e-?mail/i.test(ev) ? '📧' : /conclui/i.test(ev) ? '🎉' : /criou|abriu/i.test(ev) ? '🆕' : '📋';
+    evs.push({ hora: trajetoHora(h.created_at), min: minOf(trajetoHora(h.created_at)), ic, txt: osTxt + esc(ev) });
+  });
   const vistos = new Set();
   (atvs||[]).forEach(a=>{
     const oc = numMap[a.os_id]; if(!oc || vistos.has(oc.id)) return; vistos.add(oc.id);
-    if(oc.status === 'concluida' && oc.updated_at){
+    if(oc.status === 'concluida' && oc.updated_at && !histConcluiu.has(oc.id)){
       const diaOc = new Date(new Date(oc.updated_at).getTime() - 3*3600000).toISOString().slice(0,10);
       if(diaOc === dia) evs.push({ hora: trajetoHora(oc.updated_at), min: minOf(trajetoHora(oc.updated_at)), ic:'🏁', txt:`<b>OS ${esc(oc.numero||'')}</b> concluída` });
     }
