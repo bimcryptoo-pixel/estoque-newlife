@@ -8668,6 +8668,10 @@ function tecRenderConcluidas(){
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+      <div class="flex gap-2 mt-2">
+        <button type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecVerOSConc('${a.id}')">👁️ Ver OS</button>
+        <button type="button" class="btn-brand flex-1 !w-auto !py-2 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -8680,6 +8684,74 @@ function tecConcLimparFiltro(){
   if(inp) inp.value = '';
   TEC_CONC_FILTRO = '';
   tecRenderConcluidas();
+}
+/* ---------- 👁️ Ver OS + 📧 Reenviar e-mail (aba Concluídas, 20/10/2026) ----------
+   Pedido do Fabio: o técnico precisa abrir a OS concluída (só leitura, sem
+   sair do painel — o perfil dele só tem o módulo ostecnico) e poder REENVIAR
+   o e-mail ao cliente ("muitos clientes dizem que não receberam"). */
+async function tecVerOSConc(atvId){
+  const a = (TEC_CONC||[]).find(x=>String(x.id)===String(atvId));
+  if(!a) return;
+  const osId = a.os_id || (a.os_clientes && a.os_clientes.id) || '';
+  openOsModal('<div class="text-center text-gray-400 text-sm py-10">Carregando…</div>');
+  try{
+    let o = a.os_clientes || {};
+    try{
+      const [det] = await apiGET(`os_clientes?id=eq.${osId}&select=*,clientes(id,nome,tipo,email,telefone,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo),tipos_os(id,descricao)`);
+      if(det) o = det;
+    }catch(e){ /* mantém o resumo do card */ }
+    const anexos = await apiGET(`os_anexos?os_id=eq.${osId}&select=*&order=created_at.asc`).catch(()=>[]);
+    const sigRows = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&select=*&order=created_at.asc`);
+    const cli = o.clientes||{}, eq = o.equipamentos||{};
+    const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
+    const tipoNome = o.tipos_os ? o.tipos_os.descricao : '';
+    /* assinatura: SOMENTE a mais recente, desduplicada entre os_clientes.assinatura_url
+       e os_assinaturas — MESMA regra da impressão (imprimirOS). */
+    const sigs=[], sigVistas=new Set();
+    const chaveSig = u=>{ const s=String(u||'').trim(); try{ return decodeURIComponent(s); }catch(_){ return s; } };
+    const addSig = (url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
+    addSig(o.assinatura_url,'Cliente',o.assinatura_em);
+    (sigRows||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
+    let sigFinal = null;
+    for(const s of sigs){ if(!sigFinal || new Date(s.em||0).getTime() >= new Date(sigFinal.em||0).getTime()) sigFinal = s; }
+    const fotos = (anexos||[]).map(x=>x.url||x.arquivo_url).filter(Boolean);
+    openOsModal(`
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="font-black text-brand text-lg">${esc(o.numero||'')}</div>
+        ${atvTecBadge(o.status||'concluida')}
+      </div>
+      ${tipoNome?`<div class="text-xs text-gray-500 mb-2">${esc(tipoNome)}</div>`:''}
+      <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
+      ${cli.telefone?`<div class="text-xs text-gray-500">📞 ${esc(cli.telefone)}</div>`:''}
+      ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500 mt-1">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}${eq.tipo?' · '+esc(eq.tipo):''}</div>`:''}
+      ${o.descricao_servico?`<div class="mt-2"><div class="text-[11px] font-bold text-gray-400 uppercase">Descrição do serviço</div><div class="text-sm" style="white-space:pre-wrap">${esc(o.descricao_servico)}</div></div>`:''}
+      <div class="mt-3 border-t pt-2">
+        <div class="text-[11px] font-bold text-gray-400 uppercase mb-1">Atendimento</div>
+        <div class="text-xs text-gray-600">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}${a.tecnico?' · 👷 '+esc(a.tecnico):''}</div>
+        ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
+      </div>
+      ${fotos.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">📷 Fotos do atendimento (${fotos.length})</div>
+        <div class="grid grid-cols-3 gap-2">${fotos.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border" loading="lazy" alt="Foto do atendimento"></a>`).join('')}</div>
+        <div class="text-[11px] text-gray-400 mt-1">Toque numa foto para ver em tamanho real.</div></div>`:''}
+      ${sigFinal?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ Assinatura do cliente</div>
+        <img src="${esc(sigFinal.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
+        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(sigFinal.nome||'Cliente')}${sigFinal.em?' · '+new Date(sigFinal.em).toLocaleString('pt-BR'):''}</div></div>`:''}
+      <div class="flex gap-2 mt-4">
+        <button type="button" class="btn-brand flex-1 !w-auto !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
+        <button type="button" class="btn-ghost flex-1 !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>
+      </div>`);
+  }catch(e){
+    openOsModal(`<div class="text-center text-sm text-red-600 py-6">Não foi possível carregar a OS: ${esc((e&&e.message)||e)}</div>
+      <button type="button" class="btn-ghost w-full !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>`);
+  }
+}
+function tecReenviarEmail(atvId, btn){
+  const a = (TEC_CONC||[]).find(x=>String(x.id)===String(atvId));
+  const osId = a ? (a.os_id || (a.os_clientes && a.os_clientes.id) || '') : '';
+  if(!osId){ toast('OS não encontrada para reenviar o e-mail.','erro'); return Promise.resolve(false); }
+  return osReenviarEmail(osId, btn);
 }
 /* ================= 🔒 TRAVA DE FLUXO OBRIGATÓRIO — PAINEL DO TÉCNICO (20/10/2026) =================
    Regra do Fabio: enquanto a atividade está pendente, o atendimento
@@ -9359,6 +9431,38 @@ async function osEnviarEmail(){
     toast(`OS enviada para ${email}. ✓`,'ok');
     renderOSDetalhe();
   }catch(e){ toast('Erro ao enviar: '+e.message,'erro'); }
+}
+/* ---------- REENVIO manual do e-mail da OS (aba Concluídas do painel, 20/10/2026) ----------
+   MESMO endpoint/payload/headers do envio automático (osEnviarEmailAuto) e do botão
+   da ficha (osEnviarEmail) — a diferença é que o reenvio NÃO aplica o dedupe por
+   email_enviado_em: reenviar é justamente para quando o cliente diz que não recebeu. */
+async function osReenviarEmail(osId, btn){
+  let os = null;
+  try{ [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,clientes(email)`); }catch(e){}
+  const numero = (os && os.numero) || 'OS';
+  const email = ((os && os.clientes && os.clientes.email) || '').trim();
+  if(!email){ toast('Cliente sem e-mail cadastrado — não é possível reenviar.','alerta'); return false; }
+  if(!confirm(`Reenviar a ${numero} para ${email}?`)) return false;
+  const txtOrig = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Enviando…'; }
+  try{
+    const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
+      method:'POST',
+      headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ os_id: osId })
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.erro || j.message || ('HTTP '+r.status));
+    const nomeUser = (typeof sessao!=='undefined' && sessao && sessao.nome) || 'usuário';
+    await osLog(osId, `E-mail reenviado por ${nomeUser} para ${email}`);
+    toast(`📧 E-mail da ${numero} reenviado para ${email}`,'ok');
+    return true;
+  }catch(e){
+    toast('Não foi possível reenviar o e-mail: '+e.message,'erro');
+    return false;
+  }finally{
+    if(btn){ btn.disabled = false; btn.innerHTML = txtOrig; }
+  }
 }
 
 /* ---------- impressão (espelha o documento de referência) ---------- */
