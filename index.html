@@ -6623,12 +6623,23 @@ function osEditarAtividade(id){
 /* Fecha a OS por completo quando a última atividade é concluída (regra 20/10/2026):
    concluir a atividade NÃO deixa a OS "em atendimento" — a OS vira "concluída" de verdade,
    com e-mail automático ao cliente. Vale pro escritório e pro celular. */
+/* 🖊️ Regra 20/10/2026: a OS SÓ finaliza com a assinatura do cliente.
+   Assinatura vale se estiver em os_clientes.assinatura_url ou em os_assinaturas. */
+async function osTemAssinatura(osId){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=assinatura_url`);
+    if(os && os.assinatura_url) return true;
+    const sigs = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&select=id&limit=1`);
+    return Array.isArray(sigs) && sigs.length > 0;
+  }catch(e){ return false; }
+}
 async function osFecharSeTudoConcluido(osId){
   try{
     const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,status`);
     if(!os || os.status==='concluida' || os.status==='cancelada') return os && os.status;
     const atvs = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
     if(!atvs.length || !atvs.every(a=>['concluida','cancelada'].includes(a.status))) return os.status;
+    if(!(await osTemAssinatura(osId))) return 'sem_assinatura'; // 🖊️ sem assinatura, a OS NÃO fecha
     await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'concluida', updated_at:new Date().toISOString() });
     await osLog(osId, 'concluiu a OS (última atividade concluída)');
     osEnviarEmailAuto(osId); // 📧 envio automático ao cliente
@@ -6641,6 +6652,7 @@ async function osToggleAtividade(id){
     await osLog(OS_DETALHE.os.id, 'concluiu uma atividade');
     const novoStatus = await osFecharSeTudoConcluido(OS_DETALHE.os.id);
     if(novoStatus==='concluida') toast('OS concluída por completo. ✓','ok');
+    else if(novoStatus==='sem_assinatura') toast('Falta a assinatura do cliente: a OS só fecha com a assinatura.','erro');
     await verOS(OS_DETALHE.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -6892,6 +6904,8 @@ async function osSalvarAssinatura(){
     await osLog(osId, 'coletou a assinatura do cliente');
     closeOsModal();
     toast('Assinatura salva. ✓','ok');
+    const stFecha = await osFecharSeTudoConcluido(osId).catch(()=>null);
+    if(stFecha==='concluida') toast('OS concluída por completo. ✓','ok');
     OS_ASS_ID = null;
     if(OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id===osId) await verOS(osId);
     else if(!document.getElementById('aba-ostecnico').classList.contains('hidden')) await carregarPainelTecnico();
@@ -7195,7 +7209,7 @@ async function carregarMapaEquipe(){
     const ordenados = (rows||[]).slice().sort((a,b)=> (b.ativa?1:0)-(a.ativa?1:0) || String(a.tecnico_nome||'').localeCompare(String(b.tecnico_nome||'')));
     const livres = ordenados.filter(r=>!r.os_numero).length;
     document.getElementById('mapaEquipeCount').textContent = `(${(rows||[]).length} · 🟢 ${livres} livre(s))`;
-    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map(r=>{
+    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map((r, idxTec)=>{
       const nome = r.tecnico_nome||'?';
       const livre = !r.os_numero;
       const jor = jornadaMap[nome];
@@ -7216,8 +7230,9 @@ async function carregarMapaEquipe(){
         <div class="text-xs text-gray-500 mt-1 ml-11">
           ${jor?`⏰ Jornada: <b>${trajetoHora(jor.ini)} → ${trajetoHora(jor.fim)}</b> · `:''}✅ Hoje: <b>${des.concluidas}</b> concluída(s)${tMed!=null?` · ⏱️ média <b>${tMed} min</b>`:''}
         </div>
-        <div class="flex gap-2 mt-2 ml-11 flex-wrap">
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${escNome}')">🛣️ Trajeto</button>
+        <div class="flex gap-2 mt-2 ml-11 flex-wrap items-center">
+          <input type="date" id="mapaDataTec${idxTec}" value="${MAPA_TRAJETO_DATA || mapaHojeFortaleza()}" max="${mapaHojeFortaleza()}" class="border rounded-lg px-2 py-1 text-xs w-32" title="Data do trajeto/linha do tempo">
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${escNome}', (document.getElementById('mapaDataTec${idxTec}')||{}).value)">🛣️ Trajeto</button>
           <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${escNome}')">📍 Localizar</button>
           ${livre?`<button class="btn-ghost !w-auto !py-1 !px-2 text-xs !text-red-700 !border-red-300" onclick="designarOSPara('${escNome}')">📋 Designar OS</button>`:''}
         </div>
@@ -7233,6 +7248,8 @@ async function carregarMapaEquipe(){
 }
 /* ================= 🛣️ TRAJETO DO TÉCNICO (linha do tempo do deslocamento) ================= */
 let MAPA_TRAJETO_LAYER = null;
+let MAPA_TRAJETO_DATA = null; /* última data consultada no trajeto (AAAA-MM-DD) — preserva o seletor entre atualizações da lista */
+function mapaHojeFortaleza(){ return new Date(Date.now()-3*3600000).toISOString().slice(0,10); }
 function trajetoDistanciaKm(lat1, lng1, lat2, lng2){
   const R = 6371, dLa = (lat2-lat1)*Math.PI/180, dLo = (lng2-lng1)*Math.PI/180;
   const a = Math.sin(dLa/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLo/2)**2;
@@ -7241,72 +7258,149 @@ function trajetoDistanciaKm(lat1, lng1, lat2, lng2){
 function trajetoHora(iso){
   return new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
-async function verTrajetoTecnico(nome){
+async function verTrajetoTecnico(nome, dataISO){
   const info = document.getElementById('mapaTrajetoInfo');
   info.classList.remove('hidden');
-  info.innerHTML = '<div class="text-sm text-gray-500">🛣️ Carregando trajeto de hoje…</div>';
+  const dia = (dataISO && /^\d{4}-\d{2}-\d{2}$/.test(dataISO)) ? dataISO : mapaHojeFortaleza();
+  MAPA_TRAJETO_DATA = dia;
+  const diaFmt = dia.split('-').reverse().join('/');
+  info.innerHTML = `<div class="text-sm text-gray-500">🛣️ Carregando trajeto de <b>${esc(nome)}</b> em ${diaFmt}…</div>`;
   try{
     if(!MAPA_EQ){ info.innerHTML = '<div class="text-sm text-red-600">Abra o mapa primeiro.</div>'; return; }
     // limpa trajeto anterior
     if(MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
-    const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const pts = await apiGET(`tecnico_localizacao_hist?tecnico_nome=eq.${encodeURIComponent(nome)}&created_at=gte.${hoje.toISOString()}&select=lat,lng,os_numero,created_at&order=created_at.asc&limit=2000`);
-    if(!(pts||[]).length){
-      info.innerHTML = `<div class="text-sm text-gray-500">🛣️ <b>${esc(nome)}</b>: nenhum deslocamento registrado hoje ainda.</div>`;
-      return;
+    // dia em America/Fortaleza (UTC-3 fixo): 00:00 local = 03:00Z
+    const diaIni = new Date(dia + 'T00:00:00-03:00');
+    const diaFim = new Date(diaIni.getTime() + 86400000);
+    const encNome = encodeURIComponent(nome);
+    const colsAtv = 'id,os_id,tecnico,data,inicio,fim,descricao_conclusao,status';
+    const [pts, atvsData, atvsSemData] = await Promise.all([
+      apiGET(`tecnico_localizacao_hist?tecnico_nome=eq.${encNome}&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=lat,lng,os_numero,created_at&order=created_at.asc&limit=2000`).catch(()=>[]),
+      apiGET(`os_atividades?tecnico=eq.${encNome}&data=eq.${dia}&select=${colsAtv}&order=inicio.asc`).catch(()=>[]),
+      // atividades sem "data" preenchida mas criadas no dia (ex.: abertas pelo celular)
+      apiGET(`os_atividades?tecnico=eq.${encNome}&data=is.null&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=${colsAtv}&order=created_at.asc`).catch(()=>[])
+    ]);
+    const atvsMap = {}; (atvsData||[]).concat(atvsSemData||[]).forEach(a=>{ atvsMap[a.id] = a; });
+    const atvs = Object.values(atvsMap);
+    // números/conclusões das OSs envolvidas
+    const numMap = {};
+    const osIds = [...new Set(atvs.map(a=>a.os_id).filter(Boolean))];
+    if(osIds.length){
+      const oss = await apiGET(`os_clientes?id=in.(${osIds.join(',')})&select=id,numero,status,updated_at`).catch(()=>[]);
+      (oss||[]).forEach(o=>{ numMap[o.id] = o; });
     }
-    const g = L.featureGroup();
-    const coords = pts.map(p=>[+p.lat, +p.lng]);
-    // rota
-    L.polyline(coords, { color:'#2563eb', weight:4, opacity:0.85 }).addTo(g);
-    // início (verde) e fim (vermelho)
-    const i0 = pts[0], iN = pts[pts.length-1];
-    L.circleMarker([+i0.lat,+i0.lng], {radius:8, color:'#fff', weight:2, fillColor:'#16a34a', fillOpacity:1})
-      .bindPopup(`<b>Início</b> · ${trajetoHora(i0.created_at)}`).addTo(g);
-    L.circleMarker([+iN.lat,+iN.lng], {radius:8, color:'#fff', weight:2, fillColor:'#dc2626', fillOpacity:1})
-      .bindPopup(`<b>Agora</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`).addTo(g);
-    // detecta paradas: pontos a menos de 150m por mais de 10 min
-    let distTotal = 0, paradas = [], ini = 0;
-    for(let k=1;k<pts.length;k++){
-      distTotal += trajetoDistanciaKm(+pts[k-1].lat,+pts[k-1].lng,+pts[k].lat,+pts[k].lng);
-      const d = trajetoDistanciaKm(+pts[ini].lat,+pts[ini].lng,+pts[k].lat,+pts[k].lng);
-      if(d > 0.15){ // saiu do raio → fecha possível parada
-        const t0 = new Date(pts[ini].created_at).getTime(), t1 = new Date(pts[k-1].created_at).getTime();
-        if(t1-t0 >= 10*60000 && ini>0) paradas.push({pts:pts.slice(ini,k), t0, t1});
-        ini = k;
+    // —— desenha o trajeto no mapa (se houver pontos GPS no dia) ——
+    let paradas = [], resumoHtml = '';
+    if((pts||[]).length){
+      const g = L.featureGroup();
+      const coords = pts.map(p=>[+p.lat, +p.lng]);
+      L.polyline(coords, { color:'#2563eb', weight:4, opacity:0.85 }).addTo(g);
+      const i0 = pts[0], iN = pts[pts.length-1];
+      L.circleMarker([+i0.lat,+i0.lng], {radius:8, color:'#fff', weight:2, fillColor:'#16a34a', fillOpacity:1})
+        .bindPopup(`<b>Início</b> · ${trajetoHora(i0.created_at)}`).addTo(g);
+      L.circleMarker([+iN.lat,+iN.lng], {radius:8, color:'#fff', weight:2, fillColor:'#dc2626', fillOpacity:1})
+        .bindPopup(`<b>Fim</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`).addTo(g);
+      // detecta paradas: pontos a menos de 150m por mais de 10 min
+      let distTotal = 0, ini2 = 0;
+      for(let k=1;k<pts.length;k++){
+        distTotal += trajetoDistanciaKm(+pts[k-1].lat,+pts[k-1].lng,+pts[k].lat,+pts[k].lng);
+        const d = trajetoDistanciaKm(+pts[ini2].lat,+pts[ini2].lng,+pts[k].lat,+pts[k].lng);
+        if(d > 0.15){ // saiu do raio → fecha possível parada
+          const t0 = new Date(pts[ini2].created_at).getTime(), t1 = new Date(pts[k-1].created_at).getTime();
+          if(t1-t0 >= 10*60000 && ini2>0) paradas.push({pts:pts.slice(ini2,k), t0, t1});
+          ini2 = k;
+        }
       }
-    }
-    const t0f = new Date(pts[ini].created_at).getTime(), t1f = new Date(pts[pts.length-1].created_at).getTime();
-    if(t1f-t0f >= 10*60000 && ini>0) paradas.push({pts:pts.slice(ini), t0:t0f, t1:t1f});
-    paradas.forEach((p,idx)=>{
-      const cLat = p.pts.reduce((s,q)=>s+ +q.lat,0)/p.pts.length;
-      const cLng = p.pts.reduce((s,q)=>s+ +q.lng,0)/p.pts.length;
-      const mins = Math.round((p.t1-p.t0)/60000);
-      const oss = [...new Set(p.pts.map(q=>q.os_numero).filter(Boolean))];
-      L.circleMarker([cLat,cLng], {radius:10, color:'#fff', weight:2, fillColor:'#f59e0b', fillOpacity:1})
-        .bindPopup(`<b>🛑 Parada ${idx+1}</b><br>${trajetoHora(new Date(p.t0).toISOString())} → ${trajetoHora(new Date(p.t1).toISOString())} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}`).addTo(g);
-    });
-    g.addTo(MAPA_EQ);
-    MAPA_TRAJETO_LAYER = g;
-    MAPA_EQ.fitBounds(g.getBounds(), { padding:[40,40] });
-    const durMin = Math.round((new Date(iN.created_at)-new Date(i0.created_at))/60000);
-    info.innerHTML = `
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm">
-        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-          <div class="font-bold">🛣️ Trajeto de <b>${esc(nome)}</b> — hoje</div>
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="limparTrajeto()">✖️ Fechar</button>
-        </div>
+      const t0f = new Date(pts[ini2].created_at).getTime(), t1f = new Date(pts[pts.length-1].created_at).getTime();
+      if(t1f-t0f >= 10*60000 && ini2>0) paradas.push({pts:pts.slice(ini2), t0:t0f, t1:t1f});
+      paradas.forEach((p,idx)=>{
+        const cLat = p.pts.reduce((sq,q)=>sq+ +q.lat,0)/p.pts.length;
+        const cLng = p.pts.reduce((sq,q)=>sq+ +q.lng,0)/p.pts.length;
+        const mins = Math.round((p.t1-p.t0)/60000);
+        const oss = [...new Set(p.pts.map(q=>q.os_numero).filter(Boolean))];
+        L.circleMarker([cLat,cLng], {radius:10, color:'#fff', weight:2, fillColor:'#f59e0b', fillOpacity:1})
+          .bindPopup(`<b>🛑 Parada ${idx+1}</b><br>${trajetoHora(new Date(p.t0).toISOString())} → ${trajetoHora(new Date(p.t1).toISOString())} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}`).addTo(g);
+      });
+      g.addTo(MAPA_EQ);
+      MAPA_TRAJETO_LAYER = g;
+      MAPA_EQ.fitBounds(g.getBounds(), { padding:[40,40] });
+      const durMin = Math.round((new Date(iN.created_at)-new Date(i0.created_at))/60000);
+      resumoHtml = `
         <div class="grid grid-cols-2 gap-1 text-gray-700">
           <div>🟢 Início: <b>${trajetoHora(i0.created_at)}</b></div>
-          <div>🔴 Agora: <b>${trajetoHora(iN.created_at)}</b></div>
+          <div>🔴 Fim: <b>${trajetoHora(iN.created_at)}</b></div>
           <div>📏 Distância: <b>~${distTotal.toFixed(1)} km</b></div>
           <div>⏱️ Duração: <b>${durMin>=60?Math.floor(durMin/60)+'h '+(durMin%60)+'min':durMin+' min'}</b></div>
           <div>🛑 Paradas: <b>${paradas.length}</b></div>
+        </div>`;
+    } else {
+      resumoHtml = `<div class="text-sm text-gray-500">📭 Sem deslocamentos GPS registrados nesta data.</div>`;
+    }
+    // —— linha do tempo cronológica do dia ——
+    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap);
+    const tlHtml = evs.length ? `
+      <div class="mt-3">
+        <div class="font-bold text-sm mb-2">📜 Linha do tempo — ${diaFmt}</div>
+        <div class="space-y-1.5 max-h-80 overflow-y-auto pr-1">
+          ${evs.map(e=>`<div class="flex gap-2 items-start bg-white border rounded-lg px-2.5 py-1.5"><span class="shrink-0 w-12 font-bold text-gray-700">${e.hora||'—'}</span><span class="shrink-0">${e.ic}</span><span class="text-gray-800 min-w-0">${e.txt}</span></div>`).join('')}
         </div>
+      </div>` : `<div class="text-sm text-gray-500 mt-2">📭 Sem registros nesta data.</div>`;
+    info.innerHTML = `
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <div class="font-bold">🛣️ Trajeto de <b>${esc(nome)}</b> — ${diaFmt}</div>
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="limparTrajeto()">✖️ Fechar</button>
+        </div>
+        ${resumoHtml}
+        ${tlHtml}
       </div>`;
   }catch(e){
     info.innerHTML = '<div class="text-sm text-red-600">Erro ao carregar trajeto: '+esc(e.message)+'</div>';
   }
+}
+/* 📜 Eventos do dia do técnico, em ordem cronológica.
+   Fontes reais do banco: tecnico_localizacao_hist (GPS início/fim + paradas),
+   os_atividades (inicio/fim + status — a tabela NÃO guarda histórico de status,
+   então os eventos de atividade derivam de inicio/fim) e os_clientes.updated_at
+   (conclusão da OS no dia). */
+function mapaEventosDia(dia, pts, paradas, atvs, numMap){
+  const evs = [];
+  const minOf = t => { const m = String(t||'').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; };
+  const ST_IC = { a_caminho:'🚗', em_atendimento:'▶️', pausada:'⏸️', concluida:'✅', pendente:'⏳', agendada:'🗓️', cancelada:'❌' };
+  const ST_LB = { a_caminho:'A caminho', em_atendimento:'Em atendimento', pausada:'Pausada', concluida:'Concluída', pendente:'Pendente', agendada:'Agendada', cancelada:'Cancelada' };
+  if((pts||[]).length){
+    const i0 = pts[0], iN = pts[pts.length-1];
+    evs.push({ hora: trajetoHora(i0.created_at), min: minOf(trajetoHora(i0.created_at)), ic:'🟢', txt:'<b>Início do trajeto</b> (primeira posição do GPS)' });
+    (paradas||[]).forEach((p,idx)=>{
+      const mins = Math.round((p.t1-p.t0)/60000);
+      const t0 = trajetoHora(new Date(p.t0).toISOString()), t1 = trajetoHora(new Date(p.t1).toISOString());
+      const oss = [...new Set((p.pts||[]).map(q=>q.os_numero).filter(Boolean))];
+      evs.push({ hora: t0, min: minOf(t0), ic:'🛑', txt:`<b>Parada ${idx+1}</b> · ${t0} → ${t1} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}` });
+    });
+    if(pts.length > 1) evs.push({ hora: trajetoHora(iN.created_at), min: minOf(trajetoHora(iN.created_at)), ic:'🔴', txt:'<b>Última posição registrada</b>' + (iN.os_numero?` · OS <b>${esc(iN.os_numero)}</b>`:'') });
+  }
+  (atvs||[]).forEach(a=>{
+    const oc = numMap[a.os_id];
+    const osTxt = oc && oc.numero ? ` da <b>OS ${esc(oc.numero)}</b>` : '';
+    if(a.inicio && String(a.inicio).slice(0,5) !== '00:00'){
+      evs.push({ hora: String(a.inicio).slice(0,5), min: minOf(String(a.inicio).slice(0,5)), ic:'▶️', txt:`<b>Iniciou atendimento</b>${osTxt}` });
+    }
+    if(a.fim){
+      evs.push({ hora: String(a.fim).slice(0,5), min: minOf(String(a.fim).slice(0,5)), ic:'✅', txt:`<b>Concluiu a atividade</b>${osTxt}` });
+    } else if(!a.inicio && a.status){
+      evs.push({ hora:'', min:null, ic: ST_IC[a.status]||'📌', txt:`<b>Atividade</b>${osTxt} — <b>${ST_LB[a.status]||esc(a.status)}</b>` });
+    }
+  });
+  const vistos = new Set();
+  (atvs||[]).forEach(a=>{
+    const oc = numMap[a.os_id]; if(!oc || vistos.has(oc.id)) return; vistos.add(oc.id);
+    if(oc.status === 'concluida' && oc.updated_at){
+      const diaOc = new Date(new Date(oc.updated_at).getTime() - 3*3600000).toISOString().slice(0,10);
+      if(diaOc === dia) evs.push({ hora: trajetoHora(oc.updated_at), min: minOf(trajetoHora(oc.updated_at)), ic:'🏁', txt:`<b>OS ${esc(oc.numero||'')}</b> concluída` });
+    }
+  });
+  evs.sort((a,b)=> (a.min===null && b.min===null) ? 0 : a.min===null ? 1 : b.min===null ? -1 : a.min-b.min);
+  return evs;
 }
 function limparTrajeto(){
   if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
@@ -7535,11 +7629,31 @@ async function tecFluxoFinalizar(){
   if(!tecGpsPodeAgir()) return;
   const nome = (document.getElementById('tecFluxoNome')||{}).value||'';
   const cv = document.getElementById('tecFluxoPad');
+  // 🖊️ Regra 20/10/2026: sem assinatura (desenhada agora ou já salva), NÃO conclui nada.
+  if((!cv || tecPadVazio(cv)) && !(await osTemAssinatura(F.osId))){
+    toast('🖊️ Falta a assinatura do cliente: a OS só é finalizada com a assinatura.','erro');
+    return;
+  }
   try{
     // 1) salva observação + conclui atividade
     await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
-    // 1b) FECHA A OS quando todas as atividades estiverem concluídas + libera o técnico no mapa
-    //     (correção 20/10/2026: o fluxo só concluía a atividade e a OS ficava "em atendimento" pra sempre)
+    // 2) assinatura (se desenhou) — ANTES de fechar a OS (regra 20/10/2026:
+    //    sem assinatura salva, a OS não pode fechar; upload tem que ter sucesso)
+    let sigUrl = null;
+    const padDesenhado = cv && !tecPadVazio(cv);
+    if(padDesenhado){
+      const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+      const sname = `os/assinatura-${F.osId}-${Date.now()}.png`;
+      const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(sname)}`, {
+        method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
+      });
+      if(!r.ok) throw new Error('Falha ao salvar a assinatura. Tente novamente.');
+      sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(sname)}`;
+      await apiPATCH('os_clientes', `id=eq.${F.osId}`, { assinatura_url:sigUrl, assinatura_em:new Date().toISOString() });
+      try{ await apiPOSTsafe('os_assinaturas', { os_id:F.osId, url:sigUrl, nome_assinante:nome.trim()||null }); }catch(_){}
+    }
+    // 3) FECHA A OS quando todas as atividades estiverem concluídas + libera o técnico no mapa
+    //    (correção 20/10/2026: o fluxo só concluía a atividade e a OS ficava "em atendimento" pra sempre)
     try{
       const atvsRest = await apiGET(`os_atividades?os_id=eq.${F.osId}&select=status`);
       if(atvsRest.length && atvsRest.every(x=>['concluida','cancelada'].includes(x.status))){
@@ -7550,20 +7664,6 @@ async function tecFluxoFinalizar(){
           { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
       }
     }catch(_){}
-    // 2) assinatura (se desenhou)
-    let sigUrl = null;
-    if(cv && !tecPadVazio(cv)){
-      const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
-      const sname = `os/assinatura-${F.osId}-${Date.now()}.png`;
-      const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(sname)}`, {
-        method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
-      });
-      if(r.ok){
-        sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(sname)}`;
-        await apiPATCH('os_clientes', `id=eq.${F.osId}`, { assinatura_url:sigUrl, assinatura_em:new Date().toISOString() });
-        try{ await apiPOSTsafe('os_assinaturas', { os_id:F.osId, url:sigUrl, nome_assinante:nome.trim()||null }); }catch(_){}
-      }
-    }
     try{ await osLog(F.osId, 'concluiu o atendimento pelo celular'); }catch(_){}
     // 📧 envio automático da OS ao cliente
     osEnviarEmailAuto(F.osId);
