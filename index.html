@@ -1518,11 +1518,13 @@ async function fazerLogin(){
   if(!login || !senha){ box.textContent='Informe usuário e senha.'; box.classList.remove('hidden'); return; }
   try{
     let rows;
-    try{ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,permissoes`); }
-    catch(e){ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil`); }
+    try{ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,permissoes,tecnico_nome`); }
+    catch(e){ rows = await apiGET(`usuarios?login=eq.${encodeURIComponent(login)}&ativo=eq.true&select=id,nome,login,senha,perfil,tecnico_nome`); }
     if(!rows.length || rows[0].senha !== senha){ box.textContent='Usuário ou senha inválidos.'; box.classList.remove('hidden'); return; }
     sessao = { id: rows[0].id, nome: rows[0].nome, perfil: rows[0].perfil, permissoes: rows[0].permissoes || null };
     salvarSessao();
+    // 📍 presença: técnico vinculado registra o ponto do login (evento + coordenadas)
+    if(rows[0].tecnico_nome){ TEC_GPS.nome = rows[0].tecnico_nome; tecEventoLocal('login'); }
     entrarApp();
   }catch(e){ box.textContent='Falha de conexão: '+e.message; box.classList.remove('hidden'); }
 }
@@ -7110,6 +7112,38 @@ async function tecGpsEvento(ev){
   if(!TEC_GPS.nome) return;
   try{ await apiPOST('tecnico_loc_eventos', { tecnico_nome: TEC_GPS.nome, evento: ev }); }catch(e){}
 }
+/* 📍 EVENTOS DE PRESENÇA (pedido do usuário, 20/10/2026): ao LOGAR no sistema e ao
+   abrir o módulo MINHAS OSs, salva (a) o evento em tecnico_loc_eventos ('login' /
+   'minhas_os') e (b) um ponto com coordenadas em tecnico_localizacao_hist — o
+   ponto vira marcador no mapa e a descrição entra na linha do tempo do dia.
+   Nunca bloqueia o uso: sem GPS, o evento fica registrado mesmo assim. */
+async function tecEventoLocal(tipo){
+  if(!TEC_GPS.nome) return;
+  try{ await apiPOST('tecnico_loc_eventos', { tecnico_nome: TEC_GPS.nome, evento: tipo }); }catch(e){}
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao_hist`, {
+        method:'POST', headers:HJSON,
+        body: JSON.stringify({ tecnico_nome: TEC_GPS.nome,
+          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          precisao: Math.round(pos.coords.accuracy || 0) || null,
+          os_id: null, os_numero: null })
+      }).catch(()=>{});
+    },
+    () => {}, // sem GPS no momento: só o evento (a linha do tempo anota "sem GPS")
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
+}
+/* Abertura do Minhas OSs com dedupe de 30 min: Atualizar/concluir chamam o loader
+   de novo e não podem encher a linha do tempo de repetições. */
+let __tecMinhaOSUltimo = 0;
+function tecEventoMinhasOS(){
+  const agora = Date.now();
+  if(agora - __tecMinhaOSUltimo < 30*60000) return;
+  __tecMinhaOSUltimo = agora;
+  tecEventoLocal('minhas_os');
+}
 async function tecGpsEnviar(lat, lng, prec){
   if(!TEC_GPS.nome) return;
   try{
@@ -7336,6 +7370,11 @@ async function verTrajetoTecnico(nome, dataISO){
     if(osIds.length){
       historico = await apiGET(`os_historico?os_id=in.(${osIds.join(',')})&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=created_at,evento,os_id&order=created_at.asc&limit=500`).catch(()=>[]);
     }
+    // 📍 eventos de presença do dia: login no sistema + abertura do Minhas OSs
+    let presenca = [];
+    try{
+      presenca = await apiGET(`tecnico_loc_eventos?tecnico_nome=eq.${encNome}&evento=in.(login,minhas_os)&created_at=gte.${diaIni.toISOString()}&created_at=lt.${diaFim.toISOString()}&select=created_at,evento&order=created_at.asc&limit=100`).catch(()=>[]);
+    }catch(e){}
     // —— desenha o trajeto no mapa (se houver pontos GPS no dia) ——
     let paradas = [], resumoHtml = '';
     let distTotalPdf = 0, durMinPdf = 0, iniPdf = '', fimPdf = ''; // valores do resumo p/ o 📄 PDF do dia
@@ -7386,7 +7425,20 @@ async function verTrajetoTecnico(nome, dataISO){
       resumoHtml = `<div class="text-sm text-gray-500">📭 Sem deslocamentos GPS registrados nesta data.</div>`;
     }
     // —— linha do tempo cronológica do dia ——
-    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap, historico);
+    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca);
+    // 📍 marcadores de presença (login / Minhas OSs) com coordenadas casadas no mapa
+    if((pts||[]).length && MAPA_EQ){
+      try{
+        const gP = L.featureGroup();
+        let algum = false;
+        evs.filter(e=>e.lat!=null).forEach(e=>{
+          algum = true;
+          L.circleMarker([e.lat, e.lng], { radius:9, color:'#fff', weight:2, fillColor:'#7c3aed', fillOpacity:1 })
+            .bindPopup(`<b>${e.ic||''}</b> ${e.txt||''}<br>${e.hora||''}`).addTo(gP);
+        });
+        if(algum) gP.addTo(MAPA_EQ);
+      }catch(e){}
+    }
     // OSs concluídas no dia (p/ o resumo do 📄 PDF do dia)
     const osConcluidasPdf = [...new Set(Object.values(numMap).filter(o=>o && o.status==='concluida').map(o=>o.id))].length;
     // salva o pacote do PDF do dia (gerado sob demanda em mapaPdfDia)
@@ -7420,7 +7472,10 @@ async function verTrajetoTecnico(nome, dataISO){
    os_atividades (inicio/fim + status — a tabela NÃO guarda histórico de status,
    então os eventos de atividade derivam de inicio/fim) e os_clientes.updated_at
    (conclusão da OS no dia). */
-function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico){
+function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca){
+  // presenca: eventos 'login'/'minhas_os' de tecnico_loc_eventos no dia — viram
+  // 🔑 "Login no sistema" e 📱 "Abriu Minhas OSs" na linha do tempo, com o ponto
+  // GPS mais próximo (até 5 min) anexado (lat/lng) p/ marcador no mapa.
   const evs = [];
   const minOf = t => { const m = String(t||'').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; };
   const ST_IC = { a_caminho:'🚗', em_atendimento:'▶️', pausada:'⏸️', concluida:'✅', pendente:'⏳', agendada:'🗓️', cancelada:'❌' };
@@ -7465,6 +7520,21 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico){
       const diaOc = new Date(new Date(oc.updated_at).getTime() - 3*3600000).toISOString().slice(0,10);
       if(diaOc === dia) evs.push({ hora: trajetoHora(oc.updated_at), min: minOf(trajetoHora(oc.updated_at)), ic:'🏁', txt:`<b>OS ${esc(oc.numero||'')}</b> concluída` });
     }
+  });
+  // 📍 eventos de presença (pedido 20/10/2026): login no sistema + abertura do Minhas OSs
+  (presenca||[]).forEach(ev=>{
+    const lbl = ev.evento==='login' ? 'Login no sistema' : 'Abriu Minhas OSs';
+    const icE = ev.evento==='login' ? '🔑' : '📱';
+    // ponto GPS mais próximo do evento (até 5 min) — vem da captura do tecEventoLocal
+    let best = null, bestMs = 5*60000;
+    (pts||[]).forEach(p=>{
+      const d = Math.abs(new Date(p.created_at).getTime() - new Date(ev.created_at).getTime());
+      if(d < bestMs){ bestMs = d; best = p; }
+    });
+    const item = { hora: trajetoHora(ev.created_at), min: minOf(trajetoHora(ev.created_at)), ic: icE,
+      txt: `<b>${lbl}</b>` + (best && best.precisao && best.precisao > 100 ? ` · precisão ±${best.precisao} m` : '') + (!best ? ' · sem GPS no momento' : '') };
+    if(best){ item.lat = best.lat; item.lng = best.lng; }
+    evs.push(item);
   });
   evs.sort((a,b)=> (a.min===null && b.min===null) ? 0 : a.min===null ? 1 : b.min===null ? -1 : a.min-b.min);
   return evs;
@@ -7675,6 +7745,7 @@ async function carregarPainelTecnico(){
     }catch(e){}
     document.getElementById('tecNome').textContent = 'Técnico: ' + tnome;
     tecGpsIniciar(tnome); // rastreamento em tempo real
+    tecEventoMinhasOS(); // 📍 presença ao abrir o módulo (com dedupe de 30 min)
     const atvs = await apiGET(
       'os_atividades?tecnico=ilike.*'+encodeURIComponent(tnome)+'*&status=not.in.(concluida,cancelada)' +
       '&select=*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))' +
