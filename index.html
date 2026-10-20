@@ -7455,7 +7455,8 @@ function tecFluxoRender(){
       <div class="text-xs text-gray-500 mb-3">Toque para abrir a câmera. Quantas precisar.</div>
       <button class="w-full p-5 border-2 border-dashed border-brand rounded-xl bg-red-50 text-brand font-extrabold text-base mb-2" onclick="document.getElementById('tecFluxoFotoInput').click()">📷 Tirar foto</button>
       <input type="file" id="tecFluxoFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecFluxoFotoUp(this)">
-      <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map(u=>`<img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border">`).join('')}</div>
+      <div class="text-xs text-gray-500 mb-1">Foto saiu borrada? Toque no ✕ para apagar.</div>
+      <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map((u,i)=>`<div class="relative"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border"><button class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-7 h-7 text-sm font-bold shadow" onclick="tecFluxoFotoDel(${i})" title="Apagar foto">✕</button></div>`).join('')}</div>
       ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
       <div class="flex gap-2"><button class="btn-ghost flex-1 !py-3" onclick="tecFluxoVoltar()">← Voltar</button>
       <button class="btn-brand flex-1 !w-auto !py-3" onclick="tecFluxoAvancar()">Avançar →</button></div>`;
@@ -7506,6 +7507,27 @@ async function tecFluxoFotoUp(input){
     toast('Foto incluída. ✓','ok');
   }catch(e){ toast('Erro: '+e.message,'erro'); }
   input.value='';
+  tecFluxoRender();
+}
+/* Apaga a foto no ato do atendimento (regra 20/10/2026: foto borrada pode ser refeita).
+   Remove da lista do fluxo, apaga o vínculo em os_anexos e o arquivo no storage. */
+async function tecFluxoFotoDel(i){
+  const F = TEC_FLUXO; if(!F) return;
+  const url = F.fotos[i]; if(!url) return;
+  if(!confirm('Apagar esta foto?')) return;
+  try{
+    const rows = await apiGET(`os_anexos?os_id=eq.${F.osId}&select=id,url`);
+    const r = (rows||[]).find(x=>x.url===url);
+    if(r) await apiDELETE('os_anexos', `id=eq.${r.id}`);
+    const chave = url.split('/object/public/recibos/')[1];
+    if(chave){
+      await fetch(`${SUPA_URL}/storage/v1/object/recibos/${chave}`, {
+        method:'DELETE', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY }
+      }).catch(()=>{});
+    }
+    F.fotos.splice(i,1);
+    toast('Foto apagada. ✓','ok');
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
   tecFluxoRender();
 }
 async function tecFluxoFinalizar(){
