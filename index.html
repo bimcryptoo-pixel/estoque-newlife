@@ -9370,8 +9370,24 @@ function imprimirOS(){
   if(!f){ f = document.createElement('iframe'); f.id='printFrameOS'; f.style.display='none'; document.body.appendChild(f); }
   const docw = f.contentWindow.document;
   docw.open(); docw.write(html); docw.close();
-  f.contentWindow.focus();
-  setTimeout(()=>f.contentWindow.print(), 500);
+  // ESPERA REAL DAS IMAGENS (20/10/2026): foto/assinatura vêm do storage e podem
+  // demorar mais que um timeout fixo — imprimir antes do load deixava a foto EM
+  // BRANCO no PDF (bug real da OS-2026-0001). Agora aguarda o load/erro de CADA
+  // imagem (erro nunca trava a impressão: imprime sem ela, como antes) com teto
+  // global de ~6s; vencido o teto, imprime com o que tiver carregado.
+  const esperarImgPrint = im => new Promise(res=>{
+    if(im.complete) return res();
+    let fimPrint = false; const resolvePrint = ()=>{ if(!fimPrint){ fimPrint = true; res(); } };
+    im.addEventListener('load', resolvePrint, { once:true });
+    im.addEventListener('error', resolvePrint, { once:true });
+    if(im.complete) resolvePrint(); // corrida clássica: completou entre a checagem e o registro
+  });
+  const imgsPrint = [...docw.images];
+  const tetoPrint = new Promise(res=>setTimeout(res, 6000));
+  Promise.race([Promise.all(imgsPrint.map(esperarImgPrint)), tetoPrint]).then(()=>{
+    f.contentWindow.focus();
+    f.contentWindow.print();
+  });
 }
 /* ================= 📴 MODO OFFLINE — PAINEL DO TÉCNICO (20/10/2026) =================
    O técnico em campo (hospital, subsolo, interior) NÃO pode perder atendimento
