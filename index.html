@@ -8129,6 +8129,132 @@ function trajetoDistanciaKm(lat1, lng1, lat2, lng2){
 function trajetoHora(iso){
   return new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
+/* ================= 🧭 TRAJETO DETALHADO: clusters, trechos, ruas (20/10/2026) =================
+   Tudo calculado GENERICAMENTE a partir dos pontos de GPS do técnico/dia
+   selecionados — nenhum nome, coordenada ou constante de pessoa. */
+let MAPA_GEO_ALVOS = []; /* alvos de geocodificação do trajeto exibido: [{key, lat, lng}] */
+const MAPA_GEO_CACHE = {}; /* chave 'lat,lng' (3 casas) -> rótulo de rua exibível ('' = não identificado) */
+function mapaRuaChave(lat, lng){ return (+lat).toFixed(3) + ',' + (+lng).toFixed(3); }
+function trajetoFmtDur(mins){
+  mins = Math.round(mins);
+  if(mins >= 60){ return Math.floor(mins/60) + 'h' + String(mins % 60).padStart(2, '0'); }
+  return mins + ' min';
+}
+function trajetoFmtKm(km){ return (Math.round((+km || 0) * 10) / 10).toFixed(1).replace('.', ','); }
+/* Agrupa pontos consecutivos por proximidade: um ponto entra no grupo aberto
+   se estiver a até 75 m do CENTROIDE MÓVEL (média dos pontos do grupo). */
+function trajetoClusters(pts){
+  const grupos = [];
+  (pts || []).forEach(p => {
+    const g = grupos[grupos.length - 1];
+    if(g){
+      let sLa = 0, sLn = 0;
+      g.pts.forEach(q => { sLa += +q.lat; sLn += +q.lng; });
+      if(trajetoDistanciaKm(+p.lat, +p.lng, sLa / g.pts.length, sLn / g.pts.length) <= 0.075){ g.pts.push(p); return; }
+    }
+    grupos.push({ pts: [p] });
+  });
+  return grupos.map(g => {
+    let sLa = 0, sLn = 0;
+    g.pts.forEach(q => { sLa += +q.lat; sLn += +q.lng; });
+    return { pts: g.pts, lat: sLa / g.pts.length, lng: sLn / g.pts.length,
+      t0: new Date(g.pts[0].created_at).getTime(), t1: new Date(g.pts[g.pts.length - 1].created_at).getTime() };
+  });
+}
+/* Segmenta o dia em PARADAS (cluster com duração ≥ 5 min) e TRECHOS (movimento
+   entre paradas). Trecho: distância = soma dos segmentos ponto a ponto entre o
+   último ponto da parada anterior e o primeiro da próxima (passando pelos
+   pontos intermediários); sem intermediários = linha reta (linhaReta=true).
+   Buracos de sinal: pares consecutivos do trecho com Δt > 10 min E salto
+   > 200 m (silêncio no mesmo lugar fica dentro da parada, não vira buraco). */
+function trajetoSegmentos(pts){
+  if(!(pts || []).length) return [];
+  const grupos = trajetoClusters(pts);
+  const ehParada = g => (g.t1 - g.t0) >= 5 * 60000;
+  const segs = [];
+  let ponte = []; // pontos desde o fim da última parada (ou o 1º do dia)
+  const montaTrecho = (pontoFim) => {
+    const lista = pontoFim ? ponte.concat([pontoFim]) : ponte.slice();
+    if(lista.length < 2) return;
+    let dist = 0; const gaps = [];
+    for(let k = 1; k < lista.length; k++){
+      const d = trajetoDistanciaKm(+lista[k - 1].lat, +lista[k - 1].lng, +lista[k].lat, +lista[k].lng);
+      dist += d;
+      const dt = new Date(lista[k].created_at).getTime() - new Date(lista[k - 1].created_at).getTime();
+      if(dt > 10 * 60000 && d > 0.2) gaps.push({ t0: new Date(lista[k - 1].created_at).getTime(), t1: new Date(lista[k].created_at).getTime() });
+    }
+    segs.push({ tipo: 'trecho', distKm: dist, linhaReta: lista.length === 2, gaps,
+      t0: new Date(lista[0].created_at).getTime(), t1: new Date(lista[lista.length - 1].created_at).getTime() });
+  };
+  grupos.forEach(g => {
+    if(ehParada(g)){
+      montaTrecho(g.pts[0]);
+      segs.push({ tipo: 'parada', pts: g.pts, lat: g.lat, lng: g.lng, t0: g.t0, t1: g.t1,
+        primeira: g.pts[0] === pts[0], ultima: g.pts[g.pts.length - 1] === pts[pts.length - 1] });
+      ponte = [g.pts[g.pts.length - 1]];
+    } else if(!ponte.length){
+      ponte = g.pts.slice();
+    } else {
+      ponte = ponte.concat(g.pts);
+    }
+  });
+  montaTrecho(null);
+  return segs;
+}
+/* Rótulo exibível a partir da resposta do Nominatim: "Rua, nº · Bairro". */
+function mapaRotuloEndereco(j){
+  const addr = (j && j.address) || null;
+  if(addr){
+    const rua = [addr.road, addr.house_number].filter(Boolean).join(', ');
+    const bairro = addr.suburb || addr.neighbourhood || addr.city_district || addr.town || addr.city || '';
+    const partes = [rua, bairro].filter(Boolean);
+    if(partes.length) return partes.join(' · ');
+  }
+  if(j && j.display_name) return String(j.display_name).split(',')[0].trim();
+  return '';
+}
+async function mapaGeocodificarUm(lat, lng){
+  try{
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try{ ctrl.abort(); }catch(_){} }, 5000);
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, { signal: ctrl.signal });
+    clearTimeout(to);
+    if(!r.ok) return '';
+    const j = await r.json().catch(() => null);
+    return mapaRotuloEndereco(j);
+  }catch(e){ return ''; }
+}
+function mapaAplicarRua(key, rotulo, pdfRef){
+  const txt = rotulo || 'Local não identificado';
+  try{
+    document.querySelectorAll(`[data-rua="${key}"]`).forEach(el => { el.textContent = txt; });
+  }catch(e){}
+  if(pdfRef && MAPA_TRAJETO_PDF === pdfRef){
+    const ph = `<span data-rua="${key}">📍 buscando rua…</span>`;
+    (pdfRef.evs || []).forEach(e => { if(e.txt && e.txt.indexOf(ph) >= 0) e.txt = e.txt.split(ph).join(esc(txt)); });
+  }
+}
+/* Geocodifica os alvos UM por cluster, em sequência (~1,1s entre chamadas de
+   rede, conforme a política do Nominatim), com cache em memória. A tela já foi
+   renderizada com placeholder — aqui só preenchemos os textos. */
+async function mapaGeocodificar(alvos, pdfRef){
+  try{
+    const vistos = new Set();
+    let chamouRede = false;
+    for(const a of (alvos || [])){
+      if(!a || vistos.has(a.key)) continue;
+      vistos.add(a.key);
+      let rotulo = MAPA_GEO_CACHE[a.key];
+      if(rotulo == null){
+        if(chamouRede) await new Promise(r => setTimeout(r, 1100));
+        chamouRede = true;
+        rotulo = await mapaGeocodificarUm(a.lat, a.lng);
+        MAPA_GEO_CACHE[a.key] = rotulo || '';
+      }
+      mapaAplicarRua(a.key, rotulo, pdfRef);
+    }
+  }catch(e){}
+}
 async function verTrajetoTecnico(nome, dataISO){
   const info = document.getElementById('mapaTrajetoInfo');
   info.classList.remove('hidden');
@@ -8175,36 +8301,36 @@ async function verTrajetoTecnico(nome, dataISO){
     // —— desenha o trajeto no mapa (se houver pontos GPS no dia) ——
     let paradas = [], resumoHtml = '';
     let distTotalPdf = 0, durMinPdf = 0, iniPdf = '', fimPdf = ''; // valores do resumo p/ o 📄 PDF do dia
+    // 🧭 segmentação genérica do dia (qualquer técnico/dia): clusters de 75 m
+    // com ≥5 min = paradas; entre elas, trechos com km e buracos de sinal.
+    const segs = (pts||[]).length ? trajetoSegmentos(pts) : [];
+    paradas = segs.filter(s=>s.tipo==='parada');
+    const distTotal = segs.filter(s=>s.tipo==='trecho').reduce((sq,s)=>sq+s.distKm,0);
+    const temLinhaReta = segs.some(s=>s.tipo==='trecho' && s.linhaReta);
     if((pts||[]).length){
       const g = L.featureGroup();
       const coords = pts.map(p=>[+p.lat, +p.lng]);
       L.polyline(coords, { color:'#2563eb', weight:4, opacity:0.85 }).addTo(g);
       const i0 = pts[0], iN = pts[pts.length-1];
-      L.circleMarker([+i0.lat,+i0.lng], {radius:8, color:'#fff', weight:2, fillColor:'#16a34a', fillOpacity:1})
-        .bindPopup(`<b>Início</b> · ${trajetoHora(i0.created_at)}`).addTo(g);
-      L.circleMarker([+iN.lat,+iN.lng], {radius:8, color:'#fff', weight:2, fillColor:'#dc2626', fillOpacity:1})
-        .bindPopup(`<b>Fim</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`).addTo(g);
-      // detecta paradas: pontos a menos de 150m por mais de 10 min
-      let distTotal = 0, ini2 = 0;
-      for(let k=1;k<pts.length;k++){
-        distTotal += trajetoDistanciaKm(+pts[k-1].lat,+pts[k-1].lng,+pts[k].lat,+pts[k].lng);
-        const d = trajetoDistanciaKm(+pts[ini2].lat,+pts[ini2].lng,+pts[k].lat,+pts[k].lng);
-        if(d > 0.15){ // saiu do raio → fecha possível parada
-          const t0 = new Date(pts[ini2].created_at).getTime(), t1 = new Date(pts[k-1].created_at).getTime();
-          if(t1-t0 >= 10*60000 && ini2>0) paradas.push({pts:pts.slice(ini2,k), t0, t1});
-          ini2 = k;
-        }
+      const primParada = paradas.length && paradas[0].pts[0]===i0 ? paradas[0] : null;
+      const ultParada = paradas.length ? paradas[paradas.length-1] : null;
+      const fimEmParada = !!(ultParada && ultParada.pts[ultParada.pts.length-1]===iN);
+      if(!primParada){
+        L.circleMarker([+i0.lat,+i0.lng], {radius:8, color:'#fff', weight:2, fillColor:'#16a34a', fillOpacity:1})
+          .bindPopup(`<b>Início</b> · ${trajetoHora(i0.created_at)}`).addTo(g);
       }
-      const t0f = new Date(pts[ini2].created_at).getTime(), t1f = new Date(pts[pts.length-1].created_at).getTime();
-      if(t1f-t0f >= 10*60000 && ini2>0) paradas.push({pts:pts.slice(ini2), t0:t0f, t1:t1f});
+      // marcadores nos CENTROS dos clusters: início verde, fim vermelho, demais âmbar (visual atual)
       paradas.forEach((p,idx)=>{
-        const cLat = p.pts.reduce((sq,q)=>sq+ +q.lat,0)/p.pts.length;
-        const cLng = p.pts.reduce((sq,q)=>sq+ +q.lng,0)/p.pts.length;
+        const cor = p.pts[0]===i0 ? '#16a34a' : (p.pts[p.pts.length-1]===iN ? '#dc2626' : '#f59e0b');
         const mins = Math.round((p.t1-p.t0)/60000);
         const oss = [...new Set(p.pts.map(q=>q.os_numero).filter(Boolean))];
-        L.circleMarker([cLat,cLng], {radius:10, color:'#fff', weight:2, fillColor:'#f59e0b', fillOpacity:1})
+        L.circleMarker([p.lat,p.lng], {radius:10, color:'#fff', weight:2, fillColor:cor, fillOpacity:1})
           .bindPopup(`<b>🛑 Parada ${idx+1}</b><br>${trajetoHora(new Date(p.t0).toISOString())} → ${trajetoHora(new Date(p.t1).toISOString())} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}`).addTo(g);
       });
+      if(!fimEmParada){
+        L.circleMarker([+iN.lat,+iN.lng], {radius:8, color:'#fff', weight:2, fillColor:'#dc2626', fillOpacity:1})
+          .bindPopup(`<b>Fim</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`).addTo(g);
+      }
       g.addTo(MAPA_EQ);
       MAPA_TRAJETO_LAYER = g;
       MAPA_EQ.fitBounds(g.getBounds(), { padding:[40,40] });
@@ -8214,7 +8340,7 @@ async function verTrajetoTecnico(nome, dataISO){
         <div class="grid grid-cols-2 gap-1 text-gray-700">
           <div>🟢 Início: <b>${trajetoHora(i0.created_at)}</b></div>
           <div>🔴 Fim: <b>${trajetoHora(iN.created_at)}</b></div>
-          <div>📏 Distância: <b>~${distTotal.toFixed(1)} km</b></div>
+          <div>📏 Distância: <b>~${trajetoFmtKm(distTotal)} km</b>${temLinhaReta?' <span class="text-xs text-gray-500">(inclui trecho em linha reta)</span>':''}</div>
           <div>⏱️ Duração: <b>${durMin>=60?Math.floor(durMin/60)+'h '+(durMin%60)+'min':durMin+' min'}</b></div>
           <div>🛑 Paradas: <b>${paradas.length}</b></div>
         </div>`;
@@ -8222,7 +8348,8 @@ async function verTrajetoTecnico(nome, dataISO){
       resumoHtml = `<div class="text-sm text-gray-500">📭 Sem deslocamentos GPS registrados nesta data.</div>`;
     }
     // —— linha do tempo cronológica do dia ——
-    const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca);
+    MAPA_GEO_ALVOS = [];
+    const evs = mapaEventosDia(dia, pts, segs, atvs, numMap, historico, presenca);
     // 📍 marcadores de presença (login / Minhas OSs) com coordenadas casadas no mapa
     if((pts||[]).length && MAPA_EQ){
       try{
@@ -8239,7 +8366,7 @@ async function verTrajetoTecnico(nome, dataISO){
     // OSs concluídas no dia (p/ o resumo do 📄 PDF do dia)
     const osConcluidasPdf = [...new Set(Object.values(numMap).filter(o=>o && o.status==='concluida').map(o=>o.id))].length;
     // salva o pacote do PDF do dia (gerado sob demanda em mapaPdfDia)
-    MAPA_TRAJETO_PDF = { nome, dia, diaFmt, ini:iniPdf, fim:fimPdf, dist:distTotalPdf, durMin:durMinPdf, nParadas:paradas.length, osConcluidas:osConcluidasPdf, evs };
+    MAPA_TRAJETO_PDF = { nome, dia, diaFmt, ini:iniPdf, fim:fimPdf, dist:distTotalPdf, durMin:durMinPdf, nParadas:paradas.length, linhaReta:temLinhaReta, osConcluidas:osConcluidasPdf, evs };
     const tlHtml = evs.length ? `
       <div class="mt-3">
         <div class="font-bold text-sm mb-2">📜 Linha do tempo — ${diaFmt}</div>
@@ -8259,17 +8386,21 @@ async function verTrajetoTecnico(nome, dataISO){
         ${resumoHtml}
         ${tlHtml}
       </div>`;
+    // 🗺️ ruas da linha do tempo (geocodificação reversa por cluster, em segundo
+    // plano — a tela já renderizou com o placeholder "📍 buscando rua…")
+    if(MAPA_GEO_ALVOS.length){ mapaGeocodificar(MAPA_GEO_ALVOS.slice(), MAPA_TRAJETO_PDF).catch(()=>{}); }
   }catch(e){
     MAPA_TRAJETO_PDF = null;
     info.innerHTML = '<div class="text-sm text-red-600">Erro ao carregar trajeto: '+esc(e.message)+'</div>';
   }
 }
 /* 📜 Eventos do dia do técnico, em ordem cronológica.
-   Fontes reais do banco: tecnico_localizacao_hist (GPS início/fim + paradas),
+   Fontes reais do banco: tecnico_localizacao_hist (GPS — segmentado em
+   paradas/trechos/buracos por trajetoSegmentos, genérico p/ qualquer técnico),
    os_atividades (inicio/fim + status — a tabela NÃO guarda histórico de status,
    então os eventos de atividade derivam de inicio/fim) e os_clientes.updated_at
    (conclusão da OS no dia). */
-function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca){
+function mapaEventosDia(dia, pts, segs, atvs, numMap, historico, presenca){
   // presenca: eventos 'login'/'minhas_os' de tecnico_loc_eventos no dia — viram
   // 🔑 "Login no sistema" e 📱 "Abriu Minhas OSs" na linha do tempo, com o ponto
   // GPS mais próximo (até 5 min) anexado (lat/lng) p/ marcador no mapa.
@@ -8279,14 +8410,44 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico, presenca){
   const ST_LB = { a_caminho:'A caminho', em_atendimento:'Em atendimento', pausada:'Pausada', concluida:'Concluída', pendente:'Pendente', agendada:'Agendada', cancelada:'Cancelada' };
   if((pts||[]).length){
     const i0 = pts[0], iN = pts[pts.length-1];
-    evs.push({ hora: trajetoHora(i0.created_at), min: minOf(trajetoHora(i0.created_at)), ic:'🟢', txt:'<b>Início do trajeto</b> (primeira posição do GPS)' });
-    (paradas||[]).forEach((p,idx)=>{
-      const mins = Math.round((p.t1-p.t0)/60000);
-      const t0 = trajetoHora(new Date(p.t0).toISOString()), t1 = trajetoHora(new Date(p.t1).toISOString());
-      const oss = [...new Set((p.pts||[]).map(q=>q.os_numero).filter(Boolean))];
-      evs.push({ hora: t0, min: minOf(t0), ic:'🛑', txt:`<b>Parada ${idx+1}</b> · ${t0} → ${t1} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}` });
+    const segsX = segs || [];
+    const paradasX = segsX.filter(s=>s.tipo==='parada');
+    // registra alvo de geocodificação (1 por coordenada) e devolve a chave
+    const regRua = (lat, lng) => {
+      const key = mapaRuaChave(lat, lng);
+      if(!MAPA_GEO_ALVOS.some(a=>a.key===key)) MAPA_GEO_ALVOS.push({ key, lat:+lat, lng:+lng });
+      return key;
+    };
+    const ruaSpan = key => `<span data-rua="${key}">📍 buscando rua…</span>`;
+    // 🟢 início: rua do 1º cluster se o dia começa parado nele; senão, do 1º ponto
+    const primParada = paradasX.length && paradasX[0].pts[0]===i0 ? paradasX[0] : null;
+    const keyIni = primParada ? regRua(primParada.lat, primParada.lng) : regRua(i0.lat, i0.lng);
+    const hIni = trajetoHora(i0.created_at);
+    evs.push({ hora: hIni, min: minOf(hIni), ic:'🟢', txt:`<b>Início do trajeto</b> — ${ruaSpan(keyIni)}` });
+    segsX.forEach(s=>{
+      if(s.tipo==='trecho'){
+        const h0 = trajetoHora(new Date(s.t0).toISOString());
+        evs.push({ hora: h0, min: minOf(h0), ic:'🚗', txt:`<b>Deslocamento</b> — ${trajetoFmtKm(s.distKm)} km${s.linhaReta?' (linha reta)':''}` });
+        (s.gaps||[]).forEach(gp=>{
+          const g0 = trajetoHora(new Date(gp.t0).toISOString()), g1 = trajetoHora(new Date(gp.t1).toISOString());
+          evs.push({ hora: g0, min: minOf(g0), ic:'⚠️', txt:`<b>Sem sinal de GPS</b> — ${g0} → ${g1} (${trajetoFmtDur((gp.t1-gp.t0)/60000)})` });
+        });
+      } else {
+        const key = regRua(s.lat, s.lng);
+        const t0 = trajetoHora(new Date(s.t0).toISOString()), t1 = trajetoHora(new Date(s.t1).toISOString());
+        const oss = [...new Set((s.pts||[]).map(q=>q.os_numero).filter(Boolean))];
+        // dia termina dentro deste cluster → a parada absorve o fim (sem item duplicado)
+        const fimTxt = s.ultima ? `última posição, ${t1}` : t1;
+        evs.push({ hora: t0, min: minOf(t0), ic:'🔴', txt:`<b>Parada</b> — ${ruaSpan(key)} · ${t0} → ${fimTxt} (${trajetoFmtDur((s.t1-s.t0)/60000)})${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}` });
+      }
     });
-    if(pts.length > 1) evs.push({ hora: trajetoHora(iN.created_at), min: minOf(trajetoHora(iN.created_at)), ic:'🔴', txt:'<b>Última posição registrada</b>' + (iN.os_numero?` · OS <b>${esc(iN.os_numero)}</b>`:'') });
+    const ultParada = paradasX.length ? paradasX[paradasX.length-1] : null;
+    const fimEmParada = !!(ultParada && ultParada.pts[ultParada.pts.length-1]===iN);
+    if(pts.length > 1 && !fimEmParada){
+      const keyFim = regRua(iN.lat, iN.lng);
+      const hFim = trajetoHora(iN.created_at);
+      evs.push({ hora: hFim, min: minOf(hFim), ic:'🏁', txt:`<b>Última posição</b> — ${ruaSpan(keyFim)}` + (iN.os_numero?` · OS <b>${esc(iN.os_numero)}</b>`:'') });
+    }
   }
   (atvs||[]).forEach(a=>{
     const oc = numMap[a.os_id];
@@ -8340,6 +8501,7 @@ function limparTrajeto(){
   if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
   if(MAPA_EQ && MAPA_PRESENCA_LAYER){ MAPA_EQ.removeLayer(MAPA_PRESENCA_LAYER); MAPA_PRESENCA_LAYER = null; }
   MAPA_TRAJETO_PDF = null;
+  MAPA_GEO_ALVOS = [];
   document.getElementById('mapaTrajetoInfo').classList.add('hidden');
 }
 /* ================= 📄 PDF DO DIA (20/10/2026) =================
@@ -8384,7 +8546,7 @@ function mapaPdfDia(){
   <div class="sec">Resumo — ${esc(D.nome)} · ${esc(D.diaFmt)}</div>
   <div class="cards">
     <div class="card"><div class="t">Trajeto</div><div class="v">${esc(D.ini||'—')} → ${esc(D.fim||'—')}</div></div>
-    <div class="card"><div class="t">Distância</div><div class="v">~${Number(D.dist||0).toFixed(1)} km</div></div>
+    <div class="card"><div class="t">Distância</div><div class="v">~${trajetoFmtKm(D.dist||0)} km</div>${D.linhaReta?'<div class="mut">(inclui trecho em linha reta)</div>':''}</div>
     <div class="card"><div class="t">Duração</div><div class="v">${fmtDur(D.durMin||0)}</div></div>
     <div class="card"><div class="t">Paradas</div><div class="v">${D.nParadas||0}</div></div>
     <div class="card"><div class="t">OSs concluídas</div><div class="v">${D.osConcluidas||0}</div></div>
