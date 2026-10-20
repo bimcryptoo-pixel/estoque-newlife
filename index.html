@@ -7388,8 +7388,8 @@ function osAbaAnexos(d){
   const fotoCard = a=>`
     <div class="border rounded-xl overflow-hidden bg-white">
       <a href="${esc(urlDe(a))}" target="_blank" title="Abrir a foto em tamanho real" class="block">
-        <img src="${esc(urlDe(a))}" alt="${esc(a.nome||'foto do atendimento')}" class="w-full h-52 sm:h-60 lg:h-72 object-cover block bg-gray-100"
-             onerror="this.outerHTML='<div class=&quot;h-52 sm:h-60 lg:h-72 flex items-center justify-center text-4xl bg-gray-50&quot;>📎</div>'">
+        <img src="${esc(urlDe(a))}" alt="${esc(a.nome||'foto do atendimento')}" class="w-full h-56 sm:h-64 lg:h-80 object-contain block bg-gray-100"
+             onerror="this.outerHTML='<div class=&quot;h-56 sm:h-64 lg:h-80 flex items-center justify-center text-4xl bg-gray-50&quot;>📎</div>'">
       </a>
       <div class="flex items-center gap-2 px-2 py-1.5">
         <span class="text-xs text-gray-600 truncate flex-1">${esc(a.nome||'foto')}</span>
