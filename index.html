@@ -1183,6 +1183,7 @@
             <div class="font-bold text-lg">🗺️ Mapa da Equipe</div>
             <div class="flex gap-2 items-center">
               <div class="text-xs text-gray-500" id="mapaEquipeInfo">Carregando…</div>
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="mapaComparativo()">📊 Comparativo</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarMapaEquipe()">🔄 Atualizar</button>
             </div>
           </div>
@@ -7244,6 +7245,12 @@ async function carregarMapaEquipe(){
     document.getElementById('mapaEquipeLista').innerHTML = ordenados.map((r, idxTec)=>{
       const nome = r.tecnico_nome||'?';
       const livre = !r.os_numero;
+      /* ⚠️ ALERTA DE INATIVIDADE (20/10/2026): técnico com OS vinculada (os_id)
+         e sem posição nova há mais de 30 min → selo visual no cartão.
+         LIMIAR FIXO: 30 min. Somente visual — nenhum aviso externo é enviado. */
+      const minSemPos = r.updated_at ? Math.round((Date.now()-new Date(r.updated_at).getTime())/60000) : null;
+      const inativoOS = !!(r.os_id && minSemPos!==null && minSemPos>30);
+      const inativoTxt = minSemPos!==null && minSemPos>=60 ? Math.floor(minSemPos/60)+'h '+(minSemPos%60)+'min' : (minSemPos+' min');
       const jor = jornadaMap[nome];
       const des = desempenhoMap[nome]||{concluidas:0,tempoMin:0,nTempo:0};
       const tMed = des.nTempo? Math.round(des.tempoMin/des.nTempo) : null;
@@ -7259,6 +7266,7 @@ async function carregarMapaEquipe(){
           <span class="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${livre?'bg-green-100 text-green-800':'bg-blue-100 text-blue-800'}">${livre?'🟢 Livre':'🔵 Ocupado'}</span>
         </div>
         ${r.os_numero?`<div class="text-xs text-gray-600 mt-1.5 ml-11">🔧 OS <b>${esc(r.os_numero)}</b></div>`:''}
+        ${inativoOS?`<div class="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 rounded-lg px-2 py-1 mt-1.5 ml-11 inline-block">⚠️ parado há ${inativoTxt} (com OS vinculada)</div>`:''}
         <div class="text-xs text-gray-500 mt-1 ml-11">
           ${jor?`⏰ Jornada: <b>${trajetoHora(jor.ini)} → ${trajetoHora(jor.fim)}</b> · `:''}✅ Hoje: <b>${des.concluidas}</b> concluída(s)${tMed!=null?` · ⏱️ média <b>${tMed} min</b>`:''}
         </div>
@@ -7281,6 +7289,7 @@ async function carregarMapaEquipe(){
 /* ================= 🛣️ TRAJETO DO TÉCNICO (linha do tempo do deslocamento) ================= */
 let MAPA_TRAJETO_LAYER = null;
 let MAPA_TRAJETO_DATA = null; /* última data consultada no trajeto (AAAA-MM-DD) — preserva o seletor entre atualizações da lista */
+let MAPA_TRAJETO_PDF = null; /* dados do último trajeto exibido — base do 📄 PDF do dia */
 function mapaHojeFortaleza(){ return new Date(Date.now()-3*3600000).toISOString().slice(0,10); }
 function trajetoDistanciaKm(lat1, lng1, lat2, lng2){
   const R = 6371, dLa = (lat2-lat1)*Math.PI/180, dLo = (lng2-lng1)*Math.PI/180;
@@ -7329,6 +7338,7 @@ async function verTrajetoTecnico(nome, dataISO){
     }
     // —— desenha o trajeto no mapa (se houver pontos GPS no dia) ——
     let paradas = [], resumoHtml = '';
+    let distTotalPdf = 0, durMinPdf = 0, iniPdf = '', fimPdf = ''; // valores do resumo p/ o 📄 PDF do dia
     if((pts||[]).length){
       const g = L.featureGroup();
       const coords = pts.map(p=>[+p.lat, +p.lng]);
@@ -7363,6 +7373,7 @@ async function verTrajetoTecnico(nome, dataISO){
       MAPA_TRAJETO_LAYER = g;
       MAPA_EQ.fitBounds(g.getBounds(), { padding:[40,40] });
       const durMin = Math.round((new Date(iN.created_at)-new Date(i0.created_at))/60000);
+      iniPdf = trajetoHora(i0.created_at); fimPdf = trajetoHora(iN.created_at); distTotalPdf = distTotal; durMinPdf = durMin;
       resumoHtml = `
         <div class="grid grid-cols-2 gap-1 text-gray-700">
           <div>🟢 Início: <b>${trajetoHora(i0.created_at)}</b></div>
@@ -7376,6 +7387,10 @@ async function verTrajetoTecnico(nome, dataISO){
     }
     // —— linha do tempo cronológica do dia ——
     const evs = mapaEventosDia(dia, pts, paradas, atvs, numMap, historico);
+    // OSs concluídas no dia (p/ o resumo do 📄 PDF do dia)
+    const osConcluidasPdf = [...new Set(Object.values(numMap).filter(o=>o && o.status==='concluida').map(o=>o.id))].length;
+    // salva o pacote do PDF do dia (gerado sob demanda em mapaPdfDia)
+    MAPA_TRAJETO_PDF = { nome, dia, diaFmt, ini:iniPdf, fim:fimPdf, dist:distTotalPdf, durMin:durMinPdf, nParadas:paradas.length, osConcluidas:osConcluidasPdf, evs };
     const tlHtml = evs.length ? `
       <div class="mt-3">
         <div class="font-bold text-sm mb-2">📜 Linha do tempo — ${diaFmt}</div>
@@ -7387,12 +7402,16 @@ async function verTrajetoTecnico(nome, dataISO){
       <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <div class="font-bold">🛣️ Trajeto de <b>${esc(nome)}</b> — ${diaFmt}</div>
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="limparTrajeto()">✖️ Fechar</button>
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaPdfDia()">📄 PDF do dia</button>
+            <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="limparTrajeto()">✖️ Fechar</button>
+          </div>
         </div>
         ${resumoHtml}
         ${tlHtml}
       </div>`;
   }catch(e){
+    MAPA_TRAJETO_PDF = null;
     info.innerHTML = '<div class="text-sm text-red-600">Erro ao carregar trajeto: '+esc(e.message)+'</div>';
   }
 }
@@ -7452,7 +7471,151 @@ function mapaEventosDia(dia, pts, paradas, atvs, numMap, historico){
 }
 function limparTrajeto(){
   if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
+  MAPA_TRAJETO_PDF = null;
   document.getElementById('mapaTrajetoInfo').classList.add('hidden');
+}
+/* ================= 📄 PDF DO DIA (20/10/2026) =================
+   Documento imprimível do trajeto + linha do tempo, no mesmo padrão visual
+   de imprimirOS (cabeçalho NEW LIFE • Diagnóstico + rodapé "Documento gerado
+   pelo sistema New Life Diagnóstico"). Gera via iframe oculto + document.write
+   + print — o padrão de impressão do projeto. */
+function mapaPdfDia(){
+  const D = MAPA_TRAJETO_PDF;
+  if(!D){ toast('Abra o trajeto de um técnico primeiro.','erro'); return; }
+  const stripTxt = h => String(h||'').replace(/<br\s*\/?>/gi,' · ').replace(/<[^>]+>/g,'').trim();
+  const fmtDur = m => (m>=60? Math.floor(m/60)+'h '+(m%60)+'min' : m+' min');
+  const evRows = (D.evs||[]).map(e=>`<tr><td style="font-weight:700;white-space:nowrap;width:52px">${esc(e.hora||'—')}</td><td>${esc(e.ic||'')} ${esc(stripTxt(e.txt))}</td></tr>`).join('')
+    || '<tr><td colspan="2" class="mut">Sem registros nesta data.</td></tr>';
+  const agora = new Date();
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório do dia — ${esc(D.nome)} — ${esc(D.diaFmt)}</title>
+  <style>
+    *{box-sizing:border-box}
+    @page{ size:A4; margin:18mm 14mm 18mm 14mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;margin:0;padding:6mm 4mm;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:14px;margin:4mm 0 16px;}
+    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome span{color:#C1272D;}
+    .doc{text-align:right;}
+    .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
+    .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
+    .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:16px 0 8px;border-bottom:1px solid #e5e5e5;padding:8mm 0 5px;break-after:avoid;page-break-after:avoid;}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
+    .card .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
+    .card .v{font-size:13px;font-weight:600;margin-top:2px;}
+    .mut{color:#888;font-size:12px;}
+    table.tl{width:100%;border-collapse:collapse;}
+    table.tl td{padding:7px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;}
+    .rodape{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10.5px;color:#999;}
+    .noprint{} @media print{ .noprint{display:none} }
+  </style></head><body>
+  <div class="topo">
+    <div class="marca"><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div><div style="font-size:10px;color:#888;letter-spacing:2px;margin-top:2px">GESTÃO EMPRESARIAL</div></div>
+    <div class="doc"><h1>Mapa da Equipe</h1><div class="tipo">Relatório do dia</div></div>
+  </div>
+  <div class="sec">Resumo — ${esc(D.nome)} · ${esc(D.diaFmt)}</div>
+  <div class="cards">
+    <div class="card"><div class="t">Trajeto</div><div class="v">${esc(D.ini||'—')} → ${esc(D.fim||'—')}</div></div>
+    <div class="card"><div class="t">Distância</div><div class="v">~${Number(D.dist||0).toFixed(1)} km</div></div>
+    <div class="card"><div class="t">Duração</div><div class="v">${fmtDur(D.durMin||0)}</div></div>
+    <div class="card"><div class="t">Paradas</div><div class="v">${D.nParadas||0}</div></div>
+    <div class="card"><div class="t">OSs concluídas</div><div class="v">${D.osConcluidas||0}</div></div>
+    <div class="card"><div class="t">Eventos</div><div class="v">${(D.evs||[]).length}</div></div>
+  </div>
+  <div class="sec">Linha do tempo — ${esc(D.diaFmt)}</div>
+  <table class="tl">${evRows}</table>
+  <div class="rodape"><span>Documento gerado pelo sistema New Life Diagnóstico</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
+  </body></html>`;
+  let f = document.getElementById('printFrameMapa');
+  if(!f){ f = document.createElement('iframe'); f.id='printFrameMapa'; f.style.display='none'; document.body.appendChild(f); }
+  const docw = f.contentWindow.document;
+  docw.open(); docw.write(html); docw.close();
+  f.contentWindow.focus();
+  setTimeout(()=>{ try{ f.contentWindow.print(); }catch(_){ toast('Use o botão 🖨️ Imprimir.','alerta'); } }, 500);
+}
+/* ================= 📊 COMPARATIVO ENTRE TÉCNICOS (20/10/2026) ================= */
+function mapaDiaBounds(dia){ const ini = new Date(dia+'T00:00:00-03:00'); return { ini, fim:new Date(ini.getTime()+86400000) }; }
+async function mapaComparativo(diaISO){
+  const dia = (diaISO && /^\d{4}-\d{2}-\d{2}$/.test(diaISO)) ? diaISO : (MAPA_TRAJETO_DATA || mapaHojeFortaleza());
+  const diaFmt = dia.split('-').reverse().join('/');
+  openOsModal(`<div class="font-bold text-lg mb-1">📊 Comparativo entre técnicos</div><div class="text-sm text-gray-500">Carregando ${diaFmt}…</div>`);
+  try{
+    const linhas = await mapaComparativoCalcular(dia);
+    openOsModal(mapaComparativoHtml(dia, diaFmt, linhas));
+  }catch(e){
+    openOsModal(`<div class="font-bold text-lg mb-1">📊 Comparativo entre técnicos</div><div class="text-sm text-red-600">Erro: ${esc(e.message)}</div>`);
+  }
+}
+async function mapaComparativoCalcular(dia){
+  const { ini, fim } = mapaDiaBounds(dia);
+  const colsAtv = 'id,os_id,tecnico,data,inicio,fim,status';
+  const [locs, hist, atvD, atvS] = await Promise.all([
+    apiGET('tecnico_localizacao?select=tecnico_nome&limit=500').catch(()=>[]),
+    apiGET(`tecnico_localizacao_hist?created_at=gte.${ini.toISOString()}&created_at=lt.${fim.toISOString()}&select=tecnico_nome,lat,lng,created_at&order=created_at.asc&limit=5000`).catch(()=>[]),
+    apiGET(`os_atividades?data=eq.${dia}&select=${colsAtv}&limit=2000`).catch(()=>[]),
+    apiGET(`os_atividades?data=is.null&created_at=gte.${ini.toISOString()}&created_at=lt.${fim.toISOString()}&select=${colsAtv}&limit=2000`).catch(()=>[])
+  ]);
+  const nomes = [...new Set((locs||[]).map(r=>r.tecnico_nome).concat((hist||[]).map(h=>h.tecnico_nome)).concat((atvD||[]).concat(atvS||[]).map(a=>(a.tecnico||'').trim())))].filter(Boolean);
+  const atvsMap = {};
+  (atvD||[]).concat(atvS||[]).forEach(a=>{ atvsMap[a.id] = a; });
+  const atvs = Object.values(atvsMap);
+  const osIds = [...new Set(atvs.map(a=>a.os_id).filter(Boolean))];
+  const numMap = {};
+  if(osIds.length){
+    const oss = await apiGET(`os_clientes?id=in.(${osIds.join(',')})&select=id,numero,status`).catch(()=>[]);
+    (oss||[]).forEach(o=>{ numMap[o.id] = o; });
+  }
+  const minOfHHMM = s => { const m = String(s||'').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; };
+  const linhas = nomes.map(nome=>{
+    const pts = (hist||[]).filter(h=>h.tecnico_nome===nome);
+    let dist = 0;
+    for(let k=1;k<pts.length;k++) dist += trajetoDistanciaKm(+pts[k-1].lat,+pts[k-1].lng,+pts[k].lat,+pts[k].lng);
+    const atvsTec = atvs.filter(a=>(a.tecnico||'').trim()===nome);
+    const osConc = new Set();
+    let tempoMin = 0, nTempo = 0;
+    atvsTec.forEach(a=>{
+      const oc = numMap[a.os_id];
+      if(oc && oc.status==='concluida') osConc.add(oc.id);
+      if(a.status==='concluida'){
+        const mi = minOfHHMM(a.inicio), mf = minOfHHMM(a.fim);
+        if(mi!==null && mf!==null){ const d = mf>=mi ? mf-mi : mf-mi+1440; if(d>0 && d<1440){ tempoMin += d; nTempo++; } }
+      }
+    });
+    return {
+      nome,
+      jornada: pts.length ? trajetoHora(pts[0].created_at)+' → '+trajetoHora(pts[pts.length-1].created_at) : '—',
+      dist, osConcluidas: osConc.size,
+      tempoMedio: nTempo ? Math.round(tempoMin/nTempo) : null
+    };
+  });
+  linhas.sort((a,b)=> (b.osConcluidas-a.osConcluidas) || (b.dist-a.dist) || String(a.nome).localeCompare(String(b.nome)));
+  return linhas;
+}
+function mapaComparativoHtml(dia, diaFmt, linhas){
+  const linhasHtml = linhas.length ? linhas.map((l,i)=>`
+    <tr class="border-b">
+      <td class="py-2 pr-2"><b>${i+1}º</b> ${esc(l.nome)}</td>
+      <td class="py-2 pr-2 whitespace-nowrap">${l.jornada}</td>
+      <td class="py-2 pr-2 text-right">~${l.dist.toFixed(1)} km</td>
+      <td class="py-2 pr-2 text-center"><b>${l.osConcluidas}</b></td>
+      <td class="py-2 text-right whitespace-nowrap">${l.tempoMedio!=null? l.tempoMedio+' min':'—'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="5" class="text-gray-400 text-sm py-3">Sem registros de técnicos nesta data.</td></tr>';
+  return `
+  <div class="font-bold text-lg mb-1">📊 Comparativo entre técnicos</div>
+  <div class="flex items-center gap-2 mb-3 flex-wrap">
+    <input type="date" value="${dia}" max="${mapaHojeFortaleza()}" onchange="mapaComparativo(this.value)" class="border rounded-lg px-2 py-1 text-sm">
+    <span class="text-xs text-gray-500">${diaFmt} · ordenado por OSs concluídas</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm min-w-[560px]">
+      <thead><tr class="text-left text-gray-500 text-xs uppercase"><th class="py-2 pr-2">Técnico</th><th class="py-2 pr-2">Jornada</th><th class="py-2 pr-2 text-right">Distância</th><th class="py-2 pr-2 text-center">OSs concluídas</th><th class="py-2 text-right">Tempo médio</th></tr></thead>
+      <tbody>${linhasHtml}</tbody>
+    </table>
+  </div>
+  <div class="text-xs text-gray-400 mt-2">O rastreio pausa se o painel for minimizado/fechado no navegador.</div>
+  <button class="btn-ghost w-full !py-2.5 text-sm mt-3" onclick="closeOsModal()">Fechar</button>`;
 }
 async function mapaFocarTecnico(nome){
   try{
