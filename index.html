@@ -7499,6 +7499,18 @@ async function tecFluxoFinalizar(){
   try{
     // 1) salva observação + conclui atividade
     await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
+    // 1b) FECHA A OS quando todas as atividades estiverem concluídas + libera o técnico no mapa
+    //     (correção 20/10/2026: o fluxo só concluía a atividade e a OS ficava "em atendimento" pra sempre)
+    try{
+      const atvsRest = await apiGET(`os_atividades?os_id=eq.${F.osId}&select=status`);
+      if(atvsRest.length && atvsRest.every(x=>['concluida','cancelada'].includes(x.status))){
+        await apiPATCH('os_clientes', `id=eq.${F.osId}`, { status:'concluida', updated_at:new Date().toISOString() });
+      }
+      if(TEC_GPS.nome){
+        await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
+          { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+      }
+    }catch(_){}
     // 2) assinatura (se desenhou)
     let sigUrl = null;
     if(cv && !tecPadVazio(cv)){
