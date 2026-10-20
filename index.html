@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>NEW LIFE • Gestão Empresarial</title>
   <link rel="icon" type="image/png" href="logo.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#C1272D">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -1210,6 +1215,8 @@
           </div>
           <div id="tecNome" class="text-xs text-gray-500 mb-2"></div>
           <div id="tecGpsBar"></div>
+          <div id="tecOfflineBar" class="hidden text-xs font-bold rounded-lg px-3 py-2 mb-2" style="background:#fef3c7;color:#92400e"></div>
+          <div id="tecPendBar" class="hidden text-xs font-bold rounded-lg px-3 py-2 mb-2 cursor-pointer" style="background:#ffedd5;color:#9a3412" onclick="nlSync(true)" title="Toque para tentar enviar agora"></div>
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
           <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
         </div>
@@ -1535,6 +1542,7 @@ function entrarApp(){
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
   aplicarPermissoesNav();
+  try{ nlAposLogin(); }catch(e){} /* 📴 fila offline: selo + sync pós-login */
   // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
   document.getElementById('fData').value = hojeISO();
   carregarProdutosCache().then(()=>{
@@ -8350,9 +8358,27 @@ async function carregarPainelTecnico(){
         (rows||[]).forEach(r=>{ fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; });
       }
     }catch(e){}
+    // 📴 MODO OFFLINE: salva o SNAPSHOT desta lista no aparelho — é ele que
+    //    aparece quando o técnico abrir o painel sem internet no campo.
+    try{ await nlSnapshotSalvar({ ts:Date.now(), tnome, atvs:atvs||[], fotoCount }); }catch(e){}
+    try{ await nlAtualizarPendCache(); }catch(e){}
+    const obOk = document.getElementById('tecOfflineBar'); if(obOk) obOk.classList.add('hidden');
     renderPainelTecnico(atvs||[], fotoCount);
   }catch(e){
-    box.innerHTML = `<span class="text-red-600 text-sm">Erro ao carregar: ${esc(e.message)}</span>`;
+    // 📴 sem rede (ou falha de leitura): renderiza do snapshot salvo no aparelho
+    const snap = await nlSnapshotLer().catch(()=>null);
+    if(snap && Array.isArray(snap.atvs)){
+      try{ await nlAtualizarPendCache(); }catch(_){}
+      if(snap.tnome) document.getElementById('tecNome').textContent = 'Técnico: ' + snap.tnome;
+      const bar = document.getElementById('tecOfflineBar');
+      if(bar){
+        bar.textContent = '📴 Sem internet — dados de ' + (snap.ts ? new Date(snap.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : 'agora há pouco');
+        bar.classList.remove('hidden');
+      }
+      renderPainelTecnico(snap.atvs, snap.fotoCount||{});
+    }else{
+      box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📴 Sem internet e ainda não há dados salvos neste aparelho.<br>Conecte-se uma vez para carregar suas OSs.</div>';
+    }
   }
 }
 function renderPainelTecnico(atvs, fotoCount){
@@ -8362,30 +8388,38 @@ function renderPainelTecnico(atvs, fotoCount){
     box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
     return;
   }
-  box.innerHTML = atvs.map(a=>{
+  const __cardsTec = atvs.map(a=>{
     const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
+    const ovSt = TEC_OVERLAY[a.id] ? TEC_OVERLAY[a.id].status : null;
+    if(ovSt==='cancelada') return ''; // 📴 cancelada offline: some da lista (o servidor confirma no envio)
+    const stExib = ovSt || a.status;
+    const pendConc = TEC_PEND.conclusaoAtvs.has(a.id);
+    const pendSt = !!ovSt || TEC_PEND.statusAtvs.has(a.id);
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
     let btns = '';
-    if(a.status==='pendente'||a.status==='agendada'){
+    if(pendConc){ /* 📴 conclusão aguardando envio: ações bloqueadas até sincronizar */ }
+    else if(stExib==='pendente'||stExib==='agendada'){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Iniciar</button>`;
-    }else if(a.status==='a_caminho'){
+    }else if(stExib==='a_caminho'){
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
-    }else if(a.status==='em_atendimento'){
+    }else if(stExib==='em_atendimento'){
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
-    }else if(a.status==='pausada'){
+    }else if(stExib==='pausada'){
       btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
       btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }
+    if(!pendConc){
     btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="osAbrirAssinatura('${os.id}')">✍️ Assinatura</button>`;
     btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecFotoOS('${os.id}')">📷 Foto</button>`;
     btns += `<button class="text-xs text-red-700 font-bold px-2" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌</button>`;
+    }
     return `
     <div class="border rounded-xl p-3 bg-white">
       <div class="flex items-center justify-between gap-2 mb-1">
         <div class="font-black text-brand">${esc(os.numero||'')}</div>
-        ${atvTecBadge(a.status)}
+        ${atvTecBadge(stExib)}
       </div>
       <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
@@ -8397,12 +8431,20 @@ function renderPainelTecnico(atvs, fotoCount){
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
       <div class="flex gap-2 flex-wrap mt-2">${btns}</div>
+      ${(pendConc||pendSt)?`<div class="text-xs font-bold mt-2" style="color:#9a3412">⏳ aguardando envio</div>`:''}
     </div>`;
   }).join('');
+  box.innerHTML = __cardsTec.trim() ? __cardsTec : '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
 }
 /* ---------- fluxo guiado de conclusão (3 passos) ---------- */
 let TEC_FLUXO = null;
 function tecConcluirModal(atvId, osId){
+  // 📴 esta atividade já foi concluída neste aparelho e está aguardando envio:
+  //    não reabre o fluxo (evita concluir a mesma atividade 2×).
+  if(TEC_PEND.conclusaoAtvs.has(atvId)){
+    toast('⏳ Este atendimento já foi concluído neste aparelho e está aguardando envio.','alerta');
+    return;
+  }
   TEC_FLUXO = { atvId, osId, passo:1, obs:'', fotos:[], sigOk:false };
   tecFluxoRender();
 }
@@ -8423,8 +8465,8 @@ function tecFluxoRender(){
       <button class="w-full p-5 border-2 border-dashed border-brand rounded-xl bg-red-50 text-brand font-extrabold text-base mb-2" onclick="document.getElementById('tecFluxoFotoInput').click()">📷 Tirar foto</button>
       <input type="file" id="tecFluxoFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecFluxoFotoUp(this)">
       <div class="text-xs text-gray-500 mb-1">Foto saiu borrada? Toque no ✕ para apagar.</div>
-      <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map((u,i)=>`<div class="relative"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border"><button class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-7 h-7 text-sm font-bold shadow" onclick="tecFluxoFotoDel(${i})" title="Apagar foto">✕</button></div>`).join('')}</div>
-      ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
+      <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map((f,i)=>{ const u=(typeof f==='string')?f:f.objUrl; const local=(typeof f!=='string'); return `<div class="relative"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border"><button class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-7 h-7 text-sm font-bold shadow" onclick="tecFluxoFotoDel(${i})" title="Apagar foto">✕</button>${local?`<div class="absolute bottom-1 left-1 text-[10px] font-bold rounded px-1.5 py-0.5" style="background:#ffedd5;color:#9a3412">⏳ aguardando envio</div>`:''}</div>`; }).join('')}</div>
+      ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)${F.fotos.some(f=>typeof f!=='string')?` · ${F.fotos.filter(f=>typeof f!=='string').length} aguardando envio`:''}</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
       <div class="flex gap-2"><button class="btn-ghost flex-1 !py-3" onclick="tecFluxoVoltar()">← Voltar</button>
       <button class="btn-brand flex-1 !w-auto !py-3" onclick="tecFluxoAvancar()">Avançar →</button></div>`;
   }else if(F.passo===3){
@@ -8464,27 +8506,78 @@ async function tecFluxoFotoUp(input){
   const F = TEC_FLUXO;
   if(!F || !input.files || !input.files[0]){ if(input) input.value=''; return; }
   const file = input.files[0];
+  input.value='';
+  // Path do storage gerado NA CAPTURA: o envio (agora ou no retry da fila offline)
+  // usa sempre o mesmo nome — retry nunca duplica arquivo.
+  const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
+  const nome = `os/${F.osId}-${Date.now()}.${ext}`;
+  const nomeOriginal = file.name||('foto-'+Date.now()+'.jpg');
+  // 📴 MODO OFFLINE: sem sinal, nem tenta a rede — guarda a foto no aparelho.
+  if(navigator.onLine===false){
+    try{ await tecFotoEnfileirar(F, file, nome, nomeOriginal, false); }
+    catch(e){ toast('Erro ao guardar a foto no aparelho: '+e.message,'erro'); }
+    tecFluxoRender();
+    return;
+  }
   try{
     toast('Enviando foto…','ok');
-    const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
-    const nome = `os/${F.osId}-${Date.now()}.${ext}`;
     const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
       method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'image/jpeg' }, body: file
     });
     if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+')'); }
     const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
-    await apiPOST('os_anexos', { os_id:F.osId, url, nome:file.name||('foto-'+Date.now()+'.jpg') });
+    try{
+      await apiPOST('os_anexos', { os_id:F.osId, url, nome:nomeOriginal });
+    }catch(ePost){
+      // arquivo subiu, mas o vínculo falhou por REDE: enfileira só o vínculo
+      if(nlEhErroRede(ePost)){
+        try{ await tecFotoEnfileirar(F, null, nome, nomeOriginal, true); }
+        catch(e2){ toast('Erro: '+e2.message,'erro'); }
+        tecFluxoRender();
+        return;
+      }
+      throw ePost;
+    }
     F.fotos.push(url);
     toast('Foto incluída. ✓','ok');
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
-  input.value='';
+  }catch(e){
+    if(nlEhErroRede(e)){
+      // 📴 a rede caiu no upload: a foto NÃO se perde — vai pra fila do aparelho
+      try{ await tecFotoEnfileirar(F, file, nome, nomeOriginal, false); }
+      catch(e2){ toast('Erro: '+e2.message,'erro'); }
+    }else{
+      toast('Erro: '+e.message,'erro');
+    }
+  }
   tecFluxoRender();
+}
+/* 📴 Guarda a foto na fila offline (IndexedDB) e exibe no fluxo com o selo
+   "aguardando envio". blob=null + jaNoStorage=true quando o arquivo já subiu
+   pro storage e só falta o vínculo em os_anexos. */
+async function tecFotoEnfileirar(F, blob, path, nomeOriginal, jaNoStorage){
+  const filaId = await nlFilaAdd({ tipo:'foto', osId:F.osId, path, nomeOriginal, jaNoStorage:!!jaNoStorage, ts:Date.now() }, blob||null);
+  const objUrl = blob ? URL.createObjectURL(blob)
+                      : `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(path)}`;
+  F.fotos.push({ local:true, filaId, objUrl, path });
+  toast('📴 Sem internet: foto guardada no aparelho — será enviada ao voltar o sinal.','alerta');
 }
 /* Apaga a foto no ato do atendimento (regra 20/10/2026: foto borrada pode ser refeita).
    Remove da lista do fluxo, apaga o vínculo em os_anexos e o arquivo no storage. */
 async function tecFluxoFotoDel(i){
   const F = TEC_FLUXO; if(!F) return;
-  const url = F.fotos[i]; if(!url) return;
+  const entrada = F.fotos[i]; if(!entrada) return;
+  if(typeof entrada !== 'string'){
+    // 📴 foto LOCAL (ainda só na fila do aparelho): apaga da fila e da lista —
+    //    NENHUMA chamada de rede (a foto nunca saiu do celular).
+    if(!confirm('Apagar esta foto?')) return;
+    try{ await nlFilaRemove(entrada.filaId); }catch(e){}
+    if(entrada.objUrl && entrada.objUrl.indexOf('blob:')===0){ try{ URL.revokeObjectURL(entrada.objUrl); }catch(e){} }
+    F.fotos.splice(i,1);
+    toast('Foto apagada. ✓','ok');
+    tecFluxoRender();
+    return;
+  }
+  const url = entrada;
   if(!confirm('Apagar esta foto?')) return;
   try{
     const rows = await apiGET(`os_anexos?os_id=eq.${F.osId}&select=id,url`);
@@ -8508,26 +8601,69 @@ async function tecFluxoFinalizar(){
   if(!tecGpsPodeAgir()) return;
   const nome = (document.getElementById('tecFluxoNome')||{}).value||'';
   const cv = document.getElementById('tecFluxoPad');
+  const padDesenhado = !!(cv && !tecPadVazio(cv));
+  const offline = (navigator.onLine===false);
   // 🖊️ Regra 20/10/2026: sem assinatura (desenhada agora ou já salva), NÃO conclui nada.
   //    Clicar no aviso volta pra página da assinatura.
-  if((!cv || tecPadVazio(cv)) && !(await osTemAssinatura(F.osId))){
-    toast('⚠️ Falta a assinatura do cliente: a OS só é finalizada com a assinatura. Toque para assinar.', 'erro', ()=>{ if(TEC_FLUXO){ TEC_FLUXO.passo = 3; tecFluxoRender(); } });
+  if(!padDesenhado){
+    if(offline){
+      // 📴 MODO OFFLINE: sem rede não dá pra consultar a assinatura já salva no
+      //    servidor — exige a assinatura DESENHADA agora p/ guardar a conclusão.
+      toast('⚠️ Sem internet: peça ao cliente para assinar na tela — sem a assinatura desenhada não dá para guardar a conclusão. Toque para assinar.', 'erro', ()=>{ if(TEC_FLUXO){ TEC_FLUXO.passo = 3; tecFluxoRender(); } });
+      return;
+    }
+    if(!(await osTemAssinatura(F.osId))){
+      toast('⚠️ Falta a assinatura do cliente: a OS só é finalizada com a assinatura. Toque para assinar.', 'erro', ()=>{ if(TEC_FLUXO){ TEC_FLUXO.passo = 3; tecFluxoRender(); } });
+      return;
+    }
+  }
+  // Blob da assinatura capturado UMA vez (vale pro envio online e pra fila offline).
+  let sigBlob = null;
+  if(padDesenhado){
+    sigBlob = await new Promise(res=>{ try{ cv.toBlob(b=>res(b),'image/png'); }catch(e){ res(null); } });
+    if(!sigBlob){ toast('Erro ao ler a assinatura desenhada. Tente assinar de novo.','erro'); return; }
+  }
+  // 📴 MODO OFFLINE: guarda a conclusão INTEIRA no aparelho; o motor de
+  //    sincronização envia tudo (na ordem) quando o sinal voltar.
+  if(offline){
+    try{ await nlCapturarConclusao(F, nome, sigBlob, null); }
+    catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
     return;
+  }
+  // Fotos LOCAIS pendentes desta OS (capturadas offline neste fluxo): descarrega
+  // ANTES de concluir. Se alguma falhar, a conclusão inteira vira captura offline
+  // (nada se perde e a ordem foto → conclusão é preservada).
+  if(F.fotos.some(f=>typeof f!=='string')){
+    const novas = [];
+    let flushOk = true;
+    for(const f of F.fotos){
+      if(typeof f==='string'){ novas.push(f); continue; }
+      const it = await nlFilaGet(f.filaId).catch(()=>null);
+      if(!it){ novas.push(f); continue; } // já enviada por outro caminho
+      const url = await nlEnviarFotoIntent(it).catch(()=>null);
+      if(!url){ flushOk = false; break; }
+      novas.push(url);
+    }
+    if(!flushOk){
+      try{ await nlCapturarConclusao(F, nome, sigBlob, null); }
+      catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
+      return;
+    }
+    F.fotos = novas;
   }
   TEC_FINALIZANDO = true;
   const btnFin = document.getElementById('tecBtnFinalizar');
   if(btnFin){ btnFin.disabled = true; btnFin.textContent = 'Concluindo…'; }
+  let sigUrl = null;
+  let atividadeConcluida = false;
   try{
     // 1) assinatura PRIMEIRO (pré-piloto): o upload tem que ter sucesso ANTES de concluir
     //    qualquer coisa — se a rede de campo falhar, a atividade continua na lista do
     //    técnico e ele consegue tentar de novo (antes, concluía e a atividade sumia).
-    let sigUrl = null;
-    const padDesenhado = cv && !tecPadVazio(cv);
-    if(padDesenhado){
-      const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+    if(sigBlob){
       const sname = `os/assinatura-${F.osId}-${Date.now()}.png`;
       const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(sname)}`, {
-        method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
+        method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: sigBlob
       });
       if(!r.ok) throw new Error('Falha ao salvar a assinatura. Tente novamente.');
       sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(sname)}`;
@@ -8536,6 +8672,7 @@ async function tecFluxoFinalizar(){
     }
     // 2) salva observação + conclui atividade (só depois da assinatura salva)
     await tecMudarStatusSilent(F.atvId, 'concluida', F.obs);
+    atividadeConcluida = true;
     // 3) FECHA A OS quando todas as atividades estiverem concluídas + libera o técnico no mapa
     //    (correção 20/10/2026: o fluxo só concluía a atividade e a OS ficava "em atendimento" pra sempre)
     try{
@@ -8567,7 +8704,16 @@ async function tecFluxoFinalizar(){
         </div>
         <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
       </div>`);
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){
+    // 📴 rede caiu ANTES de concluir a atividade: a conclusão NÃO se perde —
+    //    vai pra fila offline (com a sigUrl, se a assinatura já tiver subido,
+    //    pra não duplicar o arquivo no storage).
+    if(!atividadeConcluida && nlEhErroRede(e)){
+      try{ await nlCapturarConclusao(F, nome, sigUrl ? null : sigBlob, sigUrl); return; }
+      catch(_){}
+    }
+    toast('Erro: '+e.message,'erro');
+  }
   finally{
     TEC_FINALIZANDO = false;
     const b = document.getElementById('tecBtnFinalizar');
@@ -8618,7 +8764,22 @@ async function tecMudarStatus(id, novo, obs){
     await tecSincronizarOS(a.os_id);
     toast('Status atualizado. ✓','ok');
     await carregarPainelTecnico();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){
+    if(nlEhErroRede(e)){
+      // 📴 MODO OFFLINE: a mudança NÃO se perde — vai pra fila do aparelho,
+      // aparece na tela pelo overlay otimista e é enviada ao voltar o sinal.
+      try{
+        await nlFilaAdd({ tipo:'status', atvId:id, novo, obs:(obs===undefined?null:obs), ts:Date.now() }, null);
+        nlOverlaySet(id, novo);
+        await nlAtualizarPendCache();
+      }catch(_){}
+      try{ closeOsModal(); }catch(_){}
+      toast('📴 Sem internet: alteração guardada no aparelho — será enviada ao voltar o sinal.','alerta');
+      carregarPainelTecnico();
+      return;
+    }
+    toast('Erro: '+e.message,'erro');
+  }
 }
 /* ---------- fotos do atendimento (técnico em campo) ---------- */
 let TEC_FOTO_OS = null;
@@ -8930,6 +9091,342 @@ function imprimirOS(){
   f.contentWindow.focus();
   setTimeout(()=>f.contentWindow.print(), 500);
 }
+/* ================= 📴 MODO OFFLINE — PAINEL DO TÉCNICO (20/10/2026) =================
+   O técnico em campo (hospital, subsolo, interior) NÃO pode perder atendimento
+   por falta de sinal — era assim no Field Control (app guardava tudo no aparelho
+   e sincronizava depois). Aqui a MESMA garantia, no sistema web:
+
+   - IndexedDB 'nl-offline': store 'fila' (intents FIFO com o trabalho capturado
+     offline: foto/conclusão/mudança de status, com os blobs) e store 'snapshot'
+     (última lista de Minhas OSs carregada online, p/ abrir o painel sem rede).
+   - Overlay otimista em localStorage 'nl_tec_overlay': o status que o técnico
+     acabou de aplicar aparece na tela na hora, com o selo "⏳ aguardando envio".
+   - Motor nlSync(): processa a fila EM ORDEM quando o sinal volta (evento
+     'online', pós-login, intervalo de 60s e toque no selo de pendências).
+     Conclusão só executa depois das fotos da mesma OS. Falhou → para a fila
+     ali, preservando a ordem, e tenta no próximo gatilho.
+   - Os nomes de arquivo no storage são gerados NA CAPTURA: retry não duplica
+     arquivo nem vínculo (os_anexos é conferido pela URL antes de inserir).
+   Escopo: SOMENTE o Painel do Técnico. Nenhum outro módulo usa esta fila. */
+const NL_DB_NOME = 'nl-offline';
+const NL_OVERLAY_KEY = 'nl_tec_overlay';
+let __nlDbPromise = null;
+let TEC_OVERLAY = {};   // cache em memória do overlay (render é síncrono)
+let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set() };
+let NL_SYNC_ANDANDO = false;
+
+/* Falha de REDE (não erro HTTP do servidor): fetch rejeita com TypeError,
+   ou o navegador já sabe que está offline. Erros HTTP (400/500) NÃO entram
+   na fila — são problema de dado/servidor, não de sinal. */
+function nlEhErroRede(e){
+  if(navigator.onLine===false) return true;
+  if(!e) return false;
+  if(e instanceof TypeError) return true;
+  return /failed to fetch|networkerror|network error|load failed|err_network/i.test(String(e.message||e));
+}
+
+/* ---------- IndexedDB ---------- */
+function nlDb(){
+  if(__nlDbPromise) return __nlDbPromise;
+  __nlDbPromise = new Promise((resolve, reject)=>{
+    if(!('indexedDB' in window)){ reject(new Error('IndexedDB indisponível neste navegador')); return; }
+    let rq;
+    try{ rq = indexedDB.open(NL_DB_NOME, 1); }
+    catch(e){ reject(e); return; }
+    rq.onupgradeneeded = ()=>{
+      const db = rq.result;
+      if(!db.objectStoreNames.contains('fila')) db.createObjectStore('fila', { keyPath:'id' });
+      if(!db.objectStoreNames.contains('snapshot')) db.createObjectStore('snapshot', { keyPath:'key' });
+    };
+    rq.onsuccess = ()=>resolve(rq.result);
+    rq.onerror = ()=>reject(rq.error || new Error('Falha ao abrir o banco local'));
+  });
+  return __nlDbPromise;
+}
+async function nlStore(nome, modo){
+  const db = await nlDb();
+  return db.transaction(nome, modo).objectStore(nome);
+}
+function nlReq(rq){
+  return new Promise((res, rej)=>{ rq.onsuccess = ()=>res(rq.result); rq.onerror = ()=>rej(rq.error || new Error('Erro no banco local')); });
+}
+async function nlFilaAdd(intent, blob){
+  const st = await nlStore('fila', 'readwrite');
+  const rec = { ...intent, blob: blob || null };
+  rec.id = 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  await nlReq(st.put(rec));
+  nlAtualizarPendCache().catch(()=>{});
+  return rec.id;
+}
+async function nlFilaAll(){
+  const st = await nlStore('fila', 'readonly');
+  const rows = await nlReq(st.getAll());
+  return (rows||[]).sort((a,b)=> (a.ts||0) - (b.ts||0) || String(a.id).localeCompare(String(b.id)));
+}
+async function nlFilaGet(id){
+  if(!id) return null;
+  const st = await nlStore('fila', 'readonly');
+  return (await nlReq(st.get(id))) || null;
+}
+async function nlFilaRemove(id){
+  if(!id) return;
+  const st = await nlStore('fila', 'readwrite');
+  await nlReq(st.delete(id));
+  nlAtualizarPendCache().catch(()=>{});
+}
+async function nlFilaCount(){
+  return (await nlFilaAll()).length;
+}
+async function nlSnapshotSalvar(snap){
+  const st = await nlStore('snapshot', 'readwrite');
+  await nlReq(st.put({ key:'minhasos', ts:snap.ts, tnome:snap.tnome, atvs:snap.atvs, fotoCount:snap.fotoCount }));
+}
+async function nlSnapshotLer(){
+  const st = await nlStore('snapshot', 'readonly');
+  return (await nlReq(st.get('minhasos'))) || null;
+}
+
+/* ---------- Overlay otimista (localStorage) ---------- */
+function nlOverlayLer(){
+  try{ return JSON.parse(localStorage.getItem(NL_OVERLAY_KEY) || '{}') || {}; }
+  catch(e){ return {}; }
+}
+function nlOverlaySalvar(o){
+  TEC_OVERLAY = o || {};
+  try{ localStorage.setItem(NL_OVERLAY_KEY, JSON.stringify(TEC_OVERLAY)); }catch(e){}
+}
+function nlOverlaySet(atvId, status){
+  const o = nlOverlayLer();
+  o[atvId] = { status, ts: Date.now() };
+  nlOverlaySalvar(o);
+}
+function nlOverlayLimpar(atvId){
+  const o = nlOverlayLer();
+  if(o[atvId]){ delete o[atvId]; nlOverlaySalvar(o); }
+}
+
+/* Recarrega TEC_PEND/TEC_OVERLAY a partir da fila (fonte da verdade) e
+   descarta overlay órfão (atividade sem nenhuma intent pendente). */
+async function nlAtualizarPendCache(){
+  const itens = await nlFilaAll();
+  TEC_PEND = {
+    total: itens.length,
+    conclusaoAtvs: new Set(itens.filter(i=>i.tipo==='conclusao').map(i=>i.atvId)),
+    statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId))
+  };
+  const comIntent = new Set(itens.map(i=>i.atvId).filter(Boolean));
+  const ov = nlOverlayLer();
+  let mudou = false;
+  Object.keys(ov).forEach(k=>{ if(!comIntent.has(k)){ delete ov[k]; mudou = true; } });
+  if(mudou) nlOverlaySalvar(ov); else TEC_OVERLAY = ov;
+  nlPintarSelo();
+  return itens;
+}
+
+/* ---------- Selo de pendências no painel ---------- */
+function nlPintarSelo(){
+  const bar = document.getElementById('tecPendBar');
+  if(!bar) return;
+  if(TEC_PEND.total > 0){
+    bar.textContent = `⏳ ${TEC_PEND.total} aguardando envio — toque para enviar agora`;
+    bar.classList.remove('hidden');
+  }else{
+    bar.classList.add('hidden');
+  }
+}
+/* Gatilho pós-login (boot com sessão restaurada ou login novo). */
+function nlAposLogin(){
+  nlAtualizarPendCache().catch(()=>{});
+  try{ nlSync(); }catch(e){}
+}
+
+/* ---------- Replay: foto ---------- */
+async function nlEnviarFotoIntent(it){
+  const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(it.path)}`;
+  if(!it.jaNoStorage){
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(it.path)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': (it.blob && it.blob.type) || 'image/jpeg' }, body: it.blob
+    });
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      // retry com o MESMO path: "already exists" = o arquivo já subiu — segue
+      if(!/already exists|duplicate/i.test(t)) throw new Error('Upload falhou (' + r.status + ')');
+    }
+  }
+  // retry não duplica o vínculo: confere pela URL antes de inserir
+  const ja = await apiGETsafe(`os_anexos?os_id=eq.${it.osId}&url=eq.${encodeURIComponent(url)}&select=id&limit=1`);
+  if(!ja.length) await apiPOST('os_anexos', { os_id: it.osId, url, nome: it.nomeOriginal || 'foto.jpg' });
+  await nlFilaRemove(it.id);
+  return url;
+}
+
+/* ---------- Replay: mudança de status (mesma conta do tecMudarStatus online,
+   sem GPS gate/confirmação/toast — o gate já foi aplicado na captura) ---------- */
+async function nlExecutarStatus(it){
+  const [a] = await apiGET(`os_atividades?id=eq.${it.atvId}&select=id,os_id,inicio,fim,status`);
+  if(!a) throw new Error('Atividade não encontrada.');
+  const hhmm = new Date().toTimeString().slice(0,5);
+  const body = { status: it.novo };
+  if(it.obs !== null && it.obs !== undefined) body.descricao_conclusao = String(it.obs).trim() || null;
+  if((it.novo==='a_caminho' || it.novo==='em_atendimento') && !a.inicio) body.inicio = hhmm;
+  if(it.novo==='concluida' && !a.fim) body.fim = hhmm;
+  await apiPATCH('os_atividades', `id=eq.${it.atvId}`, body);
+  // atualiza a OS vinculada no mapa da equipe (mesmo padrão do fluxo online)
+  if(TEC_GPS.nome && (it.novo==='a_caminho' || it.novo==='em_atendimento')){
+    try{
+      const [os] = await apiGET(`os_clientes?id=eq.${a.os_id}&select=numero`);
+      await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
+        { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:a.os_id, os_numero: os ? os.numero : null }) }).catch(()=>{});
+    }catch(e){}
+  }
+  if(TEC_GPS.nome && (it.novo==='concluida' || it.novo==='cancelada')){
+    fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
+      { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+  }
+  await tecSincronizarOS(a.os_id);
+}
+
+/* ---------- Replay: conclusão — EXATAMENTE a sequência remota do
+   tecFluxoFinalizar online (assinatura → status → fecha OS → mapa → log → e-mail) ---------- */
+async function nlExecutarConclusao(it){
+  const osId = it.osId;
+  // 1) assinatura PRIMEIRO
+  if(it.blob){ /* blob da assinatura (guardado na captura) */
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(it.sigPath)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: it.blob
+    });
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      if(!/already exists|duplicate/i.test(t)) throw new Error('Falha ao salvar a assinatura. Tente novamente.');
+    }
+    const sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(it.sigPath)}`;
+    await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url: sigUrl, assinatura_em: it.sigEm || new Date().toISOString() });
+    const ja = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&url=eq.${encodeURIComponent(sigUrl)}&select=id&limit=1`);
+    if(!ja.length){ try{ await apiPOSTsafe('os_assinaturas', { os_id: osId, url: sigUrl, nome_assinante: it.nomeAssinante || null }); }catch(_){} }
+  }else if(it.sigUrl){
+    // assinatura já tinha subido na tentativa online: só garante vínculo/registro 1×
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=assinatura_url`);
+    if(!os || os.assinatura_url !== it.sigUrl){
+      await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url: it.sigUrl, assinatura_em: it.sigEm || new Date().toISOString() });
+    }
+    const ja = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&url=eq.${encodeURIComponent(it.sigUrl)}&select=id&limit=1`);
+    if(!ja.length){ try{ await apiPOSTsafe('os_assinaturas', { os_id: osId, url: it.sigUrl, nome_assinante: it.nomeAssinante || null }); }catch(_){} }
+  }
+  // 2) conclui a atividade (mesma função do fluxo online)
+  await tecMudarStatusSilent(it.atvId, 'concluida', it.obs);
+  // 3) fecha a OS se todas concluídas + libera o técnico no mapa
+  try{
+    const atvsRest = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
+    if(atvsRest.length && atvsRest.every(x=>['concluida','cancelada'].includes(x.status))){
+      await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'concluida', updated_at:new Date().toISOString() });
+    }
+    if(TEC_GPS.nome){
+      await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
+        { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+    }
+  }catch(_){}
+  try{ await osLog(osId, 'concluiu o atendimento pelo celular'); }catch(_){}
+  // 📧 envio automático da OS ao cliente
+  osEnviarEmailAuto(osId);
+}
+
+/* ---------- Captura offline da conclusão (chamada pelo tecFluxoFinalizar) ---------- */
+async function nlCapturarConclusao(F, nome, sigBlob, sigUrl){
+  const intent = {
+    tipo:'conclusao', osId: F.osId, atvId: F.atvId, obs: F.obs,
+    nomeAssinante: (nome || '').trim() || null,
+    sigPath: sigBlob ? `os/assinatura-${F.osId}-${Date.now()}.png` : null,
+    sigUrl: sigUrl || null,
+    sigEm: sigUrl ? new Date().toISOString() : null,
+    ts: Date.now()
+  };
+  await nlFilaAdd(intent, sigBlob || null);
+  nlOverlaySet(F.atvId, 'concluida');
+  await nlAtualizarPendCache().catch(()=>{});
+  const nfotos = F.fotos.length;
+  TEC_FLUXO = null;
+  openOsModal(`
+    <div class="text-center py-4">
+      <div class="text-6xl mb-3">📴</div>
+      <div class="font-extrabold text-lg mb-1">Atendimento guardado no aparelho</div>
+      <div class="text-sm text-gray-600 mb-4">Sem internet agora — a conclusão será <b>enviada automaticamente</b> quando o sinal voltar. Pode seguir para a próxima OS.</div>
+      <div class="text-left grid gap-2 mb-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-sm">📝 Descrição registrada</div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-sm">📷 ${nfotos} foto(s) anexada(s)</div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-sm">✍️ Assinatura do cliente registrada</div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-sm">⏳ Status: aguardando envio</div>
+      </div>
+      <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
+    </div>`);
+  try{ nlSync(); }catch(e){}
+}
+
+/* ---------- Motor de sincronização ---------- */
+async function nlSync(manual){
+  if(NL_SYNC_ANDANDO) return;
+  if(navigator.onLine===false){
+    if(manual) toast('📴 Ainda sem internet — nada foi enviado.', 'erro');
+    return;
+  }
+  NL_SYNC_ANDANDO = true;
+  let enviouConclusao = false;
+  try{
+    for(;;){
+      const itens = await nlFilaAll();
+      TEC_PEND = {
+        total: itens.length,
+        conclusaoAtvs: new Set(itens.filter(i=>i.tipo==='conclusao').map(i=>i.atvId)),
+        statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId))
+      };
+      nlPintarSelo();
+      if(!itens.length) break;
+      const it = itens[0];
+      if(it.tipo==='conclusao'){
+        // conclusão SÓ depois de TODAS as fotos da mesma OS terem subido
+        if(itens.some(x=>x.tipo==='foto' && x.osId===it.osId)) break;
+        await nlExecutarConclusao(it);
+        await nlFilaRemove(it.id);
+        nlOverlayLimpar(it.atvId);
+        enviouConclusao = true;
+        toast('Atendimento enviado ✓', 'ok');
+      }else if(it.tipo==='foto'){
+        await nlEnviarFotoIntent(it); // remove da fila ao concluir
+      }else if(it.tipo==='status'){
+        await nlExecutarStatus(it);
+        await nlFilaRemove(it.id);
+        const resto = await nlFilaAll();
+        if(!resto.some(x=>x.atvId===it.atvId)) nlOverlayLimpar(it.atvId);
+      }else{
+        await nlFilaRemove(it.id); // tipo desconhecido: descarta p/ não travar a fila
+      }
+    }
+  }catch(e){
+    /* falha no item atual: PARA a fila aqui (a ordem é preservada) e o item
+       fica guardado para a próxima tentativa — nada se perde. */
+  }finally{
+    NL_SYNC_ANDANDO = false;
+    await nlAtualizarPendCache().catch(()=>{});
+    if(enviouConclusao){ try{ carregarPainelTecnico(); }catch(e){} }
+  }
+}
+
+/* ---------- Gatilhos do motor + PWA ---------- */
+window.addEventListener('online', ()=>{ try{ nlSync(); }catch(e){} });
+setInterval(()=>{
+  try{
+    if(NL_SYNC_ANDANDO || navigator.onLine===false) return;
+    nlFilaCount().then(n=>{ if(n>0) nlSync(); }).catch(()=>{});
+  }catch(e){}
+}, 60000);
+TEC_OVERLAY = nlOverlayLer();
+/* Service Worker (PWA): registra no boot; se falhar, o app segue 100% online
+   como sempre foi. O SW só cuida do shell — NUNCA intercepta Supabase/POST. */
+try{
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}catch(e){}
+
 /* ================= INIT ================= */
 (function init(){
   try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ try{ aplicarTema('claro'); }catch(e2){ /* tema nunca pode travar o boot */ } }
