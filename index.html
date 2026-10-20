@@ -7388,8 +7388,8 @@ function osAbaAnexos(d){
   const fotoCard = a=>`
     <div class="border rounded-xl overflow-hidden bg-white">
       <a href="${esc(urlDe(a))}" target="_blank" title="Abrir a foto em tamanho real" class="block">
-        <img src="${esc(urlDe(a))}" alt="${esc(a.nome||'foto do atendimento')}" class="w-full h-44 object-cover block bg-gray-100"
-             onerror="this.outerHTML='<div class=&quot;h-44 flex items-center justify-center text-4xl bg-gray-50&quot;>📎</div>'">
+        <img src="${esc(urlDe(a))}" alt="${esc(a.nome||'foto do atendimento')}" class="w-full h-52 sm:h-60 lg:h-72 object-cover block bg-gray-100"
+             onerror="this.outerHTML='<div class=&quot;h-52 sm:h-60 lg:h-72 flex items-center justify-center text-4xl bg-gray-50&quot;>📎</div>'">
       </a>
       <div class="flex items-center gap-2 px-2 py-1.5">
         <span class="text-xs text-gray-600 truncate flex-1">${esc(a.nome||'foto')}</span>
@@ -7402,7 +7402,7 @@ function osAbaAnexos(d){
       ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
     </div>`;
   const partes = [];
-  if(fotos.length)  partes.push(`<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-3">${fotos.map(fotoCard).join('')}</div>`);
+  if(fotos.length)  partes.push(`<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">${fotos.map(fotoCard).join('')}</div>`);
   if(outros.length) partes.push(`<div class="grid gap-2 mb-3">${outros.map(outroRow).join('')}</div>`);
   if(!partes.length) partes.push('<div class="mb-3"><span class="text-gray-400 text-xs">Sem anexos.</span></div>');
   return partes.join('') + (editavel?`<label class="btn-ghost !w-auto !py-2 !px-4 text-sm inline-block cursor-pointer">＋ Anexar arquivo<input type="file" class="hidden" onchange="osUploadAnexo(this)"></label>`:'');
