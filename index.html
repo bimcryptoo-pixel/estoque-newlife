@@ -6713,6 +6713,13 @@ async function salvarOS(){
   // selecionado — a validação roda antes de QUALQUER escrita (equipamento/OS).
   const tecObrigEl = document.getElementById('nosTecnico');
   if(!tecObrigEl || !tecObrigEl.value){ toast('Selecione o técnico responsável para gravar a OS.','erro'); return; }
+  // 🏷️ regra do Fabio (21/10/2026): Nova OS só grava COM ao menos uma etiqueta —
+  // a OS-2026-0002 (HUC Torre C) foi aberta sem etiqueta por esquecimento da Suzana.
+  // Mesma trava do técnico: valida antes de QUALQUER escrita.
+  if(typeof OS_FIELD_PARIDADE!=='undefined' && OS_FIELD_PARIDADE){
+    const etiqObrig = String((document.getElementById('nosEtiq')||{}).value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    if(!etiqObrig.length){ toast('Selecione ao menos uma etiqueta para gravar a OS.','erro'); return; }
+  }
   SALVAR_OS_TRAVA = true;
   const btnSalvarOS = document.getElementById('btnSalvarOS');
   if(btnSalvarOS){ btnSalvarOS.disabled = true; btnSalvarOS.textContent = 'Salvando…'; }
