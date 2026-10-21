@@ -1128,10 +1128,10 @@
             <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="osBuscaDebounce()">
             <select id="osFiltroStatus" class="inp text-sm" onchange="osRecarregar()">
               <option value="">Todos os status</option>
-              <option value="aberta">🟡 Aberta</option>
-              <option value="em_atendimento">🔵 Em atendimento</option>
-              <option value="concluida">🟢 Concluída</option>
-              <option value="cancelada">⚫ Cancelada</option>
+              <option value="aberta">📂 Aberta</option>
+              <option value="em_atendimento">🔧 Em atendimento</option>
+              <option value="concluida">✅ Concluída</option>
+              <option value="cancelada">❌ Cancelada</option>
             </select>
             <select id="osFiltroCliente" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os clientes</option></select>
             <select id="osFiltroTipo" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os tipos</option></select>
@@ -5974,10 +5974,10 @@ async function imprimirDanfe(notaId){
 
 /* ================= OS CLIENTES (chamados técnicos) ================= */
 const OS_STATUS = {
-  aberta:        { label:'🟡 Aberta',         badge:'background:#fef9c3;color:#854d0e' },
-  em_atendimento:{ label:'🔵 Em atendimento', badge:'background:#dbeafe;color:#1e40af' },
-  concluida:     { label:'🟢 Concluída',       badge:'background:#dcfce7;color:#166534' },
-  cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
+  aberta:        { label:'📂 Aberta',         badge:'background:#fef9c3;color:#854d0e' },
+  em_atendimento:{ label:'🔧 Em atendimento', badge:'background:#dbeafe;color:#1e40af' },
+  concluida:     { label:'✅ Concluída',       badge:'background:#dcfce7;color:#166534' },
+  cancelada:     { label:'❌ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
 };
 let OS_CACHE = [];
 /* Paginação server-side da lista de OSs (escala com o crescimento da base) */
@@ -8062,10 +8062,10 @@ const ATV_TEC_STATUS = {
   pendente:      { label:'⏳ Pendente',        badge:'background:#fef9c3;color:#854d0e' },
   agendada:      { label:'📅 Agendada',       badge:'background:#e0e7ff;color:#3730a3' },
   a_caminho:     { label:'🚗 A caminho',      badge:'background:#dbeafe;color:#1e40af' },
-  em_atendimento:{ label:'🔵 Em atendimento', badge:'background:#bfdbfe;color:#1e40af' },
+  em_atendimento:{ label:'🔧 Em atendimento', badge:'background:#bfdbfe;color:#1e40af' },
   pausada:       { label:'⏸️ Pausada',         badge:'background:#ffedd5;color:#9a3412' },
   concluida:     { label:'✅ Concluída',      badge:'background:#dcfce7;color:#166534' },
-  cancelada:     { label:'⚫ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
+  cancelada:     { label:'❌ Cancelada',      badge:'background:#e5e7eb;color:#4b5563' },
 };
 function atvTecBadge(st){
   const s = ATV_TEC_STATUS[st]||ATV_TEC_STATUS.pendente;
