@@ -1136,8 +1136,8 @@
             <select id="osFiltroCliente" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os clientes</option></select>
             <select id="osFiltroTipo" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os tipos</option></select>
             <div class="flex gap-2">
-              <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">⚙️ Tipos</button>
-              <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">⚙️ Equip.</button>
+              <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">🏷️ Tipos</button>
+              <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">🔧 Equip.</button>
             </div>
           </div>
           <div id="osLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
@@ -6809,7 +6809,7 @@ function closeOsModal(){ const m = document.getElementById('modalOS'); if(m) m.s
 /* ================= OS — ABAS (paridade Field Control) ================= */
 const ETIQUETAS_SUGERIDAS = ['TROCA DE CARTUCHO','CHAMADO TÉCNICO','TREINAMENTO OPER.','INSTALAÇÃO','CHAMADO CIENTÍFICO','ERRO OPERACIONAL','MUDANÇA BANCADA','VIA TELEFONE','VISITA SEMANAL','TROCA DE BATERIA','M. PREVENTIVA ANUAL','M. PREV SEMESTRAL','TROCA DE LED ACLTOP','OSMOSE','DESINSTALAÇÃO','LEVANTAMENTO EQUIP'];
 const OS_ABAS = [
-  ['geral','📋 Geral'],['atividades','🛠️ Atividades'],['equipamentos','⚙️ Equipamentos'],
+  ['geral','📋 Geral'],['atividades','🛠️ Atividades'],['equipamentos','🔧 Equipamentos'],
   ['produtos','📦 Produtos'],['servicos','🧰 Serviços'],['despesas','💸 Despesas'],
   ['orcamentos','💰 Orçamentos'],['formularios','📝 Formulários'],['anexos','📎 Anexos'],
   ['assinaturas','✍️ Assinaturas'],['comentarios','💬 Comentários'],
@@ -7534,7 +7534,7 @@ function osTelaTipos(){
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
-      <div class="font-bold">⚙️ Tipos de OS</div><div></div>
+      <div class="font-bold">🏷️ Tipos de OS</div><div></div>
     </div>
     <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4 mb-3">
       <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Novo tipo</div>
@@ -9159,7 +9159,7 @@ function tecRenderConcluidas(){
       <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
-      ${eq.nome?`<div class="text-xs text-gray-500">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
       <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
@@ -9221,7 +9221,7 @@ async function tecVerOSConc(atvId){
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
       ${cli.telefone?`<div class="text-xs text-gray-500">📞 ${esc(cli.telefone)}</div>`:''}
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
-      ${eq.nome?`<div class="text-xs text-gray-500 mt-1">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}${eq.tipo?' · '+esc(eq.tipo):''}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500 mt-1">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}${eq.tipo?' · '+esc(eq.tipo):''}</div>`:''}
       ${o.descricao_servico?`<div class="mt-2"><div class="text-[11px] font-bold text-gray-400 uppercase">Descrição do serviço</div><div class="text-sm" style="white-space:pre-wrap">${esc(o.descricao_servico)}</div></div>`:''}
       <div class="mt-3 border-t pt-2">
         <div class="text-[11px] font-bold text-gray-400 uppercase mb-1">Atendimento</div>
@@ -9370,7 +9370,7 @@ function renderPainelTecnico(atvs, fotoCount){
       <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
-      ${eq.nome?`<div class="text-xs text-gray-500">⚙️ ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
+      ${eq.nome?`<div class="text-xs text-gray-500">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
       <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
@@ -9798,7 +9798,7 @@ async function osTelaEquipamentos(){
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
-      <div class="font-bold text-lg">⚙️ Equipamentos</div><div></div>
+      <div class="font-bold text-lg">🔧 Equipamentos</div><div></div>
     </div>
     <div class="grid gap-2 md:grid-cols-3 mb-3">
       <select id="eqCliente" class="inp text-sm"><option value="">— cliente —</option>${cliOpts}</select>
