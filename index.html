@@ -7536,14 +7536,14 @@ function osTelaTipos(){
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
       <div class="font-bold">⚙️ Tipos de OS</div><div></div>
     </div>
-    <div id="osTiposLista" class="grid gap-2 mb-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
-    <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4">
+    <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4 mb-3">
       <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Novo tipo</div>
       <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osTipoDesc" class="inp text-sm" placeholder="Ex: Instalação de Equipamento"></div>
       <div><label class="lbl">Duração (min)</label><input id="osTipoDur" type="number" min="0" class="inp text-sm" placeholder="120"></div>
       <div><label class="lbl">Prazo solução (h)</label><input id="osTipoPrz" type="number" min="0" class="inp text-sm" placeholder="48"></div>
       <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddTipo()">Adicionar tipo</button></div>
-    </div>`;
+    </div>
+    <div id="osTiposLista" class="grid gap-2 mb-3"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
   osListarTipos();
 }
 async function osListarTipos(){
