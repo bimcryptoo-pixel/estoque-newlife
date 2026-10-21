@@ -9,7 +9,7 @@
      (preserva a trava anti-cache); offline, cai para a cópia do cache e o app abre.
    - Demais arquivos do shell: stale-while-revalidate (abre instantâneo do cache
      e atualiza em segundo plano). */
-const NL_CACHE = 'nl-shell-v2';
+const NL_CACHE = 'nl-shell-v3';
 const NL_SHELL = [
   './',
   './index.html',
