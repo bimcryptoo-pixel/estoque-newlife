@@ -6764,11 +6764,18 @@ async function salvarOS(){
         designado = tecnicoSel;
       }catch(e){ designFalhou = e.message; }
     }
+    // 📧 e-mail de abertura ao cliente (21/10/2026): DEPOIS da designação, pra
+    // o e-mail já sair com o técnico responsável; nunca bloqueia a criação.
+    const emailAbertura = await osEnviarEmailAbertura(os.id);
     closeOsModal();
     OS_CACHE = null;
-    if(designado) toast(`OS ${numero} criada e designada para ${designado}. ✓`,'ok');
-    else if(designFalhou) toast(`OS ${numero} criada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
-    else toast(`OS ${numero} criada. ✓`,'ok');
+    let msgOS = '', tipoOS = 'ok';
+    if(designado){ msgOS = `OS ${numero} criada e designada para ${designado}. ✓`; }
+    else if(designFalhou){ msgOS = `OS ${numero} criada, mas a designação do técnico falhou: ${designFalhou}`; tipoOS = 'erro'; }
+    else { msgOS = `OS ${numero} criada. ✓`; }
+    if(emailAbertura==='sem_email'){ msgOS += ' ⚠️ Cliente sem e-mail cadastrado — o e-mail de abertura não foi enviado.'; if(tipoOS==='ok') tipoOS = 'alerta'; }
+    else if(emailAbertura==='falhou'){ msgOS += ' ⚠️ O e-mail de abertura falhou — veja o histórico da OS.'; if(tipoOS==='ok') tipoOS = 'alerta'; }
+    toast(msgOS, tipoOS);
     await verOS(os.id);
   }catch(e){
     toast('Erro ao criar OS: '+e.message,'erro');
@@ -6925,7 +6932,7 @@ function renderOSDetalhe(){
       <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
       ${osStatusBadge(o.status)}
       ${osPrazoBadge(o)}
-      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
+      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_abertura_enviado_em?` · 📧 abertura enviada em ${new Date(o.email_abertura_enviado_em).toLocaleString('pt-BR')}`:''}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
     </div>
     ${o.etiquetas&&o.etiquetas.length?`<div class="flex gap-1.5 flex-wrap mb-3">${osEtiquetasChips(o.etiquetas)}</div>`:''}
     <div class="flex gap-1 overflow-x-auto border-b mb-4 pb-1">${tabs}</div>
@@ -9894,6 +9901,33 @@ async function osEnviarEmailAuto(osId){
   }catch(e){
     /* não bloqueia a conclusão se o e-mail falhar — mas registra no histórico */
     try{ await osLog(osId, '⚠️ e-mail automático falhou — reenvie manualmente pela ficha da OS'); }catch(_){}
+  }
+}
+/* ---------- envio automático do e-mail de ABERTURA ao criar a OS (21/10/2026, pedido do Fabio) ----------
+   Registra pro cliente o dia/hora da abertura (base pros indicadores) e grava
+   email_abertura_enviado_em via a MESMA Edge Function, com tipo='abertura'.
+   Retorna: 'enviado' | 'sem_email' | 'ja_enviado' | 'falhou'. NUNCA lança —
+   a criação da OS não pode quebrar por causa do e-mail. */
+async function osEnviarEmailAbertura(osId){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,email_abertura_enviado_em,clientes(email)`);
+    if(os && os.email_abertura_enviado_em) return 'ja_enviado'; // dedupe: abertura é uma vez só
+    const email = ((os && os.clientes && os.clientes.email) || '').trim();
+    if(!email) return 'sem_email';
+    const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
+      method:'POST',
+      headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ os_id: osId, tipo: 'abertura' })
+    });
+    if(r.ok){
+      await osLog(osId, `enviou o e-mail de abertura da OS para ${email}`);
+      return 'enviado';
+    }
+    try{ await osLog(osId, `⚠️ e-mail de abertura falhou (HTTP ${r.status})`); }catch(_){}
+    return 'falhou';
+  }catch(e){
+    try{ await osLog(osId, '⚠️ e-mail de abertura falhou'); }catch(_){}
+    return 'falhou';
   }
 }
 async function osEnviarEmail(){
