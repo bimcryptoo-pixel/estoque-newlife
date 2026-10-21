@@ -1666,7 +1666,7 @@ async function entrarComPasskey(){
   box.classList.add('hidden');
   const login = document.getElementById('loginUser').value.trim();
   const op = await authChamar('passkey-login-opcoes', login ? { login } : {}, null);
-  if(op.tipo === 'indisponivel'){ toast('A entrada com digital/rosto ainda não foi ativada neste servidor. Entre com sua senha.', 'alerta'); return; }
+  if(op.tipo === 'indisponivel'){ toast('Não foi possível entrar com digital/rosto agora — o servidor não respondeu como esperado. Entre com sua senha.', 'alerta'); return; }
   if(op.tipo === 'erro'){ box.textContent = op.mensagem; box.classList.remove('hidden'); return; }
   let assercao = null;
   try{
@@ -1758,7 +1758,7 @@ async function segReauth(){
     return;
   }
   if(r.tipo === 'erro'){ toast(r.mensagem, 'erro'); return; }
-  toast('O servidor de segurança ainda não foi ativado neste ambiente. Tente mais tarde.', 'alerta');
+  toast('Não foi possível carregar suas digitais agora — o servidor não respondeu como esperado. Tente mais tarde.', 'alerta');
 }
 async function segCarregarPasskeys(){
   const box = document.getElementById('segListaPasskeys');
@@ -1780,7 +1780,7 @@ async function segCadastrarPasskey(){
   if(!window.PublicKeyCredential){ toast('Este aparelho/navegador não suporta rosto/digital (WebAuthn).', 'erro'); return; }
   const nome = (document.getElementById('segNomeDisp')?.value || '').trim();
   const op = await authChamar('passkey-registro-opcoes', {});
-  if(op.tipo === 'indisponivel'){ toast('O cadastro de digital/rosto ainda não foi ativado neste servidor.', 'alerta'); return; }
+  if(op.tipo === 'indisponivel'){ toast('Não foi possível iniciar o cadastro agora — o servidor não respondeu como esperado. Tente de novo; se persistir, avise o administrador.', 'alerta'); return; }
   if(op.tipo === 'erro'){ toast(op.mensagem, 'erro'); return; }
   let cred = null;
   try{
@@ -1811,7 +1811,7 @@ async function segTrocarSenha(){
   const r = await authChamar('trocar-senha', { senha_atual: atual, senha_nova: nova });
   if(r.tipo === 'ok'){ toast('Senha trocada. ✓ Suas outras sessões foram encerradas.', 'ok'); segFecharModal(); return; }
   if(r.tipo === 'erro'){ toast(r.mensagem, 'erro'); return; }
-  toast('A troca de senha pelo servidor ainda não foi ativada neste ambiente.', 'alerta');
+  toast('Não foi possível trocar a senha agora — o servidor não respondeu como esperado. Tente de novo; se persistir, avise o administrador.', 'alerta');
 }
 
 function entrarApp(){
