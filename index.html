@@ -6932,7 +6932,7 @@ function renderOSDetalhe(){
       <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
       ${osStatusBadge(o.status)}
       ${osPrazoBadge(o)}
-      <div class="text-xs text-gray-500">aberta em ${fmtData((o.created_at||'').slice(0,10))}${o.email_abertura_enviado_em?` · 📧 abertura enviada em ${new Date(o.email_abertura_enviado_em).toLocaleString('pt-BR')}`:''}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
+      <div class="text-xs text-gray-500">aberta em ${o.created_at?`${new Date(o.created_at).toLocaleDateString('pt-BR',{timeZone:'America/Fortaleza'})} às ${new Date(o.created_at).toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})}`:fmtData((o.created_at||'').slice(0,10))}${o.email_abertura_enviado_em?` · 📧 abertura enviada em ${new Date(o.email_abertura_enviado_em).toLocaleString('pt-BR')}`:''}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
     </div>
     ${o.etiquetas&&o.etiquetas.length?`<div class="flex gap-1.5 flex-wrap mb-3">${osEtiquetasChips(o.etiquetas)}</div>`:''}
     <div class="flex gap-1 overflow-x-auto border-b mb-4 pb-1">${tabs}</div>
