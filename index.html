@@ -74,6 +74,11 @@
   .inp{ width:100%; border:1px solid var(--input-border); border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:var(--input-bg); color:var(--text); }
   .inp::placeholder{ color:var(--faint); }
   .inp:focus{ outline:2px solid var(--brand); border-color:var(--brand); }
+  /* 📱 iOS/Safari (21/10/2026): o input de data NATIVO não encolhe no flex/grade e
+     vazava do cartão no filtro De/Até de Minhas OS (print do Fabio). Sem a aparência
+     nativa ele vira uma caixa comum que respeita a largura; o seletor de data
+     continua abrindo no toque. Escopo: só os campos com a classe .inp-data. */
+  .inp-data{ -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; text-align:left; }
   label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
   .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; }
   .btn-brand:active{ background:var(--brand-dark); }
@@ -1225,14 +1230,14 @@
             <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
           </div>
           <div id="tecAbFiltro" class="rounded-2xl border bg-gray-50 p-3 mb-3">
-            <div class="flex gap-2">
-              <label class="flex-1 min-w-0">
+            <div class="grid grid-cols-2 gap-2">
+              <label class="block min-w-0">
                 <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DE</span>
-                <input type="date" id="tecAbDe" class="inp w-full text-sm !mb-0" onchange="tecAbFiltrar()">
+                <input type="date" id="tecAbDe" class="inp inp-data w-full min-w-0 text-sm !mb-0 !px-2" onchange="tecAbFiltrar()">
               </label>
-              <label class="flex-1 min-w-0">
+              <label class="block min-w-0">
                 <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">ATÉ</span>
-                <input type="date" id="tecAbAte" class="inp w-full text-sm !mb-0" onchange="tecAbFiltrar()">
+                <input type="date" id="tecAbAte" class="inp inp-data w-full min-w-0 text-sm !mb-0 !px-2" onchange="tecAbFiltrar()">
               </label>
             </div>
             <div class="flex items-center justify-between mt-2">
@@ -1245,7 +1250,7 @@
             <div class="rounded-2xl border bg-gray-50 p-3 mb-3">
               <label class="block">
                 <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DIA</span>
-                <input type="date" id="tecConcData" class="inp w-full text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
+                <input type="date" id="tecConcData" class="inp inp-data w-full min-w-0 text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
               </label>
               <div class="flex items-center justify-between mt-2">
                 <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecConcLimparFiltro()">Limpar</button>
@@ -9110,7 +9115,7 @@ async function carregarPainelTecnico(){
     // as atividades de "Fabio Filho". Se o eq vier vazio, busca ampla + filtro
     // por igualdade normalizada (trim + caixa) no cliente.
     const selAtv = '*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))';
-    const ordAtv = '&order=data.desc,created_at.desc&limit=200';
+    const ordAtv = '&order=data.desc,created_at.desc&limit=1000';
     let atvs = await apiGET(
       'os_atividades?tecnico=eq.'+encodeURIComponent(tnome)+'&status=not.in.(concluida,cancelada)' +
       '&select=' + selAtv + ordAtv
@@ -9122,18 +9127,11 @@ async function carregarPainelTecnico(){
       const alvo = String(tnome||'').trim().toLowerCase();
       atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo);
     }
-    // JANELA DE 60 DIAS (adendo piloto): a importação do Field deixou centenas de
-    // atividades 'pendente' legadas (2021–2026) com o nome completo do técnico.
-    // Sem janela, um técnico cadastrado com esse nome veria dezenas de fantasmas.
-    // Regra: só entra atividade com data OU created_at nos últimos 60 dias —
-    // designações novas têm data=hoje e created_at=agora, nunca somem.
-    const corteTs = Date.now() - 60*24*3600*1000;
-    const cdJanela = new Date(corteTs);
-    const corteData = `${cdJanela.getFullYear()}-${String(cdJanela.getMonth()+1).padStart(2,'0')}-${String(cdJanela.getDate()).padStart(2,'0')}`;
-    atvs = (atvs||[]).filter(a =>
-      (a.data && String(a.data).slice(0,10) >= corteData) ||
-      (a.created_at && new Date(a.created_at).getTime() >= corteTs)
-    );
+    // 📋 REGRA (pedido do Fabio, 21/10/2026): TODAS as OSs do técnico sempre
+    // aparecem no Minhas OS — sem janela de dias escondendo nada. A antiga
+    // janela de 60 dias existia pros fantasmas do Field, que foram reconciliados
+    // em 21/10/2026 (impedidas/canceladas/concluídas viradas no banco).
+    // O único recorte da lista é o filtro de data, quando o técnico preenche.
     let fotoCount = {};
     try{
       const osIds = [...new Set((atvs||[]).map(a=>a.os_clientes&&a.os_clientes.id).filter(Boolean))];
@@ -9235,14 +9233,14 @@ async function tecCarregarConcluidas(){
     const selAtv = '*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))';
     let atvs = await apiGET(
       'os_atividades?tecnico=eq.'+encodeURIComponent(tnome)+'&status=eq.concluida' +
-      '&select=' + selAtv + '&order=data.desc,created_at.desc&limit=200'
+      '&select=' + selAtv + '&order=data.desc,created_at.desc&limit=1000'
     );
     if(!(atvs||[]).length){
       const amplas = await apiGET(
         'os_atividades?status=eq.concluida&select=' + selAtv + '&order=data.desc,created_at.desc&limit=1000'
       ).catch(()=>[]);
       const alvo = String(tnome||'').trim().toLowerCase();
-      atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo).slice(0,200);
+      atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo).slice(0,1000);
     }
     TEC_CONC = atvs || [];
     tecRenderConcluidas();
