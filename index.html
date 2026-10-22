@@ -6250,6 +6250,8 @@ const FC_CFG = {
   email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
   eqcli:{ hidden:'eqFiltroCliente',  label:'eqFcLabel',  lista:'eqFcLista',  busca:'eqFcBusca',  opcoes:'eqFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   periodo:{ hidden:'osFiltroPeriodo', label:'osPerLabel', lista:'osPerLista', busca:'osPerBusca', opcoes:'osPerOpcoes', todos:'Todas as datas', vazio:'—' },
+  eqform:{ hidden:'eqCliente', label:'eqFormLabel', lista:'eqFormLista', busca:'eqFormBusca', opcoes:'eqFormOpcoes', todos:'— cliente —', vazio:'Nenhum cliente encontrado.' },
+  eqtipo:{ hidden:'eqTipo', label:'eqTipoLabel', lista:'eqTipoLista', busca:'eqTipoBusca', opcoes:'eqTipoOpcoes', todos:'Tipo…', vazio:'—' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
@@ -6268,7 +6270,7 @@ const OS_PER_ITENS = [  // 📅 filtro de Período da OS Clientes (22/10/2026)
   { valor:'mesesp', rotulo:'Mês específico…' },
   { valor:'periodo', rotulo:'Período específico…' },
 ];
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : OS_FC_ITENS; }
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
@@ -6282,7 +6284,7 @@ function fcAbrir(qual, ev){
   l.classList.remove('hidden');
   if(b) setTimeout(()=>{ try{ b.focus(); }catch(_){ } }, 30);
 }
-function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista,#eqFcLista,#osPerLista').forEach(x=>x.classList.add('hidden')); }
+function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista,#eqFcLista,#osPerLista,#eqFormLista,#eqTipoLista').forEach(x=>x.classList.add('hidden')); }
 function fcRender(qual){
   const cfg = FC_CFG[qual], div = document.getElementById(cfg.opcoes);
   if(!div) return;
@@ -6305,6 +6307,7 @@ function fcEscolher(qual, valorEnc){
   else if(qual==='tipo'){ osRecarregar(); }
   else if(qual==='eqcli'){ osListarEquipamentos(); }
   else if(qual==='periodo'){ osPeriodoMudou(); }
+  else if(qual==='eqform' || qual==='eqtipo'){ /* formulário de equipamentos: só registra a escolha */ }
   else if(qual==='email'){
     // conclusão só existe em OS concluída: força a situação p/ 'todas'
     if(valor==='cc_env' || valor==='cc_nao'){
@@ -6329,7 +6332,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -11107,16 +11110,33 @@ async function osTelaEquipamentos(){
   box.classList.remove('hidden');
   const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
     .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+  EQ_TP_ITENS = LINHAS.map(l=>({ valor: l, rotulo: l }));
+  if(!(OS_FC_ITENS||[]).length && (CLIENTES||[]).length) OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false).map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
       <div class="font-bold text-lg">🔧 Equipamentos</div><div></div>
     </div>
     <div class="grid gap-2 md:grid-cols-3 mb-3">
-      <select id="eqCliente" class="inp text-sm"><option value="">— cliente —</option>${cliOpts}</select>
+      <div class="relative" id="eqFormWrap">
+        <input type="hidden" id="eqCliente" value="">
+        <button type="button" id="eqFormBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('eqform',event)"><span id="eqFormLabel" class="truncate">— cliente —</span><span>▾</span></button>
+        <div id="eqFormLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+          <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+            <input id="eqFormBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="fcRender('eqform')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+          </div>
+          <div id="eqFormOpcoes" class="overflow-y-auto"></div>
+        </div>
+      </div>
       <input id="eqNome" class="inp text-sm" placeholder="Nome (ex: ACL TOP 350)">
       <input id="eqSerie" class="inp text-sm" placeholder="Nº de série">
-      <select id="eqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
+      <div class="relative" id="eqTipoWrap">
+        <input type="hidden" id="eqTipo" value="">
+        <button type="button" id="eqTipoBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('eqtipo',event)"><span id="eqTipoLabel" class="truncate">Tipo…</span><span>▾</span></button>
+        <div id="eqTipoLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+          <div id="eqTipoOpcoes" class="overflow-y-auto"></div>
+        </div>
+      </div>
       <input id="eqObs" class="inp text-sm" placeholder="Setor / observação">
       <div class="flex gap-2">
         <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="eqBtnSalvar" onclick="osSalvarEquipamento()">＋ Adicionar</button>
@@ -11141,6 +11161,7 @@ async function osTelaEquipamentos(){
   await osListarEquipamentos();
 }
 let EQ_LISTA = [];
+let EQ_TP_ITENS = [];   // itens do combobox Tipo (formulário de equipamentos)
 let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
 async function osListarEquipamentos(){
   const fc = (document.getElementById('eqFiltroCliente')||{}).value || '';
@@ -11164,11 +11185,12 @@ function osEditarEquipamento(id){
   const e = (EQ_LISTA||[]).find(x=>x.id===id); if(!e) return;
   EQ_EDIT_ID = id;
   document.getElementById('eqCliente').value = e.cliente_id||'';
+  fcSincronizar('eqform');
   document.getElementById('eqNome').value = e.nome||'';
   document.getElementById('eqSerie').value = e.numero_serie||'';
-  const selTipo = document.getElementById('eqTipo');
-  if(e.tipo && ![...selTipo.options].some(op=>op.value===e.tipo)){ const op = document.createElement('option'); op.textContent = e.tipo; selTipo.appendChild(op); }
-  selTipo.value = e.tipo||'';
+  if(e.tipo && !EQ_TP_ITENS.some(x=>x.valor===e.tipo)) EQ_TP_ITENS.push({ valor: e.tipo, rotulo: e.tipo });
+  document.getElementById('eqTipo').value = e.tipo||'';
+  fcSincronizar('eqtipo');
   document.getElementById('eqObs').value = e.observacao||'';
   document.getElementById('eqBtnSalvar').textContent = '💾 Salvar alterações';
   document.getElementById('eqBtnCancelarEd').classList.remove('hidden');
@@ -11179,6 +11201,7 @@ function osCancelarEdicaoEquipamento(){
   ['eqNome','eqSerie','eqObs'].forEach(i=>{ const el = document.getElementById(i); if(el) el.value=''; });
   const c = document.getElementById('eqCliente'); if(c) c.value='';
   const t = document.getElementById('eqTipo'); if(t) t.value='';
+  fcSincronizar('eqform'); fcSincronizar('eqtipo');
   const b = document.getElementById('eqBtnSalvar'); if(b) b.textContent = '＋ Adicionar';
   const bc = document.getElementById('eqBtnCancelarEd'); if(bc) bc.classList.add('hidden');
 }
