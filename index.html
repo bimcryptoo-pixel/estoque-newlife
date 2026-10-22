@@ -1451,12 +1451,6 @@
     </main>
   </div>
 
-  <!-- NAV INFERIOR (mobile) -->
-  <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="flex items-center justify-center px-4 py-2.5">
-      <button onclick="abrirMenuMob()" class="flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">☰</span><span class="text-sm">Menu</span></button>
-    </div>
-  </nav>
   <!-- Drawer do menu mobile (estilo Windows: oculto, abre ao clicar) -->
   <div id="menuMobDrawer" class="md:hidden fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50" onclick="fecharMenuMob()"></div>
@@ -1469,6 +1463,17 @@
     </div>
   </div>
 </div>
+
+<!-- NAV INFERIOR (mobile) — FORA do #app e com camada própria (translateZ):
+     no iOS, position:fixed dentro de contêiner que muda de altura "descola"
+     na rolagem e a barra flutua no meio da tela (bug relatado em 22/10/2026).
+     Filha direta do body + camada promovida = a barra acompanha o rodapé.
+     Nasce hidden; o entrarApp() revela (logout é reload → volta a esconder). -->
+<nav id="navMob" class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t z-40 hidden" style="padding-bottom:env(safe-area-inset-bottom);transform:translateZ(0);-webkit-transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden">
+  <div class="flex items-center justify-center px-4 py-2.5">
+    <button onclick="abrirMenuMob()" class="flex items-center gap-1.5 font-semibold text-gray-700"><span class="text-xl">☰</span><span class="text-sm">Menu</span></button>
+  </div>
+</nav>
 
 <script type="module">
   /* Biblioteca NF-e compartilhada com a Edge Function e os testes */
@@ -1910,6 +1915,7 @@ function entrarApp(){
   }
   document.getElementById('telaLogin').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  const __navMob = document.getElementById('navMob'); if(__navMob) __navMob.classList.remove('hidden');
   document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
   aplicarPermissoesNav();
   try{ nlAposLogin(); }catch(e){} /* 📴 fila offline: selo + sync pós-login */
