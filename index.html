@@ -7114,11 +7114,13 @@ function osAbaGeral(d){
       ? `<img src="${esc(o.assinatura_url)}" class="max-w-full h-auto max-h-32 border rounded-lg bg-white" style="transform:rotate(0deg)">
          <div class="text-xs text-gray-500 mt-1">Assinado em ${o.assinatura_em?new Date(o.assinatura_em).toLocaleString('pt-BR'):''} · coletada no celular do técnico</div>
          ${editavel?`<button class="text-xs text-brand font-bold mt-1" onclick="osAbrirAssinatura()">🔄 Assinar novamente</button>`:''}`
-      : ((d.assinaturas||[]).length
-        ? (d.assinaturas||[]).map(s=>`
+      : ''}
+    ${(d.assinaturas||[]).filter(s=>s.url && s.url!==o.assinatura_url).map(s=>`
           <div class="mb-3"><img src="${esc(s.url)}" class="max-w-full h-auto max-h-32 border rounded-lg bg-white">
-          <div class="text-xs text-gray-500 mt-1">Assinatura de <b>${esc(s.nome_assinante||'—')}</b>${s.created_at?' · '+new Date(s.created_at).toLocaleString('pt-BR'):''}</div></div>`).join('')
-        : (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>'))}
+          <div class="text-xs text-gray-500 mt-1">Assinatura de <b>${esc(s.nome_assinante||'—')}</b>${s.created_at?' · '+new Date(s.created_at).toLocaleString('pt-BR'):''}</div></div>`).join('')}
+    ${!o.assinatura_url && !(d.assinaturas||[]).length
+      ? (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')
+      : ''}
   </div>
   <div class="border-t mt-2 pt-3 flex justify-end gap-6 text-sm flex-wrap">
     <div>Serviços: <b>${fmtReais(tot.vs)}</b></div>
@@ -9406,15 +9408,15 @@ async function tecVerOSConc(atvId){
     const cli = o.clientes||{}, eq = o.equipamentos||{};
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
     const tipoNome = o.tipos_os ? o.tipos_os.descricao : '';
-    /* assinatura: SOMENTE a mais recente, desduplicada entre os_clientes.assinatura_url
-       e os_assinaturas — MESMA regra da impressão (imprimirOS). */
+    /* assinaturas: TODAS as distintas, desduplicadas entre os_clientes.assinatura_url
+       e os_assinaturas. Correção 21/10/2026 (urgente, apontada pelo Fabio): OSs do Field
+       podem ter 2+ assinaturas (ex.: 12675 — cliente + segundo signatário) e o Ver OS
+       mostrava só a mais recente. Documentos (impressão/PDF) seguem regra própria. */
     const sigs=[], sigVistas=new Set();
     const chaveSig = u=>{ const s=String(u||'').trim(); try{ return decodeURIComponent(s); }catch(_){ return s; } };
     const addSig = (url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
     addSig(o.assinatura_url,'Cliente',o.assinatura_em);
     (sigRows||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
-    let sigFinal = null;
-    for(const s of sigs){ if(!sigFinal || new Date(s.em||0).getTime() >= new Date(sigFinal.em||0).getTime()) sigFinal = s; }
     const fotos = (anexos||[]).filter(x=>!osEhVideoNome(x.nome) && !osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
     const videos = (anexos||[]).filter(x=>osEhVideoNome(x.nome) || osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
     openOsModal(`
@@ -9439,9 +9441,9 @@ async function tecVerOSConc(atvId){
         <div class="text-[11px] text-gray-400 mt-1">Toque numa foto para ver em tamanho real.</div></div>`:''}
       ${videos.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">🎥 Vídeos do atendimento (${videos.length})</div>
         <div class="grid gap-2">${videos.map(u=>`<video src="${esc(u)}" controls preload="metadata" playsinline class="w-full rounded-lg border bg-black" style="max-height:260px"></video>`).join('')}</div></div>`:''}
-      ${sigFinal?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ Assinatura do cliente</div>
-        <img src="${esc(sigFinal.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
-        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(sigFinal.nome||'Cliente')}${sigFinal.em?' · '+new Date(sigFinal.em).toLocaleString('pt-BR'):''}</div></div>`:''}
+      ${sigs.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ ${sigs.length>1?`Assinaturas do cliente (${sigs.length})`:'Assinatura do cliente'}</div>
+        ${sigs.map(s=>`<div class="mb-2"><img src="${esc(s.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
+        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(s.nome||'Cliente')}${s.em?' · '+new Date(s.em).toLocaleString('pt-BR'):''}</div></div>`).join('')}</div>`:''}
       <div class="flex flex-col min-[400px]:flex-row gap-2 mt-4">
         <button type="button" class="btn-brand flex-1 !w-auto !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
         <button type="button" class="btn-ghost flex-1 !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>
