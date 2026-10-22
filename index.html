@@ -1147,7 +1147,16 @@
               <option value="concluida">✅ Concluída</option>
               <option value="cancelada">❌ Cancelada</option>
             </select>
-            <select id="osFiltroCliente" class="inp text-sm" onchange="osFiltroClienteMudou()"><option value="">Todos os clientes</option></select>
+            <div class="relative" id="osFcWrap">
+              <input type="hidden" id="osFiltroCliente" value="">
+              <button type="button" id="osFcBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('os',event)"><span id="osFcLabel" class="truncate">Todos os clientes</span><span>▾</span></button>
+              <div id="osFcLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+                <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+                  <input id="osFcBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="fcRender('os')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+                </div>
+                <div id="osFcOpcoes" class="overflow-y-auto"></div>
+              </div>
+            </div>
             <select id="osFiltroTipo" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os tipos</option></select>
             <div class="flex gap-2">
               <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">🏷️ Tipos</button>
@@ -1239,10 +1248,19 @@
             <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
           </div>
           <div class="rounded-2xl border bg-gray-50 p-3 mb-3">
-            <label class="block">
+            <div class="block">
               <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">👥 CLIENTE</span>
-              <select id="tecFiltroCliente" class="inp w-full min-w-0 text-sm !mb-0" onchange="tecFiltroClienteMudou()"><option value="">Todos os clientes</option></select>
-            </label>
+              <div class="relative" id="tecFcWrap">
+                <input type="hidden" id="tecFiltroCliente" value="">
+                <button type="button" id="tecFcBtn" class="inp w-full min-w-0 text-sm !mb-0 flex justify-between items-center" onclick="fcAbrir('tec',event)"><span id="tecFcLabel" class="truncate">Todos os clientes</span><span>▾</span></button>
+                <div id="tecFcLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-72 flex flex-col">
+                  <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+                    <input id="tecFcBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="fcRender('tec')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+                  </div>
+                  <div id="tecFcOpcoes" class="overflow-y-auto"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div id="tecAbFiltro" class="rounded-2xl border bg-gray-50 p-3 mb-3">
             <div class="grid grid-cols-2 gap-2">
@@ -3670,7 +3688,7 @@ function ehHospital(nome, tipo){
   if(/^(UPA[\s\-]|PRIMILAB|LACAM|OTOCL|PARTICULARES|NEW LIFE)/.test(n)) return false;
   return true;
 }
-function fmtCliNome(nome, tipo){ return (ehHospital(nome, tipo || 'cliente') ? '🏥 ' : '') + nome; }
+function fmtCliNome(nome, tipo){ return '🏥 ' + nome; } // REGRA do Fabio (21/10/2026): TODO cliente leva 🏥 na lista — sem exceção (antes UPA/LACAM/PARTICULARES/NEW LIFE ficavam sem)
 
 async function carregarClientesCache(){
   try{
@@ -6075,6 +6093,64 @@ function osBuscaDebounce(){ clearTimeout(OS_BUSCA_T); OS_BUSCA_T = setTimeout(os
    Ao selecionar um cliente, a lista mostra TODAS as OSs dele — abertas E
    concluídas: a situação vai pra 'todas' sozinha. É daqui que se localiza
    a OS pra reenviar o e-mail (botão 📧 da linha) sem garimpar a caixa. */
+/* ---------- 🔎 Filtro de clientes PESQUISÁVEL (21/10/2026, pedido do Fabio) ----------
+   O filtro de clientes vira combobox: digita e busca (sem acento) OU abre a
+   lista suspensa completa. Vale p/ OS Clientes ('os') e Minhas OS ('tec').
+   O valor fica num input hidden com o MESMO id do antigo <select> — toda a
+   lógica que lia o select segue funcionando sem mudança. */
+const FC_CFG = {
+  os:  { hidden:'osFiltroCliente',  label:'osFcLabel',  lista:'osFcLista',  busca:'osFcBusca',  opcoes:'osFcOpcoes' },
+  tec: { hidden:'tecFiltroCliente', label:'tecFcLabel', lista:'tecFcLista', busca:'tecFcBusca', opcoes:'tecFcOpcoes' },
+};
+let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
+let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : OS_FC_ITENS; }
+function fcAbrir(qual, ev){
+  if(ev) ev.stopPropagation();
+  const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
+  if(!l) return;
+  const estavaFechada = l.classList.contains('hidden');
+  fcFecharTodas();
+  if(!estavaFechada) return;
+  const b = document.getElementById(cfg.busca);
+  if(b) b.value = '';
+  fcRender(qual);
+  l.classList.remove('hidden');
+  if(b) setTimeout(()=>{ try{ b.focus(); }catch(_){ } }, 30);
+}
+function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista').forEach(x=>x.classList.add('hidden')); }
+function fcRender(qual){
+  const cfg = FC_CFG[qual], div = document.getElementById(cfg.opcoes);
+  if(!div) return;
+  const q = osNormNome((document.getElementById(cfg.busca)||{}).value||'');
+  const atual = (document.getElementById(cfg.hidden)||{}).value||'';
+  const itens = fcItens(qual).filter(it=>!q || osNormNome(it.rotulo).includes(q));
+  div.innerHTML =
+    `<button type="button" class="w-full text-left px-4 py-2.5 text-sm font-bold ${!atual?'text-brand bg-red-50':'text-gray-700'} hover:bg-red-50 border-b border-gray-100" onclick="fcEscolher('${qual}','')">Todos os clientes</button>` +
+    (itens.length ? itens.map(it=>`<button type="button" class="w-full text-left px-4 py-2.5 text-sm font-semibold ${String(it.valor)===String(atual)?'text-brand bg-red-50':'text-gray-800'} hover:bg-red-50 border-b border-gray-100 last:border-0" onclick="fcEscolher('${qual}','${encodeURIComponent(String(it.valor))}')">${String(it.valor)===String(atual)?'✅ ':''}${esc(it.rotulo)}</button>`).join('')
+    : '<div class="p-4 text-sm text-gray-400">Nenhum cliente encontrado.</div>');
+}
+function fcEscolher(qual, valorEnc){
+  const cfg = FC_CFG[qual];
+  const valor = valorEnc ? decodeURIComponent(valorEnc) : '';
+  const it = fcItens(qual).find(x=>String(x.valor)===String(valor));
+  const h = document.getElementById(cfg.hidden); if(h) h.value = valor;
+  const lb = document.getElementById(cfg.label); if(lb) lb.textContent = valor && it ? it.rotulo : 'Todos os clientes';
+  fcFecharTodas();
+  if(qual==='tec'){ TEC_FILTRO_CLIENTE_ROTULO = valor && it ? it.rotulo : ''; tecFiltroClienteMudou(); }
+  else osFiltroClienteMudou();
+}
+function fcSincronizar(qual){
+  const cfg = FC_CFG[qual], h = document.getElementById(cfg.hidden);
+  if(!h) return;
+  const v = h.value||'';
+  const it = fcItens(qual).find(x=>String(x.valor)===String(v));
+  const lb = document.getElementById(cfg.label);
+  if(lb) lb.textContent = v && it ? it.rotulo : 'Todos os clientes';
+}
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap')) fcFecharTodas();
+});
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
   if(fc){
@@ -6199,10 +6275,9 @@ async function carregarOSClientes(){
     });
   }catch(e){}
   try{
-    const sel = document.getElementById('osFiltroCliente');
-    if(sel && (!sel.options || sel.options.length<=1) && Array.isArray(CLIENTES)){
-      sel.innerHTML = '<option value="">Todos os clientes</option>' +
-        CLIENTES.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
+    if(Array.isArray(CLIENTES)){
+      OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false).map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+      fcSincronizar('os');
     }
     const st = document.getElementById('osFiltroTipo');
     if(st) st.innerHTML = '<option value="">Todos os tipos</option>' +
@@ -9239,19 +9314,19 @@ function tecCliChave(a){
 }
 /* 👥 (re)monta as opções do filtro com os clientes das duas abas (união) */
 function tecPopularFiltroCliente(){
-  const sel = document.getElementById('tecFiltroCliente'); if(!sel) return;
   const mapa = new Map();
   const add = (a)=>{ const c = a && a.os_clientes && a.os_clientes.clientes; if(c && c.nome){ const k = osNormNome(c.nome); if(k && !mapa.has(k)) mapa.set(k, fmtCliNome(c.nome, c.tipo)); } };
   ((TEC_AB_CACHE && TEC_AB_CACHE.atvs) || []).forEach(add);
   (TEC_CONC || []).forEach(add);
   if(TEC_FILTRO_CLIENTE && !mapa.has(TEC_FILTRO_CLIENTE)) mapa.set(TEC_FILTRO_CLIENTE, TEC_FILTRO_CLIENTE_ROTULO || TEC_FILTRO_CLIENTE);
-  sel.innerHTML = '<option value="">Todos os clientes</option>' +
-    [...mapa.entries()].sort((x,y)=>x[1].localeCompare(y[1])).map(([k,v])=>`<option value="${esc(k)}"${k===TEC_FILTRO_CLIENTE?' selected':''}>${esc(v)}</option>`).join('');
+  TEC_FC_ITENS = [...mapa.entries()].sort((x,y)=>x[1].localeCompare(y[1])).map(([valor, rotulo])=>({ valor, rotulo }));
+  const h = document.getElementById('tecFiltroCliente'); if(h) h.value = TEC_FILTRO_CLIENTE || '';
+  fcSincronizar('tec');
 }
 function tecFiltroClienteMudou(){
-  const sel = document.getElementById('tecFiltroCliente');
-  TEC_FILTRO_CLIENTE = sel ? sel.value : '';
-  TEC_FILTRO_CLIENTE_ROTULO = sel && sel.selectedIndex>0 ? sel.options[sel.selectedIndex].text : '';
+  const h = document.getElementById('tecFiltroCliente');
+  TEC_FILTRO_CLIENTE = h ? h.value : '';
+  if(!TEC_FILTRO_CLIENTE) TEC_FILTRO_CLIENTE_ROTULO = '';
   if(TEC_ABA==='concluidas') tecRenderConcluidas();
   else if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
 }
