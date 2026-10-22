@@ -1603,8 +1603,21 @@ function headersREST(extra){
   try{ if(typeof sessao !== 'undefined' && sessao && sessao.token) h['x-session-token'] = sessao.token; }catch(e){}
   return h;
 }
+/* 📴 Erro de rede AMIGÁVEL (regra do Fabio, 22/10/2026): nada de "Failed to
+   fetch" cru na tela — sem sinal, o aviso é claro e aponta pro que funciona
+   (o Minhas OS offline). O erro traduzido carrega a marca __rede pra fila
+   offline continuar detectando a queda de rede (nlEhErroRede). */
+function erroDeRede(){
+  const er = new Error('📴 Sem internet no momento — este recurso precisa de sinal. O Minhas OS continua funcionando offline.');
+  er.__rede = true;
+  return er;
+}
+async function apiFetch(url, opts){
+  try{ return await fetch(url, opts); }
+  catch(e){ if(typeof nlEhErroRede==='function' && nlEhErroRede(e)) throw erroDeRede(); throw e; }
+}
 async function apiGET(path){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: headersREST() });
+  const r = await apiFetch(`${SUPA_URL}/rest/v1/${path}`, { headers: headersREST() });
   if(!r.ok){ const t = await r.text(); throw new Error(`GET ${path} → ${r.status}: ${t.slice(0,200)}`); }
   return r.json();
 }
@@ -1621,7 +1634,7 @@ async function apiGETall(path){
   return out;
 }
 async function apiPOST(table, body){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+  const r = await apiFetch(`${SUPA_URL}/rest/v1/${table}`, {
     method:'POST', headers: headersREST({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
   if(!r.ok){ const t = await r.text(); throw new Error(`POST ${table} → ${r.status}: ${t.slice(0,300)}`); }
@@ -1629,7 +1642,7 @@ async function apiPOST(table, body){
   return Array.isArray(j) ? j[0] : j;
 }
 async function apiPATCH(table, params, body){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {
+  const r = await apiFetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers: headersREST({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
   if(!r.ok){ const t = await r.text(); throw new Error(`PATCH ${table} → ${r.status}: ${t.slice(0,300)}`); }
@@ -4261,7 +4274,7 @@ function fmtReais(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimu
 function pedidosBuscaDeb(){ clearTimeout(pedBuscaT); pedBuscaT=setTimeout(carregarPedidos, 400); }
 
 async function apiDELETE(table, params){
-  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers: headersREST() });
+  const r = await apiFetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers: headersREST() });
   if(!r.ok){ const t = await r.text(); throw new Error(`DELETE ${table} → ${r.status}: ${t.slice(0,300)}`); }
 }
 
@@ -8314,15 +8327,31 @@ async function osSalvarAssinatura(){
   if(!cv) return;
   // 🖊️ pad em branco NÃO é assinatura (pré-piloto): bloqueia antes de subir qualquer coisa
   if(typeof tecPadVazio==='function' && tecPadVazio(cv)){ toast('⚠️ Desenhe a assinatura no quadro antes de salvar.','erro'); return; }
+  const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+  if(!blob){ toast('Erro ao gerar a imagem da assinatura.','erro'); return; }
+  const nome = `os/assinatura-${osId}-${Date.now()}.png`;
+  const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+  // 📴 OFFLINE (regra do Fabio, 22/10/2026): assinatura coletada no Minhas OS
+  //    sem sinal NÃO se perde — vai pra fila do aparelho (sobe ao voltar o
+  //    sinal, antes da conclusão) e já conta como coletada no cartão.
+  const noPainelTec = (()=>{ const s=document.getElementById('aba-ostecnico'); return s && !s.classList.contains('hidden'); })();
+  const enfileirarAss = async () => {
+    await nlFilaAdd({ tipo:'assinatura', osId, sigPath:nome, sigEm:new Date().toISOString(), ts:Date.now() }, blob);
+    await nlAtualizarPendCache().catch(()=>{});
+    OS_ASS_ID = null;
+    closeOsModal();
+    toast('📴 Sem internet: assinatura guardada no aparelho — será enviada ao voltar o sinal.','alerta');
+    if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+  };
+  if(noPainelTec && navigator.onLine===false){
+    try{ await enfileirarAss(); }catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
+    return;
+  }
   try{
-    const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
-    if(!blob) throw new Error('Falha ao gerar imagem.');
-    const nome = `os/assinatura-${osId}-${Date.now()}.png`;
     const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
       method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
     });
     if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
-    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
     const agora = new Date().toISOString();
     await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url:url, assinatura_em:agora });
     // registra também em os_assinaturas (a aba ✍️ Assinaturas lê dessa tabela — mesmo padrão do celular)
@@ -8335,7 +8364,13 @@ async function osSalvarAssinatura(){
     OS_ASS_ID = null;
     if(OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id===osId) await verOS(osId);
     else if(!document.getElementById('aba-ostecnico').classList.contains('hidden')) await carregarPainelTecnico();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){
+    // 📴 a rede caiu no meio do salvamento: no Minhas OS, guarda na fila
+    if(noPainelTec && typeof nlEhErroRede==='function' && nlEhErroRede(e)){
+      try{ await enfileirarAss(); return; }catch(_){}
+    }
+    toast('Erro: '+e.message,'erro');
+  }
 }
 
 /* ---------- anexos ---------- */
@@ -9760,6 +9795,27 @@ function tecFotosDaOS(a){
   return (TEC_FOTOS && TEC_FOTOS[osId]) || 0;
 }
 function tecAssinaturaLiberada(a){ return tecFotosDaOS(a) > 0; }
+/* ✍️ A OS tem assinatura? Vale a salva no servidor (assinatura_url da linha)
+   E a coletada neste aparelho que ainda está na fila offline. */
+function tecTemAssinaturaOS(a){
+  if(!a) return false;
+  const os = a.os_clientes || {};
+  if(os.assinatura_url) return true;
+  const osId = os.id || a.os_id;
+  try{ return !!((TEC_PEND && TEC_PEND.assinaturasFila) || new Set()).has(osId); }catch(e){ return false; }
+}
+/* ✅ REGRA DA SEQUÊNCIA (Fabio, 22/10/2026): o Concluir é o ÚLTIMO botão da
+   cadeia de botões do cartão — só libera com FOTO + ASSINATURA coletadas. */
+function tecConcluirLiberado(a){
+  if(!a || tecBloqueado(a)) return false;
+  return tecFotosDaOS(a) >= 1 && tecTemAssinaturaOS(a);
+}
+function tecAvisoConcluir(a){
+  const falta = [];
+  if(tecFotosDaOS(a) < 1) falta.push('a foto do atendimento');
+  if(!tecTemAssinaturaOS(a)) falta.push('a assinatura do cliente');
+  toast('🚨 Para concluir, colete ' + (falta.length ? falta.join(' e ') : 'a foto e a assinatura') + ' — cada botão libera o próximo passo.','erro');
+}
 function tecAvisoAssinatura(){
   toast('📷 A assinatura libera depois da foto do atendimento — toque em Foto primeiro.','alerta');
 }
@@ -9837,6 +9893,12 @@ document.addEventListener('click', function(ev){
     ev.stopImmediatePropagation();
     tecAvisoAssinatura();
   }
+  if(act==='concluir' && a && !tecConcluirLiberado(a)){
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    tecAvisoConcluir(a);
+  }
 }, true);
 
 function renderPainelTecnico(atvs, fotoCount){
@@ -9890,6 +9952,20 @@ function renderPainelTecnico(atvs, fotoCount){
     const clsTrav = trav ? ' tec-travado' : '';
     const lkTrav = trav ? '🔒 ' : '';
     const attrTrav = trav ? ` title="${TRAVA_TITULO}" aria-disabled="true"` : '';
+    // ✅ cadeia de botões: foto (cartão+fila) e assinatura (servidor+fila)
+    const fotosCard = fotoCount[os.id] || fotoCount[a.os_id] || 0;
+    const temAssCard = tecTemAssinaturaOS(a);
+    const podeConc = !trav && fotosCard >= 1 && temAssCard;
+    const clsConc = podeConc ? '' : ' tec-travado';
+    const lkConc = podeConc ? '' : '🔒 ';
+    const attrConc = podeConc ? '' : ` title="Conclui com foto + assinatura coletadas" aria-disabled="true"`;
+    const travAss = trav || fotosCard < 1;
+    const attrAss = trav ? attrTrav : (travAss ? ` title="${TRAVA_ASS_TITULO}" aria-disabled="true"` : '');
+    // 🔀 POSIÇÕES (Fabio, 22/10/2026, pelo print): a ✍️ Assinatura sobe pra
+    //    linha do status (ao lado de Pausar/Retomar) e o ✅ Concluir desce
+    //    pro lugar dela — largura cheia, por ÚLTIMO na sequência do cartão.
+    const btnAss = larg => `<button class="btn-ghost w-full !py-2.5 text-sm${larg?' min-[360px]:col-span-2':''}${travAss?' tec-travado':''}" data-atv="${a.id}" data-act="assinatura"${attrAss} onclick="tecAssinaturaAbrir('${os.id}')">${travAss?'🔒 ':''}✍️ Assinatura${temAssCard && !travAss ? ' ✓' : ''}</button>`;
+    const btnConcFull = `<button class="btn-brand w-full !py-2.5 text-sm min-[360px]:col-span-2${clsConc}" data-atv="${a.id}" data-act="concluir"${attrConc} onclick="tecConcluirBotao('${a.id}','${os.id||''}')">${lkConc}✅ Concluir</button>`;
     if(pendConc){ /* 📴 conclusão aguardando envio: ações bloqueadas até sincronizar */ }
     else if(stExib==='pendente'||stExib==='agendada'){
       btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
@@ -9898,23 +9974,27 @@ function renderPainelTecnico(atvs, fotoCount){
       btns += `<button class="btn-brand w-full !py-2.5 text-sm min-[360px]:col-span-2" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
     }else if(stExib==='em_atendimento'){
       btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
-      btns += `<button class="btn-brand w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
+      btns += btnAss(false);
     }else if(stExib==='pausada'){
       btns += `<button class="btn-brand w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
-      btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
+      btns += btnAss(false);
     }
     if(!pendConc){
-    // 📷🎥✍️ ORDEM (regra do Fabio, 22/10/2026): Foto e Vídeo SEMPRE antes da
-    // Assinatura; a Assinatura desceu pro lugar do Vídeo (largura cheia, por
-    // último) e só ativa depois da foto; o Vídeo fica DESATIVADO pra todos.
+    // 📷🎥✍️✅ POSIÇÕES (regra do Fabio, 22/10/2026): a sequência de coleta é
+    // Foto → Assinatura → Concluir (cada um ativa com a coleta anterior).
+    // No cartão em atendimento/pausada: Assinatura ao lado de Pausar/
+    // Retomar, Foto e Vídeo no meio, e o ✅ Concluir por ÚLTIMO em largura
+    // cheia (lugar que era da Assinatura). O Vídeo fica DESATIVADO.
     // 📧 Reenviar protocolo NÃO entra na sequência: é uso avulso do operador
     // (só quando o cliente solicita) — link discreto FORA da grade, embaixo.
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
     btns += `<button type="button" class="btn-ghost w-full !py-2.5 text-sm tec-travado" data-atv="${a.id}" data-act="video" title="🎥 Vídeo desativado por enquanto" aria-disabled="true" onclick="tecVideoOS('${os.id||a.os_id||''}')">🔒 🎥 Vídeo</button>`;
-    const fotosN = fotoCount[os.id] || fotoCount[a.os_id] || 0;
-    const travAss = trav || fotosN < 1;
-    const attrAss = trav ? attrTrav : (travAss ? ` title="${TRAVA_ASS_TITULO}" aria-disabled="true"` : '');
-    btns += `<button class="btn-ghost w-full !py-2.5 text-sm min-[360px]:col-span-2${travAss?' tec-travado':''}" data-atv="${a.id}" data-act="assinatura"${attrAss} onclick="tecAssinaturaAbrir('${os.id}')">${travAss?'🔒 ':''}✍️ Assinatura</button>`;
+    const fotosN = fotosCard;
+    // 🔀 em atendimento/pausada: ✅ Concluir por último (largura cheia, no
+    //    lugar onde a Assinatura ficava); nos demais estados, a Assinatura
+    //    segue por último como antes.
+    if(stExib==='em_atendimento'||stExib==='pausada') btns += btnConcFull;
+    else btns += btnAss(true);
     // ❌ REGRA (Fabio, 22/10/2026): cancelar atividade NÃO existe no Minhas
     // OS — é ação do escritório, no módulo OS Clientes (osCancelarAtividade).
     }
@@ -9932,6 +10012,7 @@ function renderPainelTecnico(atvs, fotoCount){
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+      ${(typeof temAssCard!=="undefined" && temAssCard && !os.assinatura_url)?`<div class="text-xs mt-1" style="color:#9a3412">✍️ Assinatura coletada no aparelho ⏳ aguardando envio</div>`:``}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
       <div class="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
       ${!pendConc?`<div class="mt-1.5 text-center"><button type="button" class="text-xs text-gray-400 font-semibold py-1 whitespace-nowrap" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')" title="Uso avulso do operador — só quando o cliente solicitar">📧 Reenviar protocolo</button></div>`:''}
@@ -9940,7 +10021,104 @@ function renderPainelTecnico(atvs, fotoCount){
   }).join('');
   box.innerHTML = __cardsTec.trim() ? __cardsTec : '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
 }
-/* ---------- fluxo guiado de conclusão (3 passos) ---------- */
+/* ---------- ✅ CONCLUIR pelos BOTÕES do cartão (22/10/2026) ----------
+   O Fabio DESMANCHOU o fluxo guiado de 3 passos: ele duplicava a sequência
+   dos botões (Foto → Assinatura). Agora o atendimento anda SÓ pelos botões
+   do cartão, cada um ativando o próximo quando a tarefa é coletada:
+   A caminho/Iniciar → 📷 Foto → ✍️ Assinatura → ✅ Concluir (só ativa com
+   foto + assinatura). O Concluir abre UMA caixa só: a descrição do serviço.
+   Online finaliza na hora (mesma conta do antigo fluxo); offline a
+   conclusão entra na fila DEPOIS da foto e da assinatura. */
+let TEC_CONCLUIR = null;
+function tecConcluirBotao(atvId, osId){
+  const a = tecAtvPorId(atvId);
+  if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
+  if(TEC_PEND.conclusaoAtvs.has(atvId)){
+    toast('⏳ Este atendimento já foi concluído neste aparelho e está aguardando envio.','alerta');
+    return;
+  }
+  if(a && !tecConcluirLiberado(a)){ tecAvisoConcluir(a); return; }
+  if(!tecGpsPodeAgir()) return;
+  TEC_CONCLUIR = { atvId, osId };
+  openOsModal(`
+    <div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>
+    <div class="font-extrabold text-base mb-1">📝 O que foi feito?</div>
+    <div class="text-xs text-gray-500 mb-3">Descreva o serviço executado — vai para a OS e para o cliente.</div>
+    <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…">${esc((a && a.descricao_conclusao) || '')}</textarea>
+    <button class="btn-brand w-full !py-3.5 text-base" id="tecBtnConcluirBotao" onclick="tecConcluirFinalizar()">✅ Finalizar atendimento</button>
+    <button class="btn-ghost w-full !py-2.5 text-sm mt-2" onclick="closeOsModal()">Cancelar</button>`);
+}
+async function tecConcluirFinalizar(){
+  const C = TEC_CONCLUIR; if(!C) return;
+  if(TEC_FINALIZANDO) return; // toque duplo
+  const obs = (document.getElementById('tecConcObs') || {}).value || '';
+  if(!String(obs).trim()){ toast('⚠️ Descreva o serviço executado antes de finalizar.','erro'); return; }
+  const atvId = C.atvId, osId = C.osId;
+  const a = tecAtvPorId(atvId);
+  const osRow = (a && a.os_clientes) || {};
+  const nfotos = (TEC_FOTOS && TEC_FOTOS[osId]) || 0;
+  // 📴 OFFLINE: a conclusão fica em standby na fila — a foto e a assinatura
+  //    coletadas pelos botões já estão na fila ANTES dela (ordem garantida).
+  if(navigator.onLine===false){
+    try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; }
+    catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
+    return;
+  }
+  TEC_FINALIZANDO = true;
+  const btn = document.getElementById('tecBtnConcluirBotao');
+  if(btn){ btn.disabled = true; btn.textContent = 'Concluindo…'; }
+  let atividadeConcluida = false;
+  try{
+    // mesma conta do antigo fluxo online (a assinatura já está salva na OS
+    // pelo botão ✍️ — aqui é concluir a atividade e fechar a OS):
+    await tecMudarStatusSilent(atvId, 'concluida', obs);
+    atividadeConcluida = true;
+    try{
+      const atvsRest = await apiGET(`os_atividades?os_id=eq.${osId}&select=status`);
+      if(atvsRest.length && atvsRest.every(x=>['concluida','cancelada'].includes(x.status))){
+        await apiPATCH('os_clientes', `id=eq.${osId}`, { status:'concluida', updated_at:new Date().toISOString() });
+      }
+      if(TEC_GPS.nome){
+        await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
+          { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+      }
+    }catch(_){}
+    try{ await osLog(osId, 'concluiu o atendimento pelo celular'); }catch(_){}
+    osEnviarEmailAuto(osId); // 📧 envio automático da OS ao cliente
+    TEC_CONCLUIR = null;
+    const [aa] = await apiGET(`os_atividades?id=eq.${atvId}&select=inicio,fim`);
+    openOsModal(`
+      <div class="text-center py-4">
+        <div class="text-6xl mb-3">🎉</div>
+        <div class="font-extrabold text-lg mb-1">Atendimento concluído!</div>
+        <div class="text-xs text-gray-500 mb-4">Concluído às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="text-left grid gap-2 mb-4">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📝 Descrição registrada</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📷 ${nfotos} foto(s) anexada(s)</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ Assinatura do cliente coletada</div>
+          ${aa&&aa.inicio&&aa.fim?`<div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">⏱️ Duração: ${osDuracaoReal(aa)||'—'}</div>`:''}
+        </div>
+        <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
+      </div>`);
+  }catch(e){
+    // 📴 a rede caiu no meio: a conclusão NÃO se perde — vira captura offline
+    if(!atividadeConcluida && typeof nlEhErroRede==='function' && nlEhErroRede(e)){
+      try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; return; }
+      catch(_){}
+    }
+    toast('Erro: '+e.message,'erro');
+  }
+  finally{
+    TEC_FINALIZANDO = false;
+    const b = document.getElementById('tecBtnConcluirBotao');
+    if(b){ b.disabled = false; b.textContent = '✅ Finalizar atendimento'; }
+  }
+}
+
+/* ---------- fluxo guiado de conclusão (3 passos) — DESMANCHADO em
+   22/10/2026 a pedido do Fabio (duplicava a sequência dos botões do
+   cartão). Nenhum botão chama mais este fluxo; o código fica dormente
+   como referência, igual ao 🎥 Vídeo desativado. ---------- */
 let TEC_FLUXO = null;
 function tecConcluirModal(atvId, osId){
   // 🔒 fluxo obrigatório: pendente/agendada sem A caminho não abre a conclusão
@@ -10857,7 +11035,7 @@ const NL_DB_NOME = 'nl-offline';
 const NL_OVERLAY_KEY = 'nl_tec_overlay';
 let __nlDbPromise = null;
 let TEC_OVERLAY = {};   // cache em memória do overlay (render é síncrono)
-let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set(), fotosFila:{} };
+let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set(), fotosFila:{}, assinaturasFila:new Set() };
 let NL_SYNC_ANDANDO = false;
 
 /* Falha de REDE (não erro HTTP do servidor): fetch rejeita com TypeError,
@@ -10866,6 +11044,7 @@ let NL_SYNC_ANDANDO = false;
 function nlEhErroRede(e){
   if(navigator.onLine===false) return true;
   if(!e) return false;
+  if(e.__rede) return true; // erro já traduzido pela camada de API (apiFetch)
   if(e instanceof TypeError) return true;
   return /failed to fetch|networkerror|network error|load failed|err_network/i.test(String(e.message||e));
 }
@@ -10960,7 +11139,10 @@ function nlMontarPend(itens){
     total: itens.length,
     conclusaoAtvs: new Set(itens.filter(i=>i.tipo==='conclusao').map(i=>i.atvId)),
     statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId)),
-    fotosFila: itens.filter(i=>i.tipo==='foto').reduce((m,i)=>{ if(i.osId) m[i.osId]=(m[i.osId]||0)+1; return m; }, {})
+    fotosFila: itens.filter(i=>i.tipo==='foto').reduce((m,i)=>{ if(i.osId) m[i.osId]=(m[i.osId]||0)+1; return m; }, {}),
+    // ✍️ OSs com assinatura já coletada neste aparelho (guardada na fila ou
+    // numa conclusão pendente): contam pra liberar o ✅ Concluir offline.
+    assinaturasFila: new Set(itens.filter(i=>i.tipo==='assinatura' || (i.tipo==='conclusao' && (i.sigPath || i.sigUrl))).map(i=>i.osId))
   };
 }
 async function nlAtualizarPendCache(){
@@ -11008,6 +11190,26 @@ async function nlEnviarFotoIntent(it){
   // retry não duplica o vínculo: confere pela URL antes de inserir
   const ja = await apiGETsafe(`os_anexos?os_id=eq.${it.osId}&url=eq.${encodeURIComponent(url)}&select=id&limit=1`);
   if(!ja.length) await apiPOST('os_anexos', { os_id: it.osId, url, nome: it.nomeOriginal || 'foto.jpg' });
+  await nlFilaRemove(it.id);
+  return url;
+}
+
+/* ---------- Replay: assinatura coletada pelo botão ✍️ offline ----------
+   Espelha o osSalvarAssinatura online: sobe o arquivo (retry não duplica),
+   vincula na OS, registra em os_assinaturas 1× e loga. */
+async function nlEnviarAssinaturaIntent(it){
+  const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(it.sigPath)}`;
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(it.sigPath)}`, {
+    method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: it.blob
+  });
+  if(!r.ok){
+    const t = await r.text().catch(()=> '');
+    if(!/already exists|duplicate/i.test(t)) throw new Error('Upload da assinatura falhou (' + r.status + ')');
+  }
+  await apiPATCH('os_clientes', `id=eq.${it.osId}`, { assinatura_url: url, assinatura_em: it.sigEm || new Date().toISOString() });
+  const ja = await apiGETsafe(`os_assinaturas?os_id=eq.${it.osId}&url=eq.${encodeURIComponent(url)}&select=id&limit=1`);
+  if(!ja.length){ try{ await apiPOSTsafe('os_assinaturas', { os_id: it.osId, url, nome_assinante: null }); }catch(_){} }
+  try{ await osLog(it.osId, 'coletou a assinatura do cliente'); }catch(_){}
   await nlFilaRemove(it.id);
   return url;
 }
@@ -11099,7 +11301,7 @@ async function nlCapturarConclusao(F, nome, sigBlob, sigUrl){
   await nlFilaAdd(intent, sigBlob || null);
   nlOverlaySet(F.atvId, 'concluida');
   await nlAtualizarPendCache().catch(()=>{});
-  const nfotos = F.fotos.length;
+  const nfotos = (typeof F.nfotos==='number') ? F.nfotos : F.fotos.length;
   TEC_FLUXO = null;
   openOsModal(`
     <div class="text-center py-4">
@@ -11143,6 +11345,8 @@ async function nlSync(manual){
         toast('Atendimento enviado ✓', 'ok');
       }else if(it.tipo==='foto'){
         await nlEnviarFotoIntent(it); // remove da fila ao concluir
+      }else if(it.tipo==='assinatura'){
+        await nlEnviarAssinaturaIntent(it); // remove da fila ao concluir
       }else if(it.tipo==='status'){
         await nlExecutarStatus(it);
         await nlFilaRemove(it.id);
