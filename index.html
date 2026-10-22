@@ -1506,6 +1506,11 @@ __checkVersion();
 setInterval(__checkVersion, 60000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) __checkVersion(); });
 const SUPA_KEY = 'sb_publishable_e08JBryAm6Pxx3Pp4aVLag_V1yO4dYM';
+/* ⚠️ HJSON sozinho NÃO autentica desde a virada de segurança (20/10/2026):
+   escritas REST precisam do x-session-token — use headersREST(). fetch()
+   direto com HJSON é recusado em silêncio (foi a causa do GPS morto de
+   20/10 a 22/10). HJSON fica só como base do headersREST e p/ a Edge
+   Function de NF-e (caminho próprio, ainda não deployado). */
 const HJSON = { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' };
 const LINHAS = ['Coagulação','Gasometria','Hematologia','Bioquímica'];
 const LOCAIS = ['Fortaleza','Piauí'];
@@ -3224,7 +3229,7 @@ async function salvarConfigGps(){
   }catch(e){
     // upsert manual se o POST direto falhar
     try{
-      await fetch(`${SUPA_URL}/rest/v1/sistema_config`, { method:'POST', headers:{...HJSON,'Prefer':'resolution=merge-duplicates'}, body: JSON.stringify([{chave:'gps_intervalo_seg',valor:iv},{chave:'gps_exigir_ativo',valor:ex}]) });
+      await fetch(`${SUPA_URL}/rest/v1/sistema_config`, { method:'POST', headers:headersREST({'Prefer':'resolution=merge-duplicates'}), body: JSON.stringify([{chave:'gps_intervalo_seg',valor:iv},{chave:'gps_exigir_ativo',valor:ex}]) });
       toast('Configuração do GPS salva. ✓','ok');
     }catch(e2){ toast('Erro: '+e2.message,'erro'); }
   }
@@ -6073,7 +6078,7 @@ const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao
 async function apiCount(path){
   try{
     const sep = path.includes('?') ? '&' : '?';
-    const r = await fetch(`${SUPA_URL}/rest/v1/${path}${sep}select=id&limit=1`, { headers: {...HJSON, 'Prefer':'count=exact'} });
+    const r = await fetch(`${SUPA_URL}/rest/v1/${path}${sep}select=id&limit=1`, { headers: headersREST({'Prefer':'count=exact'}) });
     const m = (r.headers.get('Content-Range')||'').match(/\/(\d+)\s*$/);
     return m ? parseInt(m[1],10) : null;
   }catch(e){ return null; }
@@ -8564,7 +8569,7 @@ async function tecEventoLocal(tipo){
   navigator.geolocation.getCurrentPosition(
     pos => {
       fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao_hist`, {
-        method:'POST', headers:HJSON,
+        method:'POST', headers:headersREST(),
         body: JSON.stringify({ tecnico_nome: TEC_GPS.nome,
           lat: pos.coords.latitude, lng: pos.coords.longitude,
           precisao: Math.round(pos.coords.accuracy || 0) || null,
@@ -8584,21 +8589,29 @@ function tecEventoMinhasOS(){
   __tecMinhaOSUltimo = agora;
   tecEventoLocal('minhas_os');
 }
+let __tecGpsFalhaUlt = 0;
 async function tecGpsEnviar(lat, lng, prec){
   if(!TEC_GPS.nome) return;
   try{
     const ativa = await apiGET(`tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}&select=os_id,os_numero`);
     const cur = (ativa||[])[0]||{};
-    await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao`, {
+    const rUp = await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao`, {
       method:'POST',
-      headers:{...HJSON, 'Prefer':'resolution=merge-duplicates'},
+      headers:headersREST({'Prefer':'resolution=merge-duplicates'}),
       body: JSON.stringify({ tecnico_nome: TEC_GPS.nome, lat, lng, precisao: prec||null,
         ativa:true, os_id: cur.os_id||null, os_numero: cur.os_numero||null, updated_at: new Date().toISOString() })
     });
+    // 🔎 ANTI-SILÊNCIO (22/10/2026): se o envio da posição for recusado, o
+    // escritório fica sabendo pelo log de eventos — foi assim que a quebra
+    // da virada de segurança (20/10) passou 2 dias invisível.
+    if(!rUp.ok && Date.now() - __tecGpsFalhaUlt > 30*60000){
+      __tecGpsFalhaUlt = Date.now();
+      tecGpsEvento('gps_falha_envio');
+    }
     // 🛣️ histórico do trajeto (linha do tempo do deslocamento)
     fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao_hist`, {
       method:'POST',
-      headers:HJSON,
+      headers:headersREST(),
       body: JSON.stringify({ tecnico_nome: TEC_GPS.nome, lat, lng, precisao: prec||null,
         os_id: cur.os_id||null, os_numero: cur.os_numero||null })
     }).catch(()=>{});
@@ -8622,7 +8635,7 @@ function tecGpsColetar(){
       if(eraAtivo) tecGpsEvento(err.code===1 ? 'negou' : 'desativou');
       // marca como inativa no mapa do escritório
       if(TEC_GPS.nome) fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-        { method:'PATCH', headers:HJSON, body: JSON.stringify({ ativa:false, updated_at:new Date().toISOString() }) }).catch(()=>{});
+        { method:'PATCH', headers:headersREST(), body: JSON.stringify({ ativa:false, updated_at:new Date().toISOString() }) }).catch(()=>{});
     },
     { enableHighAccuracy:true, timeout:15000, maximumAge:10000 }
   );
@@ -10156,7 +10169,7 @@ async function tecFluxoFinalizar(){
       }
       if(TEC_GPS.nome){
         await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-          { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+          { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
       }
     }catch(_){}
     try{ await osLog(F.osId, 'concluiu o atendimento pelo celular'); }catch(_){}
@@ -10232,6 +10245,12 @@ async function tecMudarStatus(id, novo, obs){
     const body = { status:novo };
     if(obs!==undefined) body.descricao_conclusao = String(obs).trim()||null;
     if((novo==='a_caminho'||novo==='em_atendimento') && !a.inicio) body.inicio = hhmm;
+    // 📅 REGRA (Fabio, 22/10/2026): a DATA da atividade é o dia do TRABALHO,
+    // nunca o dia em que a OS foi criada — ao clicar em 🚗 A caminho (e ao
+    // ▶️ Iniciar), a data assume o dia atual. Foi o gargalo do piloto: OS
+    // criada em 21/10 e executada em 22/10 caía na linha do tempo e no
+    // trajeto do dia errado.
+    if(novo==='a_caminho'||novo==='em_atendimento') body.data = hojeISO();
     if(novo==='concluida' && !a.fim) body.fim = hhmm;
     await apiPATCH('os_atividades', `id=eq.${id}`, body);
     // atualiza a OS vinculada no mapa da equipe
@@ -10239,13 +10258,13 @@ async function tecMudarStatus(id, novo, obs){
       try{
         const [os] = await apiGET(`os_clientes?id=eq.${a.os_id}&select=numero`);
         await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-          { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:a.os_id, os_numero:os?os.numero:null }) }).catch(()=>{});
+          { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:a.os_id, os_numero:os?os.numero:null }) }).catch(()=>{});
       }catch(e){}
     }
     if(TEC_GPS.nome && (novo==='concluida' || novo==='cancelada')){
       // concluir OU cancelar libera o técnico no mapa (pré-piloto)
       fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-        { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+        { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
     }
     try{ closeOsModal(); }catch(e){}
     await tecSincronizarOS(a.os_id);
@@ -10889,10 +10908,14 @@ async function nlEnviarFotoIntent(it){
 async function nlExecutarStatus(it){
   const [a] = await apiGET(`os_atividades?id=eq.${it.atvId}&select=id,os_id,inicio,fim,status`);
   if(!a) throw new Error('Atividade não encontrada.');
-  const hhmm = new Date().toTimeString().slice(0,5);
+  // 📅 o carimbo é o do CLIQUE (it.ts), não o do replay: data e hora atuais
+  // do momento em que o operador tocou (regra do Fabio, 22/10/2026).
+  const quando = it.ts ? new Date(it.ts) : new Date();
+  const hhmm = quando.toTimeString().slice(0,5);
   const body = { status: it.novo };
   if(it.obs !== null && it.obs !== undefined) body.descricao_conclusao = String(it.obs).trim() || null;
   if((it.novo==='a_caminho' || it.novo==='em_atendimento') && !a.inicio) body.inicio = hhmm;
+  if(it.novo==='a_caminho' || it.novo==='em_atendimento') body.data = quando.getFullYear()+'-'+String(quando.getMonth()+1).padStart(2,'0')+'-'+String(quando.getDate()).padStart(2,'0');
   if(it.novo==='concluida' && !a.fim) body.fim = hhmm;
   await apiPATCH('os_atividades', `id=eq.${it.atvId}`, body);
   // atualiza a OS vinculada no mapa da equipe (mesmo padrão do fluxo online)
@@ -10900,12 +10923,12 @@ async function nlExecutarStatus(it){
     try{
       const [os] = await apiGET(`os_clientes?id=eq.${a.os_id}&select=numero`);
       await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-        { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:a.os_id, os_numero: os ? os.numero : null }) }).catch(()=>{});
+        { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:a.os_id, os_numero: os ? os.numero : null }) }).catch(()=>{});
     }catch(e){}
   }
   if(TEC_GPS.nome && (it.novo==='concluida' || it.novo==='cancelada')){
     fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-      { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+      { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
   }
   await tecSincronizarOS(a.os_id);
 }
@@ -10946,7 +10969,7 @@ async function nlExecutarConclusao(it){
     }
     if(TEC_GPS.nome){
       await fetch(`${SUPA_URL}/rest/v1/tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(TEC_GPS.nome)}`,
-        { method:'PATCH', headers:HJSON, body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
+        { method:'PATCH', headers:headersREST(), body: JSON.stringify({ os_id:null, os_numero:null }) }).catch(()=>{});
     }
   }catch(_){}
   try{ await osLog(osId, 'concluiu o atendimento pelo celular'); }catch(_){}
