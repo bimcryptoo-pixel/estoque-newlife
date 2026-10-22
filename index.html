@@ -8317,6 +8317,80 @@ async function osExcluirDefinitivo(){
 }
 
 /* ---------- assinatura (pad) ---------- */
+let OS_ASS_TECNOME = ''; /* nome do técnico (da designação) na coleta dupla do Minhas OS */
+function osPadWire(cv){
+  if(!cv) return;
+  const ctx = cv.getContext('2d');
+  ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
+  let des = false, lx = 0, ly = 0;
+  const pos = e=>{
+    const r = cv.getBoundingClientRect();
+    const t = (e.touches && e.touches[0]) || e;
+    return [ (t.clientX - r.left) * (cv.width / r.width), (t.clientY - r.top) * (cv.height / r.height) ];
+  };
+  cv.addEventListener('pointerdown', e=>{ des = true; [lx, ly] = pos(e); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e=>{ if(!des) return; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke(); lx = x; ly = y; });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>des = false));
+}
+/* ✍️ ASSINATURAS (regra do Fabio, 22/10/2026): no Minhas OS a coleta é DUPLA —
+   a do CLIENTE (com o nome completo DIGITADO de quem assina) e a do TÉCNICO
+   (ele assina também; o nome abaixo da linha vem AUTOMÁTICO da designação da
+   OS, sem caixa de digitação). As duas saem no documento com nome + assinatura.
+   No escritório (sem tecNome) segue só a do cliente, agora com o nome também. */
+function osAbrirAssinatura(osId, opcoes){
+  OS_ASS_ID = osId || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id) || null;
+  if(!OS_ASS_ID){ toast('OS não identificada.','erro'); return; }
+  OS_ASS_TECNOME = ((opcoes && opcoes.tecNome) || '').toUpperCase(); /* regra 22/10: nome do técnico sai em CAIXA ALTA */
+  const temTec = !!OS_ASS_TECNOME;
+  openOsModal(`
+    <div class="font-bold mb-1">✍️ Assinatura${temTec ? 's' : ''}</div>
+    <div class="text-xs text-gray-500 mb-3">${temTec ? 'A OS só conclui com as duas assinaturas: a do cliente e a do técnico.' : 'O nome completo de quem assina sai no documento, abaixo da assinatura.'}</div>
+    <div class="border rounded-xl p-3 mb-3">
+      <div class="font-bold text-sm mb-1">✍️ Assinatura do cliente</div>
+      <div id="osAssStatCli" class="text-xs text-green-700 font-semibold mb-2"></div>
+      <input id="osAssNome" class="inp text-base mb-2 uppercase" placeholder="Nome completo de quem está assinando" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <canvas id="osPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
+      <div class="flex gap-2 mt-2">
+        <button class="btn-ghost flex-1" onclick="osLimparPad('osPad')">Limpar</button>
+        <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura('cliente')">Salvar do cliente</button>
+      </div>
+    </div>
+    ${temTec ? `<div class="border rounded-xl p-3 mb-3">
+      <div class="font-bold text-sm mb-1">✍️ Assinatura do técnico</div>
+      <div id="osAssStatTec" class="text-xs text-green-700 font-semibold mb-2"></div>
+      <canvas id="osPadTec" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
+      <div class="text-xs text-gray-600 mt-1.5">Nome abaixo da linha: <b>${esc(OS_ASS_TECNOME)}</b> — vem da designação da OS, não precisa digitar.</div>
+      <div class="flex gap-2 mt-2">
+        <button class="btn-ghost flex-1" onclick="osLimparPad('osPadTec')">Limpar</button>
+        <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura('tecnico')">Salvar do técnico</button>
+      </div>
+    </div>` : ''}
+    <button class="btn-ghost w-full" onclick="closeOsModal()">Cancelar</button>`);
+  osPadWire(document.getElementById('osPad'));
+  if(temTec) osPadWire(document.getElementById('osPadTec'));
+  osAssEstado(OS_ASS_ID).catch(()=>{});
+}
+/* Marca ✅ nas seções já coletadas (servidor ou fila deste aparelho). */
+async function osAssEstado(osId){
+  const stC = document.getElementById('osAssStatCli'), stT = document.getElementById('osAssStatTec');
+  let cliOk = false, tecOk = false;
+  try{
+    if(TEC_PEND && TEC_PEND.assinaturasFila && TEC_PEND.assinaturasFila.has(osId)) cliOk = true;
+    if(TEC_PEND && TEC_PEND.assinaturasTecFila && TEC_PEND.assinaturasTecFila.has(osId)) tecOk = true;
+  }catch(e){}
+  try{
+    const [os] = await apiGETsafe(`os_clientes?id=eq.${osId}&select=assinatura_url`);
+    if(os && os.assinatura_url) cliOk = true;
+    const ts = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&tipo=eq.tecnico&select=id&limit=1`);
+    if(ts && ts.length) tecOk = true;
+  }catch(e){}
+  if(stC && cliOk) stC.textContent = '✅ Cliente já assinou — coletar de novo adiciona outra assinatura.';
+  if(stT && tecOk) stT.textContent = '✅ Técnico já assinou — assinar de novo adiciona outra.';
+}
+function osLimparPad(id){
+  const cv = document.getElementById(id || 'osPad');
+  if(cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+}
 /* 🛡️ Impressão do desenho da assinatura (tamanho + hash amostrado): serve
    pra reconhecer o MESMO desenho salvo 2x na mesma sessão (OS-2026-0003). */
 async function osSigImpressao(blob){
@@ -8327,96 +8401,97 @@ async function osSigImpressao(blob){
     return buf.length + ':' + h.toString(16);
   }catch(_){ return ''; }
 }
-function osAbrirAssinatura(osId){
-  OS_ASS_ID = osId || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id) || null;
-  if(!OS_ASS_ID){ toast('OS não identificada.','erro'); return; }
-  openOsModal(`
-    <div class="font-bold mb-2">✍️ Assinatura</div>
-    <div class="text-xs text-gray-500 mb-2">Assine no quadro abaixo (técnico ou responsável do cliente).</div>
-    <canvas id="osPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
-    <div class="flex gap-2 mt-3">
-      <button class="btn-ghost flex-1" onclick="osLimparPad()">Limpar</button>
-      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
-      <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura()">Salvar assinatura</button>
-    </div>`);
-  const cv = document.getElementById('osPad');
-  const ctx = cv.getContext('2d');
-  ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
-  let des = false, lx=0, ly=0;
-  const pos = e=>{
-    const r = cv.getBoundingClientRect();
-    const t = (e.touches&&e.touches[0])||e;
-    return [ (t.clientX-r.left)*(cv.width/r.width), (t.clientY-r.top)*(cv.height/r.height) ];
-  };
-  cv.addEventListener('pointerdown', e=>{ des=true; [lx,ly]=pos(e); cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', e=>{ if(!des) return; const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(x,y); ctx.stroke(); lx=x; ly=y; });
-  ['pointerup','pointerleave','pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>des=false));
-}
-function osLimparPad(){
-  const cv = document.getElementById('osPad');
-  if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
-}
-async function osSalvarAssinatura(){
+async function osSalvarAssinatura(tipo){
+  tipo = (tipo === 'tecnico') ? 'tecnico' : 'cliente';
   const osId = OS_ASS_ID || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id);
   if(!osId) return;
-  const cv = document.getElementById('osPad');
+  const cv = document.getElementById(tipo === 'tecnico' ? 'osPadTec' : 'osPad');
   if(!cv) return;
-  // 🖊️ pad em branco NÃO é assinatura (pré-piloto): bloqueia antes de subir qualquer coisa
-  if(typeof tecPadVazio==='function' && tecPadVazio(cv)){ toast('⚠️ Desenhe a assinatura no quadro antes de salvar.','erro'); return; }
-  const blob = await new Promise(res=>cv.toBlob(b=>res(b),'image/png'));
+  if(typeof tecPadVazio === 'function' && tecPadVazio(cv)){ toast('⚠️ Desenhe a assinatura no quadro antes de salvar.','erro'); return; }
+  let nome = '';
+  if(tipo === 'cliente'){
+    nome = ((document.getElementById('osAssNome') || {}).value || '').trim().toUpperCase(); /* regra 22/10: CAIXA ALTA travada */
+    if(!nome){ toast('⚠️ Digite o nome completo de quem está assinando — ele sai no documento.','erro'); return; }
+  }else{
+    nome = (OS_ASS_TECNOME || '').trim().toUpperCase();
+    if(!nome){ toast('⚠️ Nome do técnico não identificado na designação desta OS.','erro'); return; }
+  }
+  const blob = await new Promise(res=>cv.toBlob(b=>res(b), 'image/png'));
   if(!blob){ toast('Erro ao gerar a imagem da assinatura.','erro'); return; }
   // 🛡️ trava anti-duplicada (22/10/2026): o MESMO desenho já salvo nesta sessão
-  // (toque repetido) não cria outra assinatura.
+  // (toque repetido) não cria outra assinatura — segue o fluxo normal.
   const __sigImp = await osSigImpressao(blob);
   if(__sigImp && window.__sigSalvasOS && window.__sigSalvasOS[osId + ':' + __sigImp]){
-    toast('Essa assinatura já foi salva. ✓','ok');
-    OS_ASS_ID = null;
-    closeOsModal();
+    toast('Essa assinatura já foi salva. ✓', 'ok');
+    await osAssPosSalvar(osId, tipo);
     return;
   }
-  const nome = `os/assinatura-${osId}-${Date.now()}.png`;
-  const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
-  // 📴 OFFLINE (regra do Fabio, 22/10/2026): assinatura coletada no Minhas OS
-  //    sem sinal NÃO se perde — vai pra fila do aparelho (sobe ao voltar o
-  //    sinal, antes da conclusão) e já conta como coletada no cartão.
-  const noPainelTec = (()=>{ const s=document.getElementById('aba-ostecnico'); return s && !s.classList.contains('hidden'); })();
+  const nomeArq = `os/assinatura-${tipo === 'tecnico' ? 'tec-' : ''}${osId}-${Date.now()}.png`;
+  const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nomeArq)}`;
+  const noPainelTec = (()=>{ const el = document.getElementById('aba-ostecnico'); return el && !el.classList.contains('hidden'); })();
   const enfileirarAss = async () => {
-    await nlFilaAdd({ tipo:'assinatura', osId, sigPath:nome, sigEm:new Date().toISOString(), ts:Date.now() }, blob);
+    await nlFilaAdd({ tipo:'assinatura', sigTipo: tipo, nomeAssinante: nome, osId, sigPath: nomeArq, sigEm: new Date().toISOString(), ts: Date.now() }, blob);
     await nlAtualizarPendCache().catch(()=>{});
-    OS_ASS_ID = null;
-    closeOsModal();
-    toast('📴 Sem internet: assinatura guardada no aparelho — será enviada ao voltar o sinal.','alerta');
-    if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+    toast(`📴 Sem internet: assinatura ${tipo === 'tecnico' ? 'do técnico' : 'do cliente'} guardada no aparelho — será enviada ao voltar o sinal.`, 'alerta');
+    await osAssPosSalvar(osId, tipo);
   };
-  if(noPainelTec && navigator.onLine===false){
-    try{ await enfileirarAss(); }catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
+  if(noPainelTec && navigator.onLine === false){
+    try{ await enfileirarAss(); }catch(e){ toast('Erro ao guardar no aparelho: ' + e.message, 'erro'); }
     return;
   }
   try{
-    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
-      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'image/png' }, body: blob
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nomeArq)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer ' + SUPA_KEY, 'Content-Type':'image/png' }, body: blob
     });
-    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
+    if(!r.ok){ const t = await r.text(); throw new Error('Upload falhou (' + r.status + '): ' + t.slice(0, 150)); }
     const agora = new Date().toISOString();
-    await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url:url, assinatura_em:agora });
-    // registra também em os_assinaturas (a aba ✍️ Assinaturas lê dessa tabela — mesmo padrão do celular)
-    try{ await apiPOST('os_assinaturas', { os_id:osId, url, nome_assinante:null }); }catch(_){}
-    await osLog(osId, 'coletou a assinatura do cliente');
+    if(tipo === 'cliente'){
+      await apiPATCH('os_clientes', `id=eq.${osId}`, { assinatura_url: url, assinatura_em: agora });
+      try{ await apiPOST('os_assinaturas', { os_id: osId, url, nome_assinante: nome, tipo: 'cliente' }); }catch(_){}
+      await osLog(osId, 'coletou a assinatura do cliente').catch(()=>{});
+    }else{
+      await apiPOST('os_assinaturas', { os_id: osId, url, nome_assinante: nome, tipo: 'tecnico' });
+      await osLog(osId, 'assinou como técnico responsável').catch(()=>{});
+    }
     if(__sigImp){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[osId + ':' + __sigImp] = url; }
-    closeOsModal();
-    toast('Assinatura salva. ✓','ok');
-    const stFecha = await osFecharSeTudoConcluido(osId).catch(()=>null);
-    if(stFecha==='concluida') toast('OS concluída por completo. ✓','ok');
-    OS_ASS_ID = null;
-    if(OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id===osId) await verOS(osId);
-    else if(!document.getElementById('aba-ostecnico').classList.contains('hidden')) await carregarPainelTecnico();
+    toast(`Assinatura ${tipo === 'tecnico' ? 'do técnico' : 'do cliente'} salva. ✓`, 'ok');
+    if(tipo === 'cliente'){
+      const stFecha = await osFecharSeTudoConcluido(osId).catch(()=>null);
+      if(stFecha === 'concluida') toast('OS concluída por completo. ✓', 'ok');
+    }
+    await osAssPosSalvar(osId, tipo);
   }catch(e){
-    // 📴 a rede caiu no meio do salvamento: no Minhas OS, guarda na fila
-    if(noPainelTec && typeof nlEhErroRede==='function' && nlEhErroRede(e)){
+    if(noPainelTec && typeof nlEhErroRede === 'function' && nlEhErroRede(e)){
       try{ await enfileirarAss(); return; }catch(_){}
     }
-    toast('Erro: '+e.message,'erro');
+    toast('Erro: ' + e.message, 'erro');
   }
+}
+/* Depois de salvar uma das duas: se a outra ainda falta (coleta dupla do
+   Minhas OS), reabre a caixinha já marcada; senão fecha e atualiza as telas. */
+async function osAssPosSalvar(osId, tipoSalvo){
+  if(OS_ASS_TECNOME){
+    let cliOk = false, tecOk = false;
+    try{
+      if(TEC_PEND && TEC_PEND.assinaturasFila && TEC_PEND.assinaturasFila.has(osId)) cliOk = true;
+      if(TEC_PEND && TEC_PEND.assinaturasTecFila && TEC_PEND.assinaturasTecFila.has(osId)) tecOk = true;
+      const [os] = await apiGETsafe(`os_clientes?id=eq.${osId}&select=assinatura_url`);
+      if(os && os.assinatura_url) cliOk = true;
+      const ts = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&tipo=eq.tecnico&select=id&limit=1`);
+      if(ts && ts.length) tecOk = true;
+    }catch(e){}
+    if(tipoSalvo === 'cliente') cliOk = true; else tecOk = true;
+    if(!(cliOk && tecOk)){
+      osAbrirAssinatura(osId, { tecNome: OS_ASS_TECNOME });
+      toast('Falta a outra assinatura pra concluir.', 'alerta');
+      return;
+    }
+  }
+  OS_ASS_ID = null;
+  OS_ASS_TECNOME = '';
+  closeOsModal();
+  if(OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id === osId) await verOS(osId);
+  else if(!document.getElementById('aba-ostecnico').classList.contains('hidden')) await carregarPainelTecnico();
 }
 
 /* ---------- anexos ---------- */
@@ -9279,14 +9354,14 @@ function mapaPdfDia(){
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório do dia — ${esc(D.nome)} — ${esc(D.diaFmt)}</title>
   <style>
     *{box-sizing:border-box}
-    @page{ size:A4; margin:12mm 10mm 14mm 10mm; }
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:11.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:8px;margin:0 0 10px;}
+    @page{ size:A4; margin:18mm 14mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;margin:0;padding:6mm 4mm;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:14px;margin:4mm 0 16px;}
     .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .doc{text-align:right;}
-    .doc h1{font-size:19px;margin:0;letter-spacing:1px;color:#111;}
-    .doc .tipo{font-size:11.5px;color:#555;margin-top:2px;}
+    .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
+    .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
     .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:16px 0 8px;border-bottom:1px solid #e5e5e5;padding:8mm 0 5px;break-after:avoid;page-break-after:avoid;}
     .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
     .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
@@ -9518,8 +9593,14 @@ async function carregarPainelTecnico(){
     try{
       const osIds = [...new Set((atvs||[]).map(a=>a.os_clientes&&a.os_clientes.id).filter(Boolean))];
       if(osIds.length){
-        const rows = await apiGET(`os_anexos?os_id=in.(${osIds.join(',')})&select=os_id,nome`);
-        (rows||[]).forEach(r=>{ if(!osEhVideoNome(r.nome)) fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; });
+        const rows = await apiGET(`os_anexos?os_id=in.(${osIds.join(',')})&select=os_id,id,url,nome`);
+        TEC_FOTOS_LISTA = {};
+        (rows||[]).forEach(r=>{ if(!osEhVideoNome(r.nome)){ fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; (TEC_FOTOS_LISTA[r.os_id] = TEC_FOTOS_LISTA[r.os_id] || []).push({ id: r.id, url: r.url, nome: r.nome }); } });
+        try{
+          const sigTec = await apiGETsafe(`os_assinaturas?os_id=in.(${osIds.join(',')})&tipo=eq.tecnico&select=os_id`);
+          TEC_SIGTEC = {};
+          (sigTec||[]).forEach(r=>{ TEC_SIGTEC[r.os_id] = true; });
+        }catch(e){}
       }
     }catch(e){}
     // 📴 MODO OFFLINE: salva o SNAPSHOT desta lista no aparelho — é ele que
@@ -9691,6 +9772,7 @@ function tecRenderConcluidas(){ /* concluidas: sem navegação — o 🧭 é do 
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
+      ${temAssTecCard?`<div class="text-xs text-green-700 mt-1">✍️ Técnico assinou</div>`:''}
       <div class="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">
         <button type="button" class="btn-ghost w-full !py-2.5 text-sm" onclick="tecVerOSConc('${a.id}')">👁️ Ver OS</button>
         <button type="button" class="btn-brand w-full !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
@@ -9741,9 +9823,12 @@ async function tecVerOSConc(atvId){
        mostrava só a mais recente. Documentos (impressão/PDF) seguem regra própria. */
     const sigs=[], sigVistas=new Set();
     const chaveSig = u=>{ const s=String(u||'').trim(); try{ return decodeURIComponent(s); }catch(_){ return s; } };
-    const addSig = (url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
-    addSig(o.assinatura_url,'Cliente',o.assinatura_em);
-    (sigRows||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
+    const addSig = (url,nome,em,tipo)=>{ if(!url) return; const k=chaveSig(url); const tp = tipo==='tecnico' ? 'tecnico' : 'cliente';
+      const ex = sigs.find(x=>x.k===k);
+      if(ex){ if(nome && (ex.nome==='Cliente' || ex.nome==='Técnico')) ex.nome = nome; if(tp==='tecnico') ex.tipo = 'tecnico'; if(!ex.em && em) ex.em = em; return; }
+      sigVistas.add(k); sigs.push({ k, url, nome:nome || (tp==='tecnico' ? 'Técnico' : 'Cliente'), em, tipo: tp }); };
+    addSig(o.assinatura_url, null, o.assinatura_em, 'cliente');
+    (sigRows||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante || null, s.created_at, s.tipo));
     const fotos = (anexos||[]).filter(x=>!osEhVideoNome(x.nome) && !osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
     const videos = (anexos||[]).filter(x=>osEhVideoNome(x.nome) || osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
     openOsModal(`
@@ -9770,7 +9855,7 @@ async function tecVerOSConc(atvId){
         <div class="grid gap-2">${videos.map(u=>`<video src="${esc(u)}" controls preload="metadata" playsinline class="w-full rounded-lg border bg-black" style="max-height:260px"></video>`).join('')}</div></div>`:''}
       ${sigs.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ ${sigs.length>1?`Assinaturas do cliente (${sigs.length})`:'Assinatura do cliente'}</div>
         ${sigs.map(s=>`<div class="mb-2"><img src="${esc(s.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
-        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(s.nome||'Cliente')}${s.em?' · '+new Date(s.em).toLocaleString('pt-BR'):''}</div></div>`).join('')}</div>`:''}
+        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(s.nome||'Cliente')}${s.tipo==='tecnico'?' (Técnico)':''}${s.em?' · '+new Date(s.em).toLocaleString('pt-BR'):''}</div></div>`).join('')}</div>`:''}
       <div class="flex flex-col min-[400px]:flex-row gap-2 mt-4">
         <button type="button" class="btn-brand flex-1 !w-auto !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
         <button type="button" class="btn-ghost flex-1 !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>
@@ -9851,16 +9936,27 @@ function tecTemAssinaturaOS(a){
   const osId = os.id || a.os_id;
   try{ return !!((TEC_PEND && TEC_PEND.assinaturasFila) || new Set()).has(osId); }catch(e){ return false; }
 }
+let TEC_SIGTEC = {};       // osId -> true: assinatura do técnico já no servidor
+let TEC_FOTOS_LISTA = {};  // osId -> [{id,url,nome}] fotos do servidor (pro ✕ do painel)
+/* ✍️ A OS tem a assinatura do TÉCNICO? Vale a do servidor (os_assinaturas
+   tipo='tecnico') E a coletada neste aparelho que está na fila offline. */
+function tecTemAssinaturaTecOS(a){
+  if(!a) return false;
+  const osId = (a.os_clientes && a.os_clientes.id) || a.os_id;
+  if(osId && TEC_SIGTEC && TEC_SIGTEC[osId]) return true;
+  try{ return !!((TEC_PEND && TEC_PEND.assinaturasTecFila) || new Set()).has(osId); }catch(e){ return false; }
+}
 /* ✅ REGRA DA SEQUÊNCIA (Fabio, 22/10/2026): o Concluir é o ÚLTIMO botão da
    cadeia de botões do cartão — só libera com FOTO + ASSINATURA coletadas. */
 function tecConcluirLiberado(a){
   if(!a || tecBloqueado(a)) return false;
-  return tecFotosDaOS(a) >= 1 && tecTemAssinaturaOS(a);
+  return tecFotosDaOS(a) >= 1 && tecTemAssinaturaOS(a) && tecTemAssinaturaTecOS(a);
 }
 function tecAvisoConcluir(a){
   const falta = [];
   if(tecFotosDaOS(a) < 1) falta.push('a foto do atendimento');
   if(!tecTemAssinaturaOS(a)) falta.push('a assinatura do cliente');
+  if(!tecTemAssinaturaTecOS(a)) falta.push('a assinatura do técnico');
   toast('🚨 Para concluir, colete ' + (falta.length ? falta.join(' e ') : 'a foto e a assinatura') + ' — cada botão libera o próximo passo.','erro');
 }
 function tecAvisoAssinatura(){
@@ -9909,7 +10005,44 @@ function tecAssinaturaAbrir(osId){
   const a = tecAtvPorOs(osId);
   if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
   if(a && !tecAssinaturaLiberada(a)){ tecAvisoAssinatura(); return; }
-  osAbrirAssinatura(osId);
+  osAbrirAssinatura(osId, { tecNome: (a && a.tecnico) || (typeof TEC_TNOME !== 'undefined' ? TEC_TNOME : '') || '' });
+}
+/* 📷 FAIXA DE FOTOS DO CARTÃO (pedido do Fabio, 22/10/2026): o técnico VÊ as
+   fotos da OS no próprio cartão e apaga a errada/repetida no ✕ — foto do
+   servidor (apaga vínculo + arquivo) e foto da fila offline (apaga do
+   aparelho). Sem trava automática de duplicadas: parecidas são legítimas. */
+function tecFotosStripHTML(osId){
+  if(!osId) return '';
+  const srv = (TEC_FOTOS_LISTA && TEC_FOTOS_LISTA[osId]) || [];
+  const fila = (TEC_FOTOS_FILA && TEC_FOTOS_FILA[osId]) || [];
+  const total = srv.length + fila.length;
+  if(!total) return '';
+  const thumb = (u, onclick, filaFlag) => `<div class="relative"><img src="${esc(u)}" class="w-full h-16 object-cover rounded-lg border" loading="lazy" alt="Foto do atendimento"><button type="button" class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 text-xs font-bold shadow" title="Apagar esta foto" onclick="${onclick}">✕</button>${filaFlag ? '<div class="absolute bottom-1 left-1 text-[9px] font-bold rounded px-1 py-0.5" style="background:#ffedd5;color:#9a3412">⏳ no aparelho</div>' : ''}</div>`;
+  return `<div class="mt-2"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">📷 Fotos do atendimento (${total}) — ✕ apaga a errada</div>
+    <div class="grid grid-cols-4 gap-2">${srv.map(f=>thumb(f.url, `tecFotoApagar('${f.id}','${osId}')`, false)).join('')}${fila.map(f=>thumb(f.url, `tecFotoApagarFila('${f.intentId}','${osId}')`, true)).join('')}</div></div>`;
+}
+async function tecFotoApagar(anexoId, osId){
+  if(!confirm('Apagar esta foto da OS?')) return;
+  const lista = (TEC_FOTOS_LISTA && TEC_FOTOS_LISTA[osId]) || [];
+  const an = lista.find(x=>String(x.id) === String(anexoId));
+  try{
+    await apiDELETE('os_anexos', `id=eq.${anexoId}`);
+    const chave = an && an.url ? String(an.url).split('/object/public/recibos/')[1] : null;
+    if(chave) await fetch(`${SUPA_URL}/storage/v1/object/recibos/${chave}`, { method:'DELETE', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer ' + SUPA_KEY } }).catch(()=>{});
+    TEC_FOTOS_LISTA[osId] = lista.filter(x=>String(x.id) !== String(anexoId));
+    if(TEC_AB_CACHE && TEC_AB_CACHE.fotoCount && TEC_AB_CACHE.fotoCount[osId]) TEC_AB_CACHE.fotoCount[osId] = Math.max(0, TEC_AB_CACHE.fotoCount[osId] - 1);
+    toast('Foto apagada. ✓', 'ok');
+    renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+  }catch(e){ toast('Erro: ' + e.message, 'erro'); }
+}
+async function tecFotoApagarFila(intentId, osId){
+  if(!confirm('Apagar esta foto guardada no aparelho?')) return;
+  try{
+    await nlFilaRemove(intentId);
+    await nlAtualizarPendCache().catch(()=>{});
+    toast('Foto apagada do aparelho. ✓', 'ok');
+    renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+  }catch(e){ toast('Erro: ' + e.message, 'erro'); }
 }
 /* Clique em botão travado NÃO executa a ação: mostra o aviso da regra.
    Listener em CAPTURA no document — roda antes do onclick inline do botão;
@@ -10002,7 +10135,8 @@ function renderPainelTecnico(atvs, fotoCount){
     // ✅ cadeia de botões: foto (cartão+fila) e assinatura (servidor+fila)
     const fotosCard = fotoCount[os.id] || fotoCount[a.os_id] || 0;
     const temAssCard = tecTemAssinaturaOS(a);
-    const podeConc = !trav && fotosCard >= 1 && temAssCard;
+    const temAssTecCard = tecTemAssinaturaTecOS(a);
+    const podeConc = !trav && fotosCard >= 1 && temAssCard && temAssTecCard;
     const clsConc = podeConc ? '' : ' tec-travado';
     const lkConc = podeConc ? '' : '🔒 ';
     const attrConc = podeConc ? '' : ` title="Conclui com foto + assinatura coletadas" aria-disabled="true"`;
@@ -10061,6 +10195,7 @@ function renderPainelTecnico(atvs, fotoCount){
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
       ${(typeof temAssCard!=="undefined" && temAssCard && !os.assinatura_url)?`<div class="text-xs mt-1" style="color:#9a3412">✍️ Assinatura coletada no aparelho ⏳ aguardando envio</div>`:``}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
+      ${(stExib === 'em_atendimento' || stExib === 'pausada') ? tecFotosStripHTML(os.id || a.os_id || '') : ''}
       <div class="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
       ${!pendConc?`<div class="mt-1.5 text-center"><button type="button" class="text-xs text-gray-400 font-semibold py-1 whitespace-nowrap" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')" title="Uso avulso do operador — só quando o cliente solicitar">📧 Reenviar protocolo</button></div>`:''}
       ${(pendConc||pendSt)?`<div class="text-xs font-bold mt-2" style="color:#9a3412">⏳ aguardando envio</div>`:''}
@@ -10077,6 +10212,7 @@ function renderPainelTecnico(atvs, fotoCount){
    Online finaliza na hora (mesma conta do antigo fluxo); offline a
    conclusão entra na fila DEPOIS da foto e da assinatura. */
 let TEC_CONCLUIR = null;
+let TEC_CONC_OBS = null;  // rascunho da descrição entre a prévia e a correção
 function tecConcluirBotao(atvId, osId){
   const a = tecAtvPorId(atvId);
   if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
@@ -10091,14 +10227,82 @@ function tecConcluirBotao(atvId, osId){
     <div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>
     <div class="font-extrabold text-base mb-1">📝 O que foi feito?</div>
     <div class="text-xs text-gray-500 mb-3">Descreva o serviço executado — vai para a OS e para o cliente.</div>
-    <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…">${esc((a && a.descricao_conclusao) || '')}</textarea>
-    <button class="btn-brand w-full !py-3.5 text-base" id="tecBtnConcluirBotao" onclick="tecConcluirFinalizar()">✅ Finalizar atendimento</button>
+    <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…">${esc((TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId) && TEC_CONC_OBS.obs) || (a && a.descricao_conclusao) || '')}</textarea>
+    <button class="btn-brand w-full !py-3.5 text-base" id="tecBtnConcluirBotao" onclick="tecConcluirPrevia()">👁️ Pré-visualizar OS</button>
     <button class="btn-ghost w-full !py-2.5 text-sm mt-2" onclick="closeOsModal()">Cancelar</button>`);
 }
-async function tecConcluirFinalizar(){
+/* 👁️ PRÉ-VISUALIZAÇÃO ANTES DE FINALIZAR (pedido do Fabio, 22/10/2026):
+   com a descrição digitada, o técnico vê a OS EXATAMENTE como sai no
+   documento/e-mail (mesmo construtor da impressão) — confere fotos,
+   assinaturas e texto; se algo estiver errado, ✏️ Corrigir volta pra
+   descrição (rascunho preservado) e fotos/assinaturas se ajustam no
+   cartão; pré-visualiza de novo e só então finaliza. */
+async function tecDetalhePrevia(osId, atvId, obs){
+  let det = null;
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=*,clientes(*),equipamentos(*),tipos_os(descricao)`);
+    if(os){
+      const [atividades, anexos, assinaturas, equips, produtos, servicos, despesas, orcamentos, comentarios, historico] = await Promise.all([
+        apiGETsafe(`os_atividades?os_id=eq.${osId}&select=*&order=created_at.asc`),
+        apiGETsafe(`os_anexos?os_id=eq.${osId}&select=*&order=created_at.asc`),
+        apiGETsafe(`os_assinaturas?os_id=eq.${osId}&select=*&order=created_at.asc`),
+        apiGETsafe(`os_equipamentos?os_id=eq.${osId}&select=*,equipamentos(*)`),
+        apiGETsafe(`os_produtos?os_id=eq.${osId}&select=*`),
+        apiGETsafe(`os_servicos?os_id=eq.${osId}&select=*`),
+        apiGETsafe(`os_despesas?os_id=eq.${osId}&select=*`),
+        apiGETsafe(`os_orcamentos?os_id=eq.${osId}&select=*`),
+        apiGETsafe(`os_comentarios?os_id=eq.${osId}&select=*`),
+        apiGETsafe(`os_historico?os_id=eq.${osId}&select=*`)
+      ]);
+      det = { os, atividades, anexos, assinaturas, equips, produtos, servicos, despesas, orcamentos, comentarios, historico };
+    }
+  }catch(e){}
+  if(!det){
+    const a = tecAtvPorId(atvId);
+    det = { os: { ...((a && a.os_clientes) || {}) }, atividades: a ? [{ ...a }] : [], anexos: [], assinaturas: [], equips: [], produtos: [], servicos: [], despesas: [], orcamentos: [], comentarios: [], historico: [] };
+  }
+  const hhmm = new Date().toTimeString().slice(0, 5);
+  det.atividades = (det.atividades || []).map(x=> String(x.id) === String(atvId) ? { ...x, status: 'concluida', descricao_conclusao: obs, fim: x.fim || hhmm } : x);
+  try{
+    ((TEC_FOTOS_FILA && TEC_FOTOS_FILA[osId]) || []).forEach(f=>{ det.anexos.push({ url: f.url, nome: f.nome || 'foto.jpg' }); });
+    (TEC_SIG_FILA || []).filter(sg=>sg.osId === osId).forEach(sg=>{ det.assinaturas.push({ url: sg.url, nome_assinante: sg.nome || null, tipo: sg.tipo || 'cliente', created_at: new Date().toISOString() }); });
+  }catch(e){}
+  return det;
+}
+async function tecConcluirPrevia(){
+  const C = TEC_CONCLUIR; if(!C) return;
+  const obs = (document.getElementById('tecConcObs') || {}).value || '';
+  if(!String(obs).trim()){ toast('⚠️ Descreva o serviço executado antes de pré-visualizar.','erro'); return; }
+  TEC_CONC_OBS = { atvId: C.atvId, obs };
+  const btn = document.getElementById('tecBtnConcluirBotao');
+  if(btn){ btn.disabled = true; btn.textContent = 'Montando a prévia…'; }
+  try{
+    const det = await tecDetalhePrevia(C.osId, C.atvId, obs);
+    const html = osMontarHtmlImpressao(det);
+    openOsModal(`
+      <div class="font-bold text-brand text-sm mb-1">👁️ Pré-visualização da OS</div>
+      <div class="text-xs text-gray-500 mb-2">É assim que a OS sai no documento e no e-mail do cliente. Confira fotos, assinaturas e a descrição: se algo estiver errado, toque em ✏️ Corrigir, ajuste e pré-visualize de novo.</div>
+      <iframe id="tecPreviaFrame" class="w-full border rounded-xl bg-white" style="height:56vh"></iframe>
+      <button class="btn-brand w-full !py-3.5 text-base mt-3" id="tecBtnConcluirBotao" onclick="tecConcluirFinalizar(true)">✅ Finalizar atendimento</button>
+      <button class="btn-ghost w-full !py-2.5 text-sm mt-2" onclick="tecPreviaCorrigir()">✏️ Corrigir</button>`);
+    const f = document.getElementById('tecPreviaFrame');
+    if(f && f.contentWindow){ const dw = f.contentWindow.document; dw.open(); dw.write(html); dw.close(); }
+  }catch(e){ toast('Erro na prévia: ' + e.message, 'erro'); }
+  finally{
+    const b = document.getElementById('tecBtnConcluirBotao');
+    if(b && document.getElementById('tecConcObs')){ b.disabled = false; b.textContent = '👁️ Pré-visualizar OS'; }
+  }
+}
+function tecPreviaCorrigir(){
+  const C = TEC_CONCLUIR;
+  if(!C){ closeOsModal(); return; }
+  tecConcluirBotao(C.atvId, C.osId);
+  toast('Corrija a descrição aqui — ou feche e ajuste fotos e assinaturas no cartão. Depois, Concluir → pré-visualizar de novo.', 'alerta');
+}
+async function tecConcluirFinalizar(dePrevia){
   const C = TEC_CONCLUIR; if(!C) return;
   if(TEC_FINALIZANDO) return; // toque duplo
-  const obs = (document.getElementById('tecConcObs') || {}).value || '';
+  const obs = dePrevia === true ? ((TEC_CONC_OBS && TEC_CONC_OBS.obs) || '') : ((document.getElementById('tecConcObs') || {}).value || '');
   if(!String(obs).trim()){ toast('⚠️ Descreva o serviço executado antes de finalizar.','erro'); return; }
   const atvId = C.atvId, osId = C.osId;
   const a = tecAtvPorId(atvId);
@@ -10107,7 +10311,7 @@ async function tecConcluirFinalizar(){
   // 📴 OFFLINE: a conclusão fica em standby na fila — a foto e a assinatura
   //    coletadas pelos botões já estão na fila ANTES dela (ordem garantida).
   if(navigator.onLine===false){
-    try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; }
+    try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; TEC_CONC_OBS = null; }
     catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
     return;
   }
@@ -10133,6 +10337,7 @@ async function tecConcluirFinalizar(){
     try{ await osLog(osId, 'concluiu o atendimento pelo celular'); }catch(_){}
     osEnviarEmailAuto(osId); // 📧 envio automático da OS ao cliente
     TEC_CONCLUIR = null;
+    TEC_CONC_OBS = null;
     const [aa] = await apiGET(`os_atividades?id=eq.${atvId}&select=inicio,fim`);
     openOsModal(`
       <div class="text-center py-4">
@@ -10143,6 +10348,7 @@ async function tecConcluirFinalizar(){
           <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📝 Descrição registrada</div>
           <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📷 ${nfotos} foto(s) anexada(s)</div>
           <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ Assinatura do cliente coletada</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ Assinatura do técnico coletada</div>
           ${aa&&aa.inicio&&aa.fim?`<div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">⏱️ Duração: ${osDuracaoReal(aa)||'—'}</div>`:''}
         </div>
         <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
@@ -10206,7 +10412,7 @@ function tecFluxoRender(){
     corpo = `<div class="font-extrabold text-base mb-1">✍️ Assinatura do cliente</div>
       <div class="text-xs text-gray-500 mb-3">Entregue o celular ao responsável para assinar no quadro.</div>
       <canvas id="tecFluxoPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
-      <input id="tecFluxoNome" class="inp text-base mb-3" placeholder="Nome de quem assinou">
+      <input id="tecFluxoNome" class="inp text-base mb-3 uppercase" placeholder="Nome de quem assinou" oninput="this.value=this.value.toUpperCase()">
       <button class="btn-brand w-full !py-3.5 text-base mb-2" id="tecBtnFinalizar" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
       <button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
       <button class="w-full text-sm text-gray-500 mt-2" onclick="tecFluxoVoltar()">← Voltar</button>`;
@@ -10353,7 +10559,7 @@ async function tecFluxoFinalizar(){
   const F = TEC_FLUXO; if(!F) return;
   if(TEC_FINALIZANDO) return; // toque duplo: a 1ª execução já está em voo
   if(!tecGpsPodeAgir()) return;
-  const nome = (document.getElementById('tecFluxoNome')||{}).value||'';
+  const nome = ((document.getElementById('tecFluxoNome')||{}).value||'').toUpperCase(); /* regra 22/10: nome de quem assinou em CAIXA ALTA */
   const cv = document.getElementById('tecFluxoPad');
   const padDesenhado = !!(cv && !tecPadVazio(cv));
   const offline = (navigator.onLine===false);
@@ -10423,8 +10629,8 @@ async function tecFluxoFinalizar(){
     //    qualquer coisa — se a rede de campo falhar, a atividade continua na lista do
     //    técnico e ele consegue tentar de novo (antes, concluía e a atividade sumia).
     if(sigBlob){
-      // 🛡️ mesmo desenho já salvo neste atendimento? reaproveita a URL —
-      // nada de salvar a assinatura 2x (OS-2026-0003).
+      // 🛡️ mesmo desenho já salvo neste atendimento (passo da assinatura)?
+      // reaproveita a URL — nada de salvar a assinatura 2x (OS-2026-0003).
       const __impFin = await osSigImpressao(sigBlob);
       const __jaUrl = (__impFin && window.__sigSalvasOS) ? window.__sigSalvasOS[F.osId + ':' + __impFin] : null;
       if(__jaUrl){
@@ -10952,8 +11158,10 @@ async function osReenviarEmail(osId, btn, tipo){
 }
 
 /* ---------- impressão (espelha o documento de referência) ---------- */
-function imprimirOS(){
-  const d = OS_DETALHE; if(!d){ toast('Abra uma OS para imprimir.','erro'); return; }
+/* Monta o HTML do documento da OS (impressão E pré-visualização do técnico
+   usam O MESMO construtor — a prévia é o documento de verdade). */
+function osMontarHtmlImpressao(d){
+  if(!d || !d.os) return '';
   const o = d.os, cli = o.clientes||{}, tot = osTotal(d);
   // REGRA DOS VÍNCULOS (20/10, igual à Edge Function): seções Vínculos e Totais
   // só aparecem quando há cobrança (total > 0) — OS sem valor não mostra R$ 0,00.
@@ -11002,14 +11210,14 @@ function imprimirOS(){
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
     *{box-sizing:border-box}
-    @page{ size:A4; margin:18mm 14mm 18mm 14mm; }
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;margin:0;padding:6mm 4mm;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:14px;margin:4mm 0 16px;}
-    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    @page{ size:A4; margin:12mm 10mm 14mm 10mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:11.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:8px;margin:0 0 10px;}
+    .marca .nome{font-size:17px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .doc{text-align:right;}
-    .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
-    .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
+    .doc h1{font-size:19px;margin:0;letter-spacing:1px;color:#111;}
+    .doc .tipo{font-size:11.5px;color:#555;margin-top:2px;}
     .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:10px 0 5px;border-bottom:1px solid #e5e5e5;padding:0 0 4px;break-after:avoid;page-break-after:avoid;}
     .sec .dir{font-size:11px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;}
     .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px 10px;margin-bottom:6px;break-inside:avoid;page-break-inside:avoid;}
@@ -11023,7 +11231,7 @@ function imprimirOS(){
     .card4{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:5px 8px;}
     .card4 .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
     .card4 .v{font-size:12px;font-weight:600;margin-top:1px;}
-    .mut{color:#888;font-size:12px;}
+    .mut{color:#888;font-size:11px;}
     .totais{display:flex;gap:12px;align-items:center;justify-content:center;margin:8px 0;font-size:11.5px;flex-wrap:wrap;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px;break-inside:avoid;page-break-inside:avoid;}
     .totais b{font-size:13.5px;}
     .thumb{max-height:92px;border:1px solid #ddd;border-radius:8px;margin:0 6px 6px 0;}
@@ -11065,9 +11273,13 @@ function imprimirOS(){
     /* DESDUPLICAÇÃO (20/10/2026): a MESMA assinatura existe em os_clientes.assinatura_url
        E em os_assinaturas (o fluxo do celular salva nas duas) — a impressão mostra 1 vez só. */
     const chaveSig=u=>{ const s=String(u||'').trim(); try{ return decodeURIComponent(s); }catch(_){ return s; } };
-    const addSig=(url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
-    addSig(o.assinatura_url,'Cliente',o.assinatura_em);
-    (d.assinaturas||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
+    const addSig=(url,nome,em,tipo)=>{ if(!url) return; const k=chaveSig(url); const tp = tipo==='tecnico' ? 'tecnico' : 'cliente';
+      const ex = sigs.find(x=>x.k===k);
+      if(ex){ if(nome && (ex.nome==='Cliente' || ex.nome==='Técnico')) ex.nome = nome; if(tp==='tecnico') ex.tipo = 'tecnico'; if(!ex.em && em) ex.em = em; return; }
+      sigVistas.add(k); sigs.push({ k, url, nome: nome || (tp==='tecnico' ? 'Técnico' : 'Cliente'), em, tipo: tp }); };
+    addSig(o.assinatura_url, null, o.assinatura_em, 'cliente');
+    (d.assinaturas||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante || null, s.created_at, s.tipo));
+    sigs.sort((x,y)=> x.tipo===y.tipo ? 0 : (x.tipo==='cliente' ? -1 : 1));
     /* REGRA DO USUÁRIO (atualizada 21/10/2026, decisão dele após o caso da OS 12675):
        a impressão mostra TODAS as assinaturas DISTINTAS (a desduplicação por URL acima
        continua valendo — a mesma assinatura gravada 2x aparece 1x só). Substitui a
@@ -11075,13 +11287,18 @@ function imprimirOS(){
     if(!sigs.length) return '';
     return `<div class="sec"><span>Assinatura${sigs.length>1?'s':''}</span></div>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:4px 0 2px">` + sigs.map(s=>`
-      <div class="ass" style="margin-top:0;min-width:180px;flex:1;max-width:260px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
-      ${s.em?`<div class="mut">Assinado em: ${new Date(s.em).toLocaleString('pt-BR')}</div>`:''}</div>`).join('') + `</div>`;
+      <div class="ass" style="margin-top:0;min-width:180px;flex:1;max-width:260px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem"><b>${esc(s.nome||'Cliente')}</b></div>
+      <div class="mut">${s.tipo==='tecnico' ? 'Técnico responsável' : 'Assinatura do cliente'}${s.em ? ' · Assinado em: ' + new Date(s.em).toLocaleString('pt-BR') : ''}</div></div>`).join('') + `</div>`;
   })()}
   ${anexoSec}
   <div class="rodape"><span>Documento gerado pelo sistema New Life Diagnóstico</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="noprint" style="margin-top:10px;text-align:center"><button onclick="window.print()" style="padding:8px 24px;font-size:14px">🖨️ Imprimir</button></div>
   </body></html>`;
+  return html;
+}
+function imprimirOS(){
+  const d = OS_DETALHE; if(!d){ toast('Abra uma OS para imprimir.','erro'); return; }
+  const html = osMontarHtmlImpressao(d);
   let f = document.getElementById('printFrameOS');
   if(!f){ f = document.createElement('iframe'); f.id='printFrameOS'; f.style.display='none'; document.body.appendChild(f); }
   const docw = f.contentWindow.document;
@@ -11126,7 +11343,7 @@ const NL_DB_NOME = 'nl-offline';
 const NL_OVERLAY_KEY = 'nl_tec_overlay';
 let __nlDbPromise = null;
 let TEC_OVERLAY = {};   // cache em memória do overlay (render é síncrono)
-let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set(), fotosFila:{}, assinaturasFila:new Set() };
+let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set(), fotosFila:{}, assinaturasFila:new Set(), assinaturasTecFila:new Set() };
 let NL_SYNC_ANDANDO = false;
 
 /* Falha de REDE (não erro HTTP do servidor): fetch rejeita com TypeError,
@@ -11233,12 +11450,29 @@ function nlMontarPend(itens){
     fotosFila: itens.filter(i=>i.tipo==='foto').reduce((m,i)=>{ if(i.osId) m[i.osId]=(m[i.osId]||0)+1; return m; }, {}),
     // ✍️ OSs com assinatura já coletada neste aparelho (guardada na fila ou
     // numa conclusão pendente): contam pra liberar o ✅ Concluir offline.
-    assinaturasFila: new Set(itens.filter(i=>i.tipo==='assinatura' || (i.tipo==='conclusao' && (i.sigPath || i.sigUrl))).map(i=>i.osId))
+    assinaturasFila: new Set(itens.filter(i=>(i.tipo==='assinatura' && i.sigTipo!=='tecnico') || (i.tipo==='conclusao' && (i.sigPath || i.sigUrl))).map(i=>i.osId)),
+    assinaturasTecFila: new Set(itens.filter(i=>i.tipo==='assinatura' && i.sigTipo==='tecnico').map(i=>i.osId))
   };
 }
+const NL_OBJURLS = {};
+function nlObjUrl(it){
+  if(!it || !it.blob) return '';
+  if(!NL_OBJURLS[it.id]){ try{ NL_OBJURLS[it.id] = URL.createObjectURL(it.blob); }catch(e){ return ''; } }
+  return NL_OBJURLS[it.id];
+}
+let TEC_FOTOS_FILA = {};  // osId -> [{intentId,url,nome}] fotos guardadas no aparelho
+let TEC_SIG_FILA = [];    // [{osId,tipo,nome,url}] assinaturas guardadas no aparelho
 async function nlAtualizarPendCache(){
   const itens = await nlFilaAll();
   TEC_PEND = nlMontarPend(itens);
+  try{
+    const ff = {}, sf = [];
+    (itens || []).forEach(it=>{
+      if(it.tipo === 'foto' && it.osId && it.blob) (ff[it.osId] = ff[it.osId] || []).push({ intentId: it.id, url: nlObjUrl(it), nome: it.nomeOriginal || 'foto.jpg' });
+      if(it.tipo === 'assinatura' && it.osId && it.blob) sf.push({ osId: it.osId, tipo: it.sigTipo || 'cliente', nome: it.nomeAssinante || '', url: nlObjUrl(it) });
+    });
+    TEC_FOTOS_FILA = ff; TEC_SIG_FILA = sf;
+  }catch(e){}
   const comIntent = new Set(itens.map(i=>i.atvId).filter(Boolean));
   const ov = nlOverlayLer();
   let mudou = false;
@@ -11297,10 +11531,11 @@ async function nlEnviarAssinaturaIntent(it){
     const t = await r.text().catch(()=> '');
     if(!/already exists|duplicate/i.test(t)) throw new Error('Upload da assinatura falhou (' + r.status + ')');
   }
-  await apiPATCH('os_clientes', `id=eq.${it.osId}`, { assinatura_url: url, assinatura_em: it.sigEm || new Date().toISOString() });
+  const ehTec = it.sigTipo === 'tecnico';
+  if(!ehTec) await apiPATCH('os_clientes', `id=eq.${it.osId}`, { assinatura_url: url, assinatura_em: it.sigEm || new Date().toISOString() });
   const ja = await apiGETsafe(`os_assinaturas?os_id=eq.${it.osId}&url=eq.${encodeURIComponent(url)}&select=id&limit=1`);
-  if(!ja.length){ try{ await apiPOSTsafe('os_assinaturas', { os_id: it.osId, url, nome_assinante: null }); }catch(_){} }
-  try{ await osLog(it.osId, 'coletou a assinatura do cliente'); }catch(_){}
+  if(!ja.length){ try{ await apiPOSTsafe('os_assinaturas', { os_id: it.osId, url, nome_assinante: it.nomeAssinante || null, tipo: ehTec ? 'tecnico' : 'cliente' }); }catch(_){} }
+  try{ await osLog(it.osId, ehTec ? 'assinou como técnico responsável' : 'coletou a assinatura do cliente'); }catch(_){}
   await nlFilaRemove(it.id);
   return url;
 }
