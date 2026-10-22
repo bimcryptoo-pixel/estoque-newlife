@@ -1232,6 +1232,12 @@
             <button id="tecAbaAbertas" type="button" class="btn-brand flex-1 !py-2 text-sm" onclick="tecAba('abertas')">📋 Abertas</button>
             <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
           </div>
+          <div class="rounded-2xl border bg-gray-50 p-3 mb-3">
+            <label class="block">
+              <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">👥 CLIENTE</span>
+              <select id="tecFiltroCliente" class="inp w-full min-w-0 text-sm !mb-0" onchange="tecFiltroClienteMudou()"><option value="">Todos os clientes</option></select>
+            </label>
+          </div>
           <div id="tecAbFiltro" class="rounded-2xl border bg-gray-50 p-3 mb-3">
             <div class="grid grid-cols-2 gap-2">
               <label class="block min-w-0">
@@ -9198,6 +9204,31 @@ let TEC_TNOME = '';           // tecnico_nome resolvido (carregarPainelTecnico)
 let TEC_CONC = [];            // cache das concluídas carregadas
 let TEC_CONC_FILTRO = '';     // filtro de data da aba Concluídas (aaaa-mm-dd)
 let TEC_AB_FILTRO = { de:'', ate:'' }; // 📅 filtro De/Até da aba Abertas (21/10/2026)
+let TEC_FILTRO_CLIENTE = '';        // 👥 filtro por cliente do Minhas OS (21/10/2026) — chave normalizada
+let TEC_FILTRO_CLIENTE_ROTULO = ''; // rótulo do cliente filtrado (pra manter a opção viva)
+/* 👥 chave do cliente da atividade (nome normalizado — mesmo critério do Painel OS) */
+function tecCliChave(a){
+  const c = a && a.os_clientes && a.os_clientes.clientes;
+  return c && c.nome ? osNormNome(c.nome) : '';
+}
+/* 👥 (re)monta as opções do filtro com os clientes das duas abas (união) */
+function tecPopularFiltroCliente(){
+  const sel = document.getElementById('tecFiltroCliente'); if(!sel) return;
+  const mapa = new Map();
+  const add = (a)=>{ const c = a && a.os_clientes && a.os_clientes.clientes; if(c && c.nome){ const k = osNormNome(c.nome); if(k && !mapa.has(k)) mapa.set(k, fmtCliNome(c.nome, c.tipo)); } };
+  ((TEC_AB_CACHE && TEC_AB_CACHE.atvs) || []).forEach(add);
+  (TEC_CONC || []).forEach(add);
+  if(TEC_FILTRO_CLIENTE && !mapa.has(TEC_FILTRO_CLIENTE)) mapa.set(TEC_FILTRO_CLIENTE, TEC_FILTRO_CLIENTE_ROTULO || TEC_FILTRO_CLIENTE);
+  sel.innerHTML = '<option value="">Todos os clientes</option>' +
+    [...mapa.entries()].sort((x,y)=>x[1].localeCompare(y[1])).map(([k,v])=>`<option value="${esc(k)}"${k===TEC_FILTRO_CLIENTE?' selected':''}>${esc(v)}</option>`).join('');
+}
+function tecFiltroClienteMudou(){
+  const sel = document.getElementById('tecFiltroCliente');
+  TEC_FILTRO_CLIENTE = sel ? sel.value : '';
+  TEC_FILTRO_CLIENTE_ROTULO = sel && sel.selectedIndex>0 ? sel.options[sel.selectedIndex].text : '';
+  if(TEC_ABA==='concluidas') tecRenderConcluidas();
+  else if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+}
 let TEC_AB_CACHE = null;              // última carga da Abertas (refiltrar sem rede)
 /* 📅 data de referência da atividade: a data agendada; sem ela, a de criação */
 function tecDataAtv(a){ return String((a && a.data) || (a && a.created_at) || '').slice(0,10); }
@@ -9237,6 +9268,7 @@ function tecAba(qual){
   if(fAb) fAb.classList.toggle('hidden', TEC_ABA!=='abertas');
   if(wC) wC.classList.toggle('hidden', TEC_ABA!=='concluidas');
   if(TEC_ABA==='concluidas') tecCarregarConcluidas();
+  else if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount); // 👥📅 reaplica os filtros ao voltar
 }
 async function tecCarregarConcluidas(){
   const lista = document.getElementById('tecConcLista');
@@ -9278,10 +9310,12 @@ function tecRenderConcluidas(){
   const lista = document.getElementById('tecConcLista');
   if(!lista) return;
   const cnt = document.getElementById('tecConcCount');
+  tecPopularFiltroCliente();
   let atvs = TEC_CONC || [];
   const total = atvs.length;
   if(TEC_CONC_FILTRO) atvs = atvs.filter(a=>String(a.data||'').slice(0,10)===TEC_CONC_FILTRO);
-  if(cnt) cnt.textContent = atvs.length + (atvs.length===1 ? ' concluída' : ' concluídas') + (TEC_CONC_FILTRO && total!==atvs.length ? ` (de ${total} no total)` : '');
+  if(TEC_FILTRO_CLIENTE) atvs = atvs.filter(a=>tecCliChave(a)===TEC_FILTRO_CLIENTE);
+  if(cnt) cnt.textContent = atvs.length + (atvs.length===1 ? ' concluída' : ' concluídas') + ((TEC_CONC_FILTRO || TEC_FILTRO_CLIENTE) && total!==atvs.length ? ` (de ${total} no total)` : '');
   if(!atvs.length){
     lista.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">Nenhuma OS concluída encontrada.</div>';
     return;
@@ -9470,13 +9504,17 @@ function renderPainelTecnico(atvs, fotoCount){
     box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
     return;
   }
+  tecPopularFiltroCliente();
   // 📅 regra: mais atual primeiro; filtro De/Até quando preenchido
   let lista = tecOrdenarDesc(atvs);
   const { de, ate } = TEC_AB_FILTRO;
   if(de || ate) lista = lista.filter(a=>{ const d = tecDataAtv(a); return (!de || d>=de) && (!ate || d<=ate); });
-  if(cntAb) cntAb.textContent = (de||ate) ? `${lista.length} de ${atvs.length} OSs` : `${atvs.length} OSs`;
+  if(TEC_FILTRO_CLIENTE) lista = lista.filter(a=>tecCliChave(a)===TEC_FILTRO_CLIENTE);
+  if(cntAb) cntAb.textContent = (de||ate||TEC_FILTRO_CLIENTE) ? `${lista.length} de ${atvs.length} OSs` : `${atvs.length} OSs`;
   if(!lista.length){
-    box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📅 Nenhuma OS nesse período — ajuste as datas ou toque em Limpar.</div>';
+    box.innerHTML = TEC_FILTRO_CLIENTE
+      ? '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">👥 Nenhuma OS desse cliente aqui — troque o cliente ou volte para "Todos os clientes".</div>'
+      : '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📅 Nenhuma OS nesse período — ajuste as datas ou toque em Limpar.</div>';
     return;
   }
   const __cardsTec = lista.map(a=>{
@@ -9510,6 +9548,7 @@ function renderPainelTecnico(atvs, fotoCount){
     if(!pendConc){
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
+    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo de abertura</button>`;
     btns += `<button class="col-span-2 text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
     }
     return `
