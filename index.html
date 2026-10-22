@@ -1181,15 +1181,13 @@
           </div>
           <div class="flex flex-wrap items-center gap-2 mb-3" id="osPeriodoBox">
             <span class="text-sm font-bold text-gray-600">📅 Período:</span>
-            <select id="osFiltroPeriodo" class="inp text-sm !w-auto" onchange="osPeriodoMudou()">
-              <option value="">Todas as datas</option>
-              <option value="hoje">Hoje</option>
-              <option value="semana">Esta semana</option>
-              <option value="mes">Este mês</option>
-              <option value="mespassado">Mês passado</option>
-              <option value="mesesp">Mês específico…</option>
-              <option value="periodo">Período específico…</option>
-            </select>
+            <div class="relative" id="osPerWrap">
+              <input type="hidden" id="osFiltroPeriodo" value="">
+              <button type="button" id="osPerBtn" class="inp text-sm !w-auto flex justify-between items-center gap-3" onclick="fcAbrir('periodo',event)"><span id="osPerLabel" class="truncate">Todas as datas</span><span>▾</span></button>
+              <div id="osPerLista" class="hidden absolute left-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] w-64 max-w-[85vw] max-h-96 flex flex-col">
+                <div id="osPerOpcoes" class="overflow-y-auto"></div>
+              </div>
+            </div>
             <span id="osPeriodoMesBox" class="hidden items-center gap-2">
               <input type="month" id="osMesEsp" class="inp text-sm !w-auto" onchange="osRecarregar()">
             </span>
@@ -6251,6 +6249,7 @@ const FC_CFG = {
   tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os tipos',    vazio:'Nenhum tipo encontrado.' },
   email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
   eqcli:{ hidden:'eqFiltroCliente',  label:'eqFcLabel',  lista:'eqFcLista',  busca:'eqFcBusca',  opcoes:'eqFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
+  periodo:{ hidden:'osFiltroPeriodo', label:'osPerLabel', lista:'osPerLista', busca:'osPerBusca', opcoes:'osPerOpcoes', todos:'Todas as datas', vazio:'—' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
@@ -6261,7 +6260,15 @@ const OS_EM_ITENS = [   // filtro 📧 E-mails (21/10/2026): registro de envios
   { valor:'cc_env', rotulo:'📨 Conclusão enviada' },
   { valor:'cc_nao', rotulo:'⚠️ Conclusão não enviada' },
 ];
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : OS_FC_ITENS; }
+const OS_PER_ITENS = [  // 📅 filtro de Período da OS Clientes (22/10/2026)
+  { valor:'hoje', rotulo:'Hoje' },
+  { valor:'semana', rotulo:'Esta semana' },
+  { valor:'mes', rotulo:'Este mês' },
+  { valor:'mespassado', rotulo:'Mês passado' },
+  { valor:'mesesp', rotulo:'Mês específico…' },
+  { valor:'periodo', rotulo:'Período específico…' },
+];
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
@@ -6275,7 +6282,7 @@ function fcAbrir(qual, ev){
   l.classList.remove('hidden');
   if(b) setTimeout(()=>{ try{ b.focus(); }catch(_){ } }, 30);
 }
-function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista,#eqFcLista').forEach(x=>x.classList.add('hidden')); }
+function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista,#eqFcLista,#osPerLista').forEach(x=>x.classList.add('hidden')); }
 function fcRender(qual){
   const cfg = FC_CFG[qual], div = document.getElementById(cfg.opcoes);
   if(!div) return;
@@ -6297,6 +6304,7 @@ function fcEscolher(qual, valorEnc){
   if(qual==='tec'){ TEC_FILTRO_CLIENTE_ROTULO = valor && it ? it.rotulo : ''; tecFiltroClienteMudou(); }
   else if(qual==='tipo'){ osRecarregar(); }
   else if(qual==='eqcli'){ osListarEquipamentos(); }
+  else if(qual==='periodo'){ osPeriodoMudou(); }
   else if(qual==='email'){
     // conclusão só existe em OS concluída: força a situação p/ 'todas'
     if(valor==='cc_env' || valor==='cc_nao'){
@@ -6321,7 +6329,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
