@@ -9548,7 +9548,7 @@ async function tecCarregarConcluidas(){
     lista.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📴 Sem internet — o histórico precisa de conexão.</div>';
   }
 }
-function tecRenderConcluidas(){
+function tecRenderConcluidas(){ /* concluidas: sem navegação — o 🧭 é do cartão de trabalho (Abertas) */
   const lista = document.getElementById('tecConcLista');
   if(!lista) return;
   const cnt = document.getElementById('tecConcCount');
@@ -9693,6 +9693,38 @@ const TRAVA_TITULO = 'Primeiro toque em 🚗 A caminho — o atendimento começa
    DESATIVADO pra todos (VIDEO_LIBERADO=false, estrutura mantida), a
    sequência que libera a assinatura é: A caminho → Iniciar → Foto. */
 const TRAVA_ASS_TITULO = 'A assinatura libera depois da 📷 Foto do atendimento.';
+/* 🧭 NAVEGAÇÃO (pedido do Fabio, 22/10/2026 — comportamento do Field): no
+   cartão do Minhas OS, tocar no NOME do cliente (ou no endereço) abre a
+   escolha do app de navegação (Google Maps / Waze / Maps do iPhone) com o
+   endereço cadastrado do cliente já preenchido como destino. NÃO faz parte
+   da sequência de trabalho — fica sempre disponível, travado ou não. */
+let TEC_NAV = {};          // osId -> {nome, end} da última renderização
+let TEC_NAV_ATUAL = null;  // destino aberto na caixinha de escolha
+function tecNavegar(osId){
+  const n = TEC_NAV[osId];
+  if(!n) return;
+  if(!n.end){ toast('⚠️ Cliente sem endereço cadastrado — complete o cadastro do cliente pra navegar.'); return; }
+  TEC_NAV_ATUAL = n;
+  const elN = document.getElementById('navCliNome'), elE = document.getElementById('navCliEnd'), m = document.getElementById('modalNavegar');
+  if(elN) elN.textContent = n.nome || 'Cliente';
+  if(elE) elE.textContent = '📍 ' + n.end;
+  if(m) m.style.display = 'flex';
+}
+function tecNavegarFechar(){
+  const m = document.getElementById('modalNavegar');
+  if(m) m.style.display = 'none';
+  TEC_NAV_ATUAL = null;
+}
+function tecNavegarIr(tipo){
+  const n = TEC_NAV_ATUAL;
+  if(!n || !n.end) return;
+  const q = encodeURIComponent(n.end);
+  const url = tipo === 'waze' ? `https://waze.com/ul?q=${q}&navigate=yes`
+    : tipo === 'apple' ? `https://maps.apple.com/?daddr=${q}`
+    : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
+  tecNavegarFechar();
+  window.open(url, '_blank');
+}
 function tecFotosDaOS(a){
   if(!a) return 0;
   const osId = (a.os_clientes && a.os_clientes.id) || a.os_id;
@@ -9803,6 +9835,7 @@ function renderPainelTecnico(atvs, fotoCount){
       : '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📅 Nenhuma OS nesse período — ajuste as datas ou toque em Limpar.</div>';
     return;
   }
+  TEC_NAV = {};
   const __cardsTec = lista.map(a=>{
     const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
     const ovSt = TEC_OVERLAY[a.id] ? TEC_OVERLAY[a.id].status : null;
@@ -9811,6 +9844,7 @@ function renderPainelTecnico(atvs, fotoCount){
     const pendConc = TEC_PEND.conclusaoAtvs.has(a.id);
     const pendSt = !!ovSt || TEC_PEND.statusAtvs.has(a.id);
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
+    TEC_NAV[os.id || a.os_id] = { nome: cli.nome || '', end };
     let btns = '';
     // 🔒 fluxo obrigatório: pendente/agendada sem A caminho → Iniciar,
     //    Assinatura e Foto nascem travados (visual + clique interceptado).
@@ -9852,8 +9886,8 @@ function renderPainelTecnico(atvs, fotoCount){
         <div class="font-black text-brand text-lg">${esc(os.numero||'')}</div>
         ${atvTecBadge(stExib)}
       </div>
-      <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
-      ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
+      <div class="font-bold text-sm">${end?`<span class="cursor-pointer" title="🧭 Abrir navegação pro endereço do cliente" onclick="tecNavegar('${os.id||a.os_id||''}')">${esc(fmtCliNome(cli.nome||'—', cli.tipo))} <span class="text-brand">🧭</span></span>`:esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      ${end?`<div class="text-xs text-gray-500 cursor-pointer" title="🧭 Abrir navegação pro endereço do cliente" onclick="tecNavegar('${os.id||a.os_id||''}')">📍 ${esc(end)}</div>`:''}
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
       ${eq.nome?`<div class="text-xs text-gray-500">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
       <div class="text-xs font-semibold text-gray-700 mt-1.5">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
@@ -11037,5 +11071,18 @@ try{
   // senão, fica na tela de login
 })();
 </script>
+<!-- 🧭 Caixinha de navegação (Minhas OS): escolha do app com o endereço do cliente -->
+<div id="modalNavegar" class="fixed inset-0 items-end sm:items-center justify-center" style="display:none;background:rgba(0,0,0,.45);z-index:10060" onclick="if(event.target===this)tecNavegarFechar()">
+  <div class="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl sm:m-4">
+    <div class="font-black text-base" id="navCliNome">Cliente</div>
+    <div class="text-xs text-gray-500 mt-0.5 mb-4" id="navCliEnd"></div>
+    <div class="space-y-2">
+      <button type="button" class="btn-ghost w-full !py-3 font-bold" onclick="tecNavegarIr('google')">🗺️ Google Maps</button>
+      <button type="button" class="btn-ghost w-full !py-3 font-bold" onclick="tecNavegarIr('waze')">🚗 Waze</button>
+      <button type="button" class="btn-ghost w-full !py-3 font-bold" onclick="tecNavegarIr('apple')">📍 Maps do iPhone</button>
+      <button type="button" class="w-full !py-2 text-sm text-gray-500 font-semibold" onclick="tecNavegarFechar()">Cancelar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
