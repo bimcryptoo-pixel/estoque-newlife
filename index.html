@@ -1224,20 +1224,33 @@
             <button id="tecAbaAbertas" type="button" class="btn-brand flex-1 !py-2 text-sm" onclick="tecAba('abertas')">📋 Abertas</button>
             <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
           </div>
-          <div id="tecAbFiltro" class="flex items-center gap-2 flex-wrap mb-3">
-            <span class="text-xs font-bold text-gray-500">📅 De</span>
-            <input type="date" id="tecAbDe" class="inp !w-auto text-sm !mb-0" onchange="tecAbFiltrar()">
-            <span class="text-xs font-bold text-gray-500">até</span>
-            <input type="date" id="tecAbAte" class="inp !w-auto text-sm !mb-0" onchange="tecAbFiltrar()">
-            <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecAbLimparFiltro()">Limpar</button>
-            <span id="tecAbCount" class="text-xs text-gray-500 font-bold"></span>
+          <div id="tecAbFiltro" class="rounded-2xl border bg-gray-50 p-3 mb-3">
+            <div class="flex gap-2">
+              <label class="flex-1 min-w-0">
+                <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DE</span>
+                <input type="date" id="tecAbDe" class="inp w-full text-sm !mb-0" onchange="tecAbFiltrar()">
+              </label>
+              <label class="flex-1 min-w-0">
+                <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">ATÉ</span>
+                <input type="date" id="tecAbAte" class="inp w-full text-sm !mb-0" onchange="tecAbFiltrar()">
+              </label>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecAbLimparFiltro()">Limpar</button>
+              <span id="tecAbCount" class="text-xs text-gray-500 font-bold"></span>
+            </div>
           </div>
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
           <div id="tecConcWrap" class="hidden">
-            <div class="flex items-center gap-2 flex-wrap mb-2">
-              <input type="date" id="tecConcData" class="inp !w-auto text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
-              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecConcLimparFiltro()">Limpar</button>
-              <span id="tecConcCount" class="text-xs text-gray-500 font-bold"></span>
+            <div class="rounded-2xl border bg-gray-50 p-3 mb-3">
+              <label class="block">
+                <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DIA</span>
+                <input type="date" id="tecConcData" class="inp w-full text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
+              </label>
+              <div class="flex items-center justify-between mt-2">
+                <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecConcLimparFiltro()">Limpar</button>
+                <span id="tecConcCount" class="text-xs text-gray-500 font-bold"></span>
+              </div>
             </div>
             <div id="tecConcLista" class="grid gap-3"></div>
           </div>
@@ -9256,7 +9269,7 @@ function tecRenderConcluidas(){
     const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
     return `
-    <div class="border rounded-xl p-3 bg-white">
+    <div class="border rounded-2xl p-4 bg-white shadow-sm">
       <div class="flex items-center justify-between gap-2 mb-1">
         <div class="font-black text-brand">${esc(os.numero||'')}</div>
         ${atvTecBadge('concluida')}
@@ -9269,9 +9282,9 @@ function tecRenderConcluidas(){
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
-      <div class="flex gap-2 mt-2">
-        <button type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecVerOSConc('${a.id}')">👁️ Ver OS</button>
-        <button type="button" class="btn-brand flex-1 !w-auto !py-2 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
+      <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">
+        <button type="button" class="btn-ghost w-full !py-2.5 text-sm" onclick="tecVerOSConc('${a.id}')">👁️ Ver OS</button>
+        <button type="button" class="btn-brand w-full !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
       </div>
     </div>`;
   }).join('');
@@ -9462,38 +9475,38 @@ function renderPainelTecnico(atvs, fotoCount){
     const attrTrav = trav ? ` title="${TRAVA_TITULO}" aria-disabled="true"` : '';
     if(pendConc){ /* 📴 conclusão aguardando envio: ações bloqueadas até sincronizar */ }
     else if(stExib==='pendente'||stExib==='agendada'){
-      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="iniciar"${attrTrav} onclick="tecMudarStatus('${a.id}','em_atendimento')">${lkTrav}▶️ Iniciar</button>`;
+      btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
+      btns += `<button class="btn-brand w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="iniciar"${attrTrav} onclick="tecMudarStatus('${a.id}','em_atendimento')">${lkTrav}▶️ Iniciar</button>`;
     }else if(stExib==='a_caminho'){
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
+      btns += `<button class="btn-brand w-full !py-2.5 text-sm col-span-2" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
     }else if(stExib==='em_atendimento'){
-      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
+      btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
+      btns += `<button class="btn-brand w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }else if(stExib==='pausada'){
-      btns += `<button class="btn-brand !w-auto !py-2 !px-3 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
-      btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
+      btns += `<button class="btn-brand w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Retomar</button>`;
+      btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }
     if(!pendConc){
-    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
-    btns += `<button class="btn-ghost !w-auto !py-2 !px-3 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
-    btns += `<button class="text-xs text-red-700 font-bold px-2" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌</button>`;
+    btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
+    btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
+    btns += `<button class="col-span-2 text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
     }
     return `
-    <div class="border rounded-xl p-3 bg-white">
+    <div class="border rounded-2xl p-4 bg-white shadow-sm">
       <div class="flex items-center justify-between gap-2 mb-1">
-        <div class="font-black text-brand">${esc(os.numero||'')}</div>
+        <div class="font-black text-brand text-lg">${esc(os.numero||'')}</div>
         ${atvTecBadge(stExib)}
       </div>
       <div class="font-bold text-sm">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500">📍 ${esc(end)}</div>`:''}
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
       ${eq.nome?`<div class="text-xs text-gray-500">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
-      <div class="text-xs text-gray-600 mt-1">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
+      <div class="text-xs font-semibold text-gray-700 mt-1.5">🗓️ ${fmtData((a.data||'').slice(0,10))}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' – '+String(a.fim).slice(0,5):''}</div>
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
-      <div class="flex gap-2 flex-wrap mt-2">${btns}</div>
+      <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
       ${(pendConc||pendSt)?`<div class="text-xs font-bold mt-2" style="color:#9a3412">⏳ aguardando envio</div>`:''}
     </div>`;
   }).join('');
