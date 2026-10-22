@@ -1179,6 +1179,28 @@
               <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">🔧 Equip.</button>
             </div>
           </div>
+          <div class="flex flex-wrap items-center gap-2 mb-3" id="osPeriodoBox">
+            <span class="text-sm font-bold text-gray-600">📅 Período:</span>
+            <select id="osFiltroPeriodo" class="inp text-sm !w-auto" onchange="osPeriodoMudou()">
+              <option value="">Todas as datas</option>
+              <option value="hoje">Hoje</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Este mês</option>
+              <option value="mespassado">Mês passado</option>
+              <option value="mesesp">Mês específico…</option>
+              <option value="periodo">Período específico…</option>
+            </select>
+            <span id="osPeriodoMesBox" class="hidden items-center gap-2">
+              <input type="month" id="osMesEsp" class="inp text-sm !w-auto" onchange="osRecarregar()">
+            </span>
+            <span id="osPeriodoDatasBox" class="hidden items-center gap-2 flex-wrap">
+              <label class="text-xs text-gray-500 font-bold" for="osDataDe">De</label>
+              <input type="date" id="osDataDe" class="inp inp-data text-sm !w-auto" onchange="osRecarregar()">
+              <label class="text-xs text-gray-500 font-bold" for="osDataAte">Até</label>
+              <input type="date" id="osDataAte" class="inp inp-data text-sm !w-auto" onchange="osRecarregar()">
+            </span>
+            <span id="osPeriodoResumo" class="text-xs text-gray-500 font-semibold"></span>
+          </div>
           <div id="osLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
         </div>
         <div id="osDetalheBox" class="hidden w-full xl:max-w-none max-w-6xl mx-auto"></div>
@@ -6146,6 +6168,40 @@ function osEmailSelos(o){
   }
   return h;
 }
+/* 📅 FILTRO DE PERÍODO (pedido do Fabio, 22/10/2026): todas as datas, hoje,
+   esta semana (seg–dom), este mês, mês passado, um mês específico ou um
+   período De–Até — sobre a DATA DA OS (created_at), no fuso local (-03:00). */
+function osDiaLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function osPeriodoRange(){
+  const modo = (document.getElementById('osFiltroPeriodo')||{}).value||'';
+  if(!modo) return null;
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const iso = (d)=> osDiaLocal(d)+'T00:00:00-03:00';
+  const mais = (d,n)=>{ const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+  const br = (d)=> osDiaLocal(d).split('-').reverse().join('/');
+  if(modo==='hoje') return { de: iso(hoje), lt: iso(mais(hoje,1)), rotulo: 'de hoje ('+br(hoje)+')' };
+  if(modo==='semana'){ const seg = mais(hoje, -((hoje.getDay()+6)%7)); return { de: iso(seg), lt: iso(mais(seg,7)), rotulo: 'desta semana ('+br(seg)+' a '+br(mais(seg,6))+')' }; }
+  if(modo==='mes'){ const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1); const fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 1); return { de: iso(ini), lt: iso(fim), rotulo: 'deste mês' }; }
+  if(modo==='mespassado'){ const ini = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1); const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 1); return { de: iso(ini), lt: iso(fim), rotulo: 'do mês passado' }; }
+  if(modo==='mesesp'){ const v = (document.getElementById('osMesEsp')||{}).value||''; if(!v) return null; const partes = v.split('-'); const ano = Number(partes[0]), mes = Number(partes[1]); if(!ano || !mes) return null; const ini = new Date(ano, mes-1, 1); const fim = new Date(ano, mes, 1); return { de: iso(ini), lt: iso(fim), rotulo: 'de '+String(mes).padStart(2,'0')+'/'+ano }; }
+  if(modo==='periodo'){
+    const de = (document.getElementById('osDataDe')||{}).value||'';
+    const ate = (document.getElementById('osDataAte')||{}).value||'';
+    if(!de && !ate) return null;
+    const r = { rotulo: 'do período '+(de?de.split('-').reverse().join('/'):'…')+' a '+(ate?ate.split('-').reverse().join('/'):'…') };
+    if(de) r.de = de+'T00:00:00-03:00';
+    if(ate){ const d2 = new Date(ate+'T12:00:00'); d2.setDate(d2.getDate()+1); r.lt = osDiaLocal(d2)+'T00:00:00-03:00'; }
+    return r;
+  }
+  return null;
+}
+function osPeriodoMudou(){
+  const modo = (document.getElementById('osFiltroPeriodo')||{}).value||'';
+  const mb = document.getElementById('osPeriodoMesBox'), db = document.getElementById('osPeriodoDatasBox');
+  if(mb){ mb.classList.toggle('hidden', modo!=='mesesp'); mb.classList.toggle('flex', modo==='mesesp'); if(modo==='mesesp'){ const mi = document.getElementById('osMesEsp'); if(mi && !mi.value){ const h = new Date(); mi.value = h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); } } }
+  if(db){ db.classList.toggle('hidden', modo!=='periodo'); db.classList.toggle('flex', modo==='periodo'); }
+  osRecarregar();
+}
 function osFiltrosQuery(){
   let f = '';
   const fs = (document.getElementById('osFiltroStatus')||{}).value||'';
@@ -6161,6 +6217,8 @@ function osFiltrosQuery(){
   else if(fe==='ab_nao') f += '&email_abertura_enviado_em=is.null&origem=eq.sistema';
   else if(fe==='cc_env') f += '&email_enviado_em=not.is.null';
   else if(fe==='cc_nao') f += '&email_enviado_em=is.null&status=eq.concluida';
+  const pr = osPeriodoRange();
+  if(pr){ if(pr.de) f += '&created_at=gte.'+encodeURIComponent(pr.de); if(pr.lt) f += '&created_at=lt.'+encodeURIComponent(pr.lt); }
   return f;
 }
 let OS_SITUACAO = 'aberto'; /* padrão: só as em aberto, sem poluir a tela */
@@ -6192,6 +6250,7 @@ const FC_CFG = {
   tec:  { hidden:'tecFiltroCliente', label:'tecFcLabel', lista:'tecFcLista', busca:'tecFcBusca', opcoes:'tecFcOpcoes', todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os tipos',    vazio:'Nenhum tipo encontrado.' },
   email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
+  eqcli:{ hidden:'eqFiltroCliente',  label:'eqFcLabel',  lista:'eqFcLista',  busca:'eqFcBusca',  opcoes:'eqFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
@@ -6216,7 +6275,7 @@ function fcAbrir(qual, ev){
   l.classList.remove('hidden');
   if(b) setTimeout(()=>{ try{ b.focus(); }catch(_){ } }, 30);
 }
-function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista').forEach(x=>x.classList.add('hidden')); }
+function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista,#eqFcLista').forEach(x=>x.classList.add('hidden')); }
 function fcRender(qual){
   const cfg = FC_CFG[qual], div = document.getElementById(cfg.opcoes);
   if(!div) return;
@@ -6237,6 +6296,7 @@ function fcEscolher(qual, valorEnc){
   fcFecharTodas();
   if(qual==='tec'){ TEC_FILTRO_CLIENTE_ROTULO = valor && it ? it.rotulo : ''; tecFiltroClienteMudou(); }
   else if(qual==='tipo'){ osRecarregar(); }
+  else if(qual==='eqcli'){ osListarEquipamentos(); }
   else if(qual==='email'){
     // conclusão só existe em OS concluída: força a situação p/ 'todas'
     if(valor==='cc_env' || valor==='cc_nao'){
@@ -6261,7 +6321,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -6280,6 +6340,7 @@ function osFiltroClienteMudou(){
 }
 async function osRecarregar(){
   OS_CACHE = []; OS_OFFSET = 0; OS_TEM_MAIS = false; OS_TOTAL = null;
+  const __pr = osPeriodoRange(); const __rs = document.getElementById('osPeriodoResumo'); if(__rs) __rs.textContent = __pr ? ('📅 Exibindo OSs ' + __pr.rotulo) : '';
   const box = document.getElementById('osLista');
   if(box) box.innerHTML = '<span class="text-gray-400 text-sm">Carregando…</span>';
   await osCarregarPagina();
@@ -11054,17 +11115,32 @@ async function osTelaEquipamentos(){
         <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqBtnCancelarEd" onclick="osCancelarEdicaoEquipamento()">Cancelar edição</button>
       </div>
     </div>
-    <div class="mb-2"><select id="eqFiltroCli" class="inp text-sm !w-auto" onchange="osListarEquipamentos()"><option value="">Todos os clientes</option>${cliOpts}</select></div>
+    <div class="flex items-center gap-3 flex-wrap mb-2">
+      <span class="text-sm font-bold text-gray-600">🔎 Filtrar por cliente:</span>
+      <div class="relative" id="eqFcWrap">
+        <input type="hidden" id="eqFiltroCliente" value="">
+        <button type="button" id="eqFcBtn" class="inp text-sm !w-auto flex justify-between items-center gap-3" onclick="fcAbrir('eqcli',event)"><span id="eqFcLabel" class="truncate">Todos os clientes</span><span>▾</span></button>
+        <div id="eqFcLista" class="hidden absolute left-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] w-80 max-w-[85vw] max-h-96 flex flex-col">
+          <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+            <input id="eqFcBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="fcRender('eqcli')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+          </div>
+          <div id="eqFcOpcoes" class="overflow-y-auto"></div>
+        </div>
+      </div>
+      <span id="eqContador" class="text-xs text-gray-500 font-semibold"></span>
+    </div>
     <div id="eqLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
   await osListarEquipamentos();
 }
 let EQ_LISTA = [];
 let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
 async function osListarEquipamentos(){
-  const fc = (document.getElementById('eqFiltroCli')||{}).value || '';
+  const fc = (document.getElementById('eqFiltroCliente')||{}).value || '';
   try{
-    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${fc?`&cliente_id=eq.${fc}`:''}&order=created_at.desc&limit=300`);
+    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${fc?`&cliente_id=eq.${fc}`:''}&order=created_at.desc&limit=1000`);
     EQ_LISTA = eqs;
+    const ct = document.getElementById('eqContador');
+    if(ct){ const tot = await apiCount(fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos'); ct.textContent = 'Exibindo ' + eqs.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (eqs.length===1?'':'s') + (fc ? ' deste cliente' : ''); }
     document.getElementById('eqLista').innerHTML = eqs.length ? eqs.map(e=>`
       <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap">
         <div class="flex-1 min-w-[180px]">
