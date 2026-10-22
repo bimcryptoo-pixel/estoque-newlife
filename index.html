@@ -1315,7 +1315,7 @@
             <div id="tecConcLista" class="grid gap-3"></div>
           </div>
           <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
-          <input type="file" id="tecFotoArquivoInput" accept="image/*" class="hidden" onchange="tecUploadFoto(this)">
+          <input type="file" id="tecFotoArquivoInput" accept="image/*" multiple class="hidden" onchange="tecUploadFoto(this)">
           <input type="file" id="tecVideoInput" accept="video/*" capture="environment" class="hidden" onchange="tecUploadVideo(this)">
         </div>
       </section>
@@ -1792,6 +1792,11 @@ async function entrarComPasskey(){
 }
 
 function fazerLogout(){
+  // 🚪 Sair é DESLOGAR de verdade (revoga a sessão e apaga o login salvo):
+  //    confirma antes pra ninguém sair sem querer — no dia a dia é só
+  //    fechar o app, a sessão fica salva e reabre direto (caso Fabrício,
+  //    22/10/2026: saiu e estranhou ter que entrar de novo).
+  if(!confirm('Sair do sistema?\n\nVocê vai precisar entrar de novo (biometria ou senha).\n\nPra só fechar o sistema, não precisa sair: é só fechar o app — sua sessão fica salva e reabre direto.')) return;
   try{ tecGpsParar(); }catch(e){}
   /* 🔐 Revoga a sessão NO SERVIDOR (best-effort: o keepalive faz a chamada
      sobreviver ao reload e ela NUNCA bloqueia a saída local). */
@@ -10607,12 +10612,36 @@ async function tecUploadVideo(input){
 }
 async function tecUploadFoto(input){
   const osId = TEC_FOTO_OS; TEC_FOTO_OS = null;
-  if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
-  const file = input.files[0];
-  input.value='';
+  if(!osId || !input.files || !input.files.length){ if(input) input.value=''; return; }
+  // 🖼️ SELEÇÃO MÚLTIPLA (pedido do Fabio, 22/10/2026): dá pra escolher
+  //    várias fotos do arquivo de uma vez — cada uma entra na OS (online)
+  //    ou na fila do aparelho (offline), na ordem da seleção.
+  const files = [...input.files];
+  input.value = '';
+  let okOnline = 0, naFila = 0;
+  if(navigator.onLine !== false && files.length > 1) toast('Enviando ' + files.length + ' fotos…', 'ok');
+  for(const file of files){
+    const r = await tecUploadFotoUma(osId, file);
+    if(r === 'online') okOnline++; else if(r === 'fila') naFila++;
+  }
+  if(naFila){
+    await nlAtualizarPendCache().catch(()=>{});
+    toast(naFila > 1
+      ? '📴 Sem internet: ' + naFila + ' fotos guardadas no aparelho — serão enviadas ao voltar o sinal.'
+      : '📴 Sem internet: foto guardada no aparelho — será enviada ao voltar o sinal.', 'alerta');
+    if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+  }
+  if(okOnline){
+    toast(okOnline > 1 ? okOnline + ' fotos incluídas na OS. ✓' : 'Foto incluída na OS. ✓', 'ok');
+    await carregarPainelTecnico();
+  }
+}
+/* Uma foto da seleção: sobe e vincula (online) ou guarda na fila (offline).
+   Retorna 'online' | 'fila' | 'erro' pro chamador resumir os avisos. */
+async function tecUploadFotoUma(osId, file){
   // Path gerado NA CAPTURA (mesmo padrão do fluxo): retry nunca duplica.
   const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
-  const nome = `os/${osId}-${Date.now()}.${ext}`;
+  const nome = `os/${osId}-${Date.now()}-${Math.random().toString(36).slice(2,7)}.${ext}`;
   const nomeOriginal = file.name||('foto-'+Date.now()+'.jpg');
   // 📴 OFFLINE (regra do Fabio, 22/10/2026): a foto avulsa do cartão segue a
   // MESMA regra do fluxo — sem sinal, ela NÃO se perde: vai pra fila do
@@ -10620,17 +10649,12 @@ async function tecUploadFoto(input){
   // sincroniza quando o sinal voltar, antes da conclusão da mesma OS.
   const enfileirar = async (blob, jaNoStorage) => {
     await nlFilaAdd({ tipo:'foto', osId, path:nome, nomeOriginal, jaNoStorage:!!jaNoStorage, ts:Date.now() }, blob||null);
-    await nlAtualizarPendCache();
-    toast('📴 Sem internet: foto guardada no aparelho — será enviada ao voltar o sinal.','alerta');
-    if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
   };
   if(navigator.onLine===false){
-    try{ await enfileirar(file, false); }
-    catch(e){ toast('Erro ao guardar a foto no aparelho: '+e.message,'erro'); }
-    return;
+    try{ await enfileirar(file, false); return 'fila'; }
+    catch(e){ toast('Erro ao guardar a foto no aparelho: '+e.message,'erro'); return 'erro'; }
   }
   try{
-    toast('Enviando foto…','ok');
     const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
       method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'image/jpeg' }, body: file
     });
@@ -10640,17 +10664,17 @@ async function tecUploadFoto(input){
       await apiPOST('os_anexos', { os_id:osId, url, nome:nomeOriginal });
     }catch(ePost){
       // arquivo subiu, mas o vínculo falhou por REDE: enfileira só o vínculo
-      if(nlEhErroRede(ePost)){ await enfileirar(null, true); return; }
+      if(nlEhErroRede(ePost)){ await enfileirar(null, true); return 'fila'; }
       throw ePost;
     }
     try{ await osLog(osId, 'anexou uma foto do atendimento'); }catch(e){}
-    toast('Foto incluída na OS. ✓','ok');
-    await carregarPainelTecnico();
+    return 'online';
   }catch(e){
     if(nlEhErroRede(e)){
-      try{ await enfileirar(file, false); }
+      try{ await enfileirar(file, false); return 'fila'; }
       catch(e2){ toast('Erro: '+e2.message,'erro'); }
     } else toast('Erro: '+e.message,'erro');
+    return 'erro';
   }
 }
 async function tecSincronizarOS(osId){  try{
