@@ -4926,7 +4926,7 @@ function imprimirPedido(){
     .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #C1272D;padding-bottom:16px;margin-bottom:20px;}
     .marca{display:flex;align-items:center;gap:14px;}
     .marca img{height:62px;width:62px;object-fit:contain;}
-    .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome{font-size:17px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .marca .end{font-size:11px;color:#777;margin-top:2px;}
     .doc{text-align:right;}
@@ -9237,20 +9237,20 @@ function mapaPdfDia(){
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório do dia — ${esc(D.nome)} — ${esc(D.diaFmt)}</title>
   <style>
     *{box-sizing:border-box}
-    @page{ size:A4; margin:18mm 14mm 18mm 14mm; }
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;margin:0;padding:6mm 4mm;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:14px;margin:4mm 0 16px;}
+    @page{ size:A4; margin:12mm 10mm 14mm 10mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:11.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:8px;margin:0 0 10px;}
     .marca .nome{font-size:21px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .doc{text-align:right;}
-    .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
-    .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
+    .doc h1{font-size:19px;margin:0;letter-spacing:1px;color:#111;}
+    .doc .tipo{font-size:11.5px;color:#555;margin-top:2px;}
     .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:16px 0 8px;border-bottom:1px solid #e5e5e5;padding:8mm 0 5px;break-after:avoid;page-break-after:avoid;}
     .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
     .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:8px 12px;break-inside:avoid;page-break-inside:avoid;}
     .card .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
     .card .v{font-size:13px;font-weight:600;margin-top:2px;}
-    .mut{color:#888;font-size:12px;}
+    .mut{color:#888;font-size:11px;}
     table.tl{width:100%;border-collapse:collapse;}
     table.tl td{padding:7px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;}
     .rodape{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10.5px;color:#999;}
@@ -10929,12 +10929,12 @@ function imprimirOS(){
     const imgUrl = a.url || a.arquivo_url || '';
     return `
     <div style="page-break-inside:avoid;break-inside:avoid;text-align:center">
-      <img src="${esc(imgUrl)}" style="max-width:100%;max-height:140px;border:1px solid #ddd;border-radius:8px">
+      <img src="${esc(imgUrl)}" style="max-width:100%;max-height:118px;border:1px solid #ddd;border-radius:8px">
       <div class="mut" style="margin-top:2px;font-size:10px;font-weight:700">FOTO ${i+1}</div>
     </div>`;}).join('');
   const anexoSec = (fotosImp.length || videosImp.length)
-    ? `<div style="page-break-before:auto">${fotosImp.length?`<div class="sec" style="break-after:avoid;page-break-after:avoid;margin:12px 0 6px"><span>Anexos — fotos do atendimento (${fotosImp.length})</span></div>
-       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0">${anexoHtml}</div>`:''}${videosImp.length?`<div class="mut" style="margin:6px 0">🎥 ${videosImp.length} vídeo(s) do atendimento anexado(s) — assista no sistema (não entra na impressão).</div>`:''}</div>` : '';
+    ? `<div style="page-break-before:auto">${fotosImp.length?`<div class="sec" style="break-after:avoid;page-break-after:avoid;margin:8px 0 4px"><span>Anexos — fotos do atendimento (${fotosImp.length})</span></div>
+       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0">${anexoHtml}</div>`:''}${videosImp.length?`<div class="mut" style="margin:6px 0">🎥 ${videosImp.length} vídeo(s) do atendimento anexado(s) — assista no sistema (não entra na impressão).</div>`:''}</div>` : '';
   const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
@@ -10947,25 +10947,27 @@ function imprimirOS(){
     .doc{text-align:right;}
     .doc h1{font-size:22px;margin:0;letter-spacing:1px;color:#111;}
     .doc .tipo{font-size:13px;color:#555;margin-top:4px;}
-    .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:16px 0 8px;border-bottom:1px solid #e5e5e5;padding:8mm 0 5px;break-after:avoid;page-break-after:avoid;}
+    .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#C1272D;margin:10px 0 5px;border-bottom:1px solid #e5e5e5;padding:0 0 4px;break-after:avoid;page-break-after:avoid;}
     .sec .dir{font-size:11px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;}
-    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:10px 14px;margin-bottom:8px;break-inside:avoid;page-break-inside:avoid;}
+    .card{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px 10px;margin-bottom:6px;break-inside:avoid;page-break-inside:avoid;}
+    .cards3{display:grid;grid-template-columns:1.05fr 1.05fr 1.3fr;gap:6px;margin-bottom:2px;}
+    .cards3 .card{margin-bottom:0;}
     .card .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;margin-bottom:2px;}
-    .card .v{font-size:13px;}
-    .linha{display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;}
-    .chip{font-size:11px;font-weight:700;background:#f3f4f6;border-radius:12px;padding:2px 10px;}
-    .cards4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;}
-    .card4{background:#f8f9fb;border:1px solid #e8eaee;border-radius:10px;padding:8px 12px;}
+    .card .v{font-size:12px;}
+    .linha{display:flex;justify-content:space-between;align-items:center;margin:6px 0 4px;}
+    .chip{font-size:10.5px;font-weight:700;background:#f3f4f6;border-radius:12px;padding:1px 8px;}
+    .cards4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px;}
+    .card4{background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:5px 8px;}
     .card4 .t{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#888;font-weight:700;}
-    .card4 .v{font-size:13px;font-weight:600;margin-top:2px;}
+    .card4 .v{font-size:12px;font-weight:600;margin-top:1px;}
     .mut{color:#888;font-size:12px;}
-    .totais{display:flex;gap:16px;align-items:center;justify-content:center;margin:14px 0;font-size:12.5px;flex-wrap:wrap;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:10px;break-inside:avoid;page-break-inside:avoid;}
-    .totais b{font-size:15px;}
-    .thumb{max-height:110px;border:1px solid #ddd;border-radius:8px;margin:0 8px 8px 0;}
+    .totais{display:flex;gap:12px;align-items:center;justify-content:center;margin:8px 0;font-size:11.5px;flex-wrap:wrap;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px;break-inside:avoid;page-break-inside:avoid;}
+    .totais b{font-size:13.5px;}
+    .thumb{max-height:92px;border:1px solid #ddd;border-radius:8px;margin:0 6px 6px 0;}
     .ass{margin-top:6px;text-align:center;}
-    .ass img{max-height:110px;border-bottom:1px solid #333;padding:0 30px 4px;}
-    .ass .quem{font-size:12px;color:#555;margin-top:6px;}
-    .rodape{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10.5px;color:#999;}
+    .ass img{max-height:76px;border-bottom:1px solid #333;padding:0 14px 2px;}
+    .ass .quem{font-size:11px;color:#555;margin-top:4px;}
+    .rodape{position:fixed;bottom:0;left:0;right:0;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9.5px;color:#999;background:#fff;}
     .noprint{} @media print{ .noprint{display:none} }
   </style></head><body>
   <div class="topo">
@@ -10973,6 +10975,7 @@ function imprimirOS(){
     <div class="doc"><h1>OS ${esc(o.numero)}</h1>${tipoNome?`<div class="tipo">${esc(tipoNome)}</div>`:''}</div>
   </div>
   <div class="sec"><span>Dados do cliente</span>${criacao?`<span class="dir">Ordem de serviço criada em ${criacao}</span>`:''}</div>
+  <div class="cards3">
   <div class="card">
     <div class="v"><b>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</b></div>
     ${doc?`<div class="mut">CPF/CNPJ:${esc(doc)}</div>`:''}
@@ -10987,6 +10990,7 @@ function imprimirOS(){
   <div class="card">
     <div class="t">Descrição do serviço</div>
     <div class="v" style="white-space:pre-wrap">${esc(o.descricao_servico||'—')}</div>
+  </div>
   </div>
   <div class="sec"><span>Informações de atendimento</span></div>
   ${criacao?`<div class="linha"><span><b>🆕 OS criada</b></span><span>${esc(criacao)}</span></div>`:''}
@@ -11007,8 +11011,8 @@ function imprimirOS(){
        regra de 20/10/2026 ("somente a mais recente"). */
     if(!sigs.length) return '';
     return `<div class="sec"><span>Assinatura${sigs.length>1?'s':''}</span></div>
-    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px">` + sigs.map(s=>`
-      <div class="ass" style="margin-top:0;min-width:220px;flex:1;max-width:320px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:4px 0 2px">` + sigs.map(s=>`
+      <div class="ass" style="margin-top:0;min-width:180px;flex:1;max-width:260px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
       ${s.em?`<div class="mut">Assinado em: ${new Date(s.em).toLocaleString('pt-BR')}</div>`:''}</div>`).join('') + `</div>`;
   })()}
   ${anexoSec}
