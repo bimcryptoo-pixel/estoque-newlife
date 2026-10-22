@@ -1257,10 +1257,16 @@
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
           <div id="tecConcWrap" class="hidden">
             <div class="rounded-2xl border bg-gray-50 p-3 mb-3">
-              <label class="block">
-                <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DIA</span>
-                <input type="date" id="tecConcData" class="inp inp-data w-full min-w-0 text-sm !mb-0" onchange="tecConcFiltrar(this.value)">
-              </label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="block min-w-0">
+                  <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">📅 DE</span>
+                  <input type="date" id="tecConcDe" class="inp inp-data w-full min-w-0 text-sm !mb-0 !px-2" onchange="tecConcFiltrar()">
+                </label>
+                <label class="block min-w-0">
+                  <span class="block text-[11px] font-bold text-gray-500 tracking-wide mb-1">ATÉ</span>
+                  <input type="date" id="tecConcAte" class="inp inp-data w-full min-w-0 text-sm !mb-0 !px-2" onchange="tecConcFiltrar()">
+                </label>
+              </div>
               <div class="flex items-center justify-between mt-2">
                 <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecConcLimparFiltro()">Limpar</button>
                 <span id="tecConcCount" class="text-xs text-gray-500 font-bold"></span>
@@ -9214,7 +9220,7 @@ async function carregarPainelTecnico(){
 let TEC_ABA = 'abertas';      // aba ativa do painel: 'abertas' | 'concluidas'
 let TEC_TNOME = '';           // tecnico_nome resolvido (carregarPainelTecnico)
 let TEC_CONC = [];            // cache das concluídas carregadas
-let TEC_CONC_FILTRO = '';     // filtro de data da aba Concluídas (aaaa-mm-dd)
+let TEC_CONC_FILTRO = { de:'', ate:'' }; // 📅 filtro De/Até da aba Concluídas (21/10/2026 — mesmo padrão da Abertas, pedido do Fabio: período, não só um dia)
 let TEC_AB_FILTRO = { de:'', ate:'' }; // 📅 filtro De/Até da aba Abertas (21/10/2026)
 let TEC_FILTRO_CLIENTE = '';        // 👥 filtro por cliente do Minhas OS (21/10/2026) — chave normalizada
 let TEC_FILTRO_CLIENTE_ROTULO = ''; // rótulo do cliente filtrado (pra manter a opção viva)
@@ -9325,9 +9331,10 @@ function tecRenderConcluidas(){
   tecPopularFiltroCliente();
   let atvs = TEC_CONC || [];
   const total = atvs.length;
-  if(TEC_CONC_FILTRO) atvs = atvs.filter(a=>String(a.data||'').slice(0,10)===TEC_CONC_FILTRO);
+  const cfConc = TEC_CONC_FILTRO || {};
+  if(cfConc.de || cfConc.ate) atvs = atvs.filter(a=>{ const d = tecDataAtv(a); return (!cfConc.de || d>=cfConc.de) && (!cfConc.ate || d<=cfConc.ate); });
   if(TEC_FILTRO_CLIENTE) atvs = atvs.filter(a=>tecCliChave(a)===TEC_FILTRO_CLIENTE);
-  if(cnt) cnt.textContent = atvs.length + (atvs.length===1 ? ' concluída' : ' concluídas') + ((TEC_CONC_FILTRO || TEC_FILTRO_CLIENTE) && total!==atvs.length ? ` (de ${total} no total)` : '');
+  if(cnt) cnt.textContent = atvs.length + (atvs.length===1 ? ' concluída' : ' concluídas') + (((cfConc.de || cfConc.ate) || TEC_FILTRO_CLIENTE) && total!==atvs.length ? ` (de ${total} no total)` : '');
   if(!atvs.length){
     lista.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">Nenhuma OS concluída encontrada.</div>';
     return;
@@ -9357,13 +9364,20 @@ function tecRenderConcluidas(){
   }).join('');
 }
 function tecConcFiltrar(v){
-  TEC_CONC_FILTRO = v || '';
+  if(typeof v==='string'){ // compat: chamada antiga com 1 dia vira De = Até = dia
+    TEC_CONC_FILTRO = { de: v || '', ate: v || '' };
+    const i1 = document.getElementById('tecConcDe'), i2 = document.getElementById('tecConcAte');
+    if(i1) i1.value = v || ''; if(i2) i2.value = v || '';
+  }else{
+    const de = document.getElementById('tecConcDe'), ate = document.getElementById('tecConcAte');
+    TEC_CONC_FILTRO = { de: de ? de.value : '', ate: ate ? ate.value : '' };
+  }
   tecRenderConcluidas();
 }
 function tecConcLimparFiltro(){
-  const inp = document.getElementById('tecConcData');
-  if(inp) inp.value = '';
-  TEC_CONC_FILTRO = '';
+  const i1 = document.getElementById('tecConcDe'), i2 = document.getElementById('tecConcAte');
+  if(i1) i1.value = ''; if(i2) i2.value = '';
+  TEC_CONC_FILTRO = { de:'', ate:'' };
   tecRenderConcluidas();
 }
 /* ---------- 👁️ Ver OS + 📧 Reenviar e-mail (aba Concluídas, 20/10/2026) ----------
