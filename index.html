@@ -6068,8 +6068,8 @@ const OS_STATUS = {
 let OS_CACHE = [];
 /* Paginação server-side da lista de OSs (escala com o crescimento da base) */
 let OS_PAGE = 200, OS_OFFSET = 0, OS_TOTAL = null, OS_TEM_MAIS = false, OS_BUSCA_T = null;
-const OS_LIST_SEL = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)';
-const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)';
+const OS_LIST_SEL = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo,cidade),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)';
+const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo,cidade),equipamentos(id,nome,numero_serie)';
 async function apiCount(path){
   try{
     const sep = path.includes('?') ? '&' : '?';
@@ -6263,11 +6263,45 @@ async function osCarregarPagina(){
   try{ res = await buscar(selBase); }
   catch(e){ try{ res = await buscar(selBaseFb); }catch(e2){ toast('Erro ao carregar OS: '+e2.message,'erro'); return; } }
   const ids = new Set((OS_CACHE||[]).map(o=>o.id));
-  res.rows.forEach(o=>{ if(!ids.has(o.id)){ OS_CACHE.push(o); ids.add(o.id); } });
+  const novas = [];
+  res.rows.forEach(o=>{ if(!ids.has(o.id)){ OS_CACHE.push(o); ids.add(o.id); novas.push(o); } });
   OS_OFFSET += OS_PAGE;
   OS_TEM_MAIS = !res.busca && res.rows.length === OS_PAGE;
   if(res.total!=null) OS_TOTAL = res.total;
+  await osCarregarExtras(novas);
   renderOSLista();
+}
+
+/* Extras do cartão (layout B, 22/10/2026): equipamento (tabela ligada — as OSs
+   do Field NÃO têm equipamento_id), técnico (atividades), nº de fotos,
+   formulário e assinatura — buscados em lote pros cartões da página.
+   Falha em qualquer fonte = cartão degrada sem aquele dado, nunca trava. */
+async function osCarregarExtras(rows){
+  const alvo = (rows||[]).filter(o=>o && o.id && !o._extrasOk);
+  if(!alvo.length) return;
+  const inIds = alvo.map(o=>o.id).join(',');
+  const [eqs, atvs, anx, frms, asns] = await Promise.all([
+    apiGET(`os_equipamentos?select=os_id,equipamentos(nome)&os_id=in.(${inIds})`).catch(()=>[]),
+    apiGET(`os_atividades?select=os_id,tecnico&os_id=in.(${inIds})&order=created_at.asc`).catch(()=>[]),
+    apiGET(`os_anexos?select=os_id&os_id=in.(${inIds})`).catch(()=>[]),
+    apiGET(`os_formularios?select=os_id&os_id=in.(${inIds})`).catch(()=>[]),
+    apiGET(`os_assinaturas?select=os_id&os_id=in.(${inIds})`).catch(()=>[])
+  ]);
+  const mEq = {}, mTec = {}, mFoto = {}, mForm = {}, mAss = {};
+  (eqs||[]).forEach(r=>{ const n = r.equipamentos && r.equipamentos.nome; if(!n) return; if(mEq[r.os_id]) mEq[r.os_id].n++; else mEq[r.os_id] = { nome: n, n: 1 }; });
+  (atvs||[]).forEach(r=>{ if(r.tecnico && !mTec[r.os_id]) mTec[r.os_id] = r.tecnico; });
+  (anx||[]).forEach(r=>{ mFoto[r.os_id] = (mFoto[r.os_id]||0) + 1; });
+  (frms||[]).forEach(r=>{ mForm[r.os_id] = true; });
+  (asns||[]).forEach(r=>{ mAss[r.os_id] = true; });
+  alvo.forEach(o=>{
+    const e = mEq[o.id];
+    o._equip = e ? e.nome + (e.n > 1 ? ` +${e.n - 1}` : '') : '';
+    o._tec = mTec[o.id] || '';
+    o._fotos = mFoto[o.id] || 0;
+    o._form = !!mForm[o.id];
+    o._assin = !!mAss[o.id];
+    o._extrasOk = true;
+  });
 }
 let OS_DETALHE = null;
 let TEC_LIST = []; /* técnicos vinculados (usuarios.tecnico_nome) */
@@ -6359,23 +6393,36 @@ function renderOSLista(){
   const cont = q ? `Exibindo ${rows.length} resultado${rows.length===1?'':'s'} da busca`
     : `Exibindo ${rows.length}` + (OS_TOTAL!=null ? ` de ${OS_TOTAL.toLocaleString('pt-BR')}` : '') + ` OS${rows.length===1?'':'s'}`;
   box.innerHTML = `<div class="text-xs text-gray-500 mb-1">${cont}</div>` +
-    rows.map(o=>`
-    <div class="border rounded-xl p-3 flex items-center gap-x-3 gap-y-2 flex-wrap min-w-0 hover:bg-gray-50 cursor-pointer" onclick="verOS('${o.id}')">
-      <div class="font-bold text-brand">${esc(o.numero)}</div>
-      <div class="flex-1 min-w-[180px]">
-        <div class="font-semibold text-sm">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
-        <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
-        ${(o.etiquetas&&o.etiquetas.length)?`<div class="mt-1 flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
-        <div class="mt-1 flex gap-1 flex-wrap">${osEmailSelos(o)}</div>
+    rows.map(o=>{
+      const equipNome = o._equip || (o.equipamentos ? o.equipamentos.nome : '');
+      const ctx = [];
+      if(equipNome) ctx.push(`🔧 ${esc(equipNome)}`);
+      if(o._tec) ctx.push(`👤 ${esc(o._tec)}`);
+      if(o.clientes && o.clientes.cidade) ctx.push(`📍 ${esc(o.clientes.cidade)}`);
+      const selos = osEmailSelos(o);
+      const conts = [];
+      if(o._fotos) conts.push(`📷 ${o._fotos}`);
+      if(o._form) conts.push('📝');
+      if(o._assin) conts.push('✍️');
+      return `
+    <div class="border rounded-xl p-3 min-w-0 hover:bg-gray-50 cursor-pointer flex flex-col gap-1.5" onclick="verOS('${o.id}')">
+      <div class="flex items-start gap-2">
+        <div class="font-bold flex-1 min-w-0" style="font-size:15px;line-height:1.25">🏥 ${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
+        <div class="font-bold text-brand text-[13px] whitespace-nowrap pt-[2px]">${esc(o.numero)}</div>
       </div>
-      <div class="text-xs text-gray-500 truncate w-full min-w-0 md:w-auto md:max-w-[260px]">${esc(o.descricao_servico||'')}</div>
-      <div class="flex items-center gap-2 w-full md:w-auto">
+      <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
+      ${ctx.length?`<div class="text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-0.5">${ctx.map(c=>`<span class="whitespace-nowrap">${c}</span>`).join('')}</div>`:''}
+      ${(o.etiquetas&&o.etiquetas.length)?`<div class="flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
+      ${selos?`<div class="flex gap-1 flex-wrap">${selos}</div>`:''}
+      <div class="text-xs text-gray-500 truncate min-w-0">${esc(o.descricao_servico||'')}</div>
+      <div class="flex items-center gap-2">
         ${osPrazoBadge(o)}
         ${osStatusBadge(o.status)}
-        <span class="flex-1 md:hidden"></span>
+        ${conts.length?`<span class="text-xs text-gray-400 whitespace-nowrap">${conts.join(' · ')}</span>`:''}
+        <span class="flex-1"></span>
         ${o.status!=='cancelada' ? `<button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm shrink-0" title="${o.status==='concluida' ? 'Reenviar o e-mail da OS concluída' : 'Reenviar o protocolo de abertura de chamado'}" onclick="event.stopPropagation();osReenviarEmail('${o.id}',this,'${o.status==='concluida' ? '' : 'abertura'}')">📧</button>` : ''}
       </div>
-    </div>`).join('') +
+    </div>`; }).join('') +
     (OS_TEM_MAIS ? `<button class="btn-ghost text-sm mt-1" onclick="osCarregarPagina()">Mostrar mais</button>` : '');
 }
 
