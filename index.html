@@ -1138,7 +1138,7 @@
             <button data-sit="concluida" onclick="osMudarSituacao('concluida')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">✅ Concluídas</button>
             <button data-sit="todas" onclick="osMudarSituacao('todas')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">📋 Todas</button>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+          <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 mb-3">
             <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="osBuscaDebounce()">
             <select id="osFiltroStatus" class="inp text-sm" onchange="osRecarregar()">
               <option value="">Todos os status</option>
@@ -1165,6 +1165,13 @@
                   <input id="osTpBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar tipo…" autocomplete="off" oninput="fcRender('tipo')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
                 </div>
                 <div id="osTpOpcoes" class="overflow-y-auto"></div>
+              </div>
+            </div>
+            <div class="relative" id="osEmWrap">
+              <input type="hidden" id="osFiltroEmail" value="">
+              <button type="button" id="osEmBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('email',event)"><span id="osEmLabel" class="truncate">📧 Todos os e-mails</span><span>▾</span></button>
+              <div id="osEmLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+                <div id="osEmOpcoes" class="overflow-y-auto"></div>
               </div>
             </div>
             <div class="flex gap-2">
@@ -6061,8 +6068,8 @@ const OS_STATUS = {
 let OS_CACHE = [];
 /* Paginação server-side da lista de OSs (escala com o crescimento da base) */
 let OS_PAGE = 200, OS_OFFSET = 0, OS_TOTAL = null, OS_TEM_MAIS = false, OS_BUSCA_T = null;
-const OS_LIST_SEL = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)';
-const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)';
+const OS_LIST_SEL = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie),tipos_os(id,descricao)';
+const OS_LIST_SEL_FB = 'id,numero,cliente_id,equipamento_id,tipo_os_id,descricao_servico,status,etiquetas,created_at,origem,email_abertura_enviado_em,email_enviado_em,clientes(id,nome,tipo),equipamentos(id,nome,numero_serie)';
 async function apiCount(path){
   try{
     const sep = path.includes('?') ? '&' : '?';
@@ -6070,6 +6077,23 @@ async function apiCount(path){
     const m = (r.headers.get('Content-Range')||'').match(/\/(\d+)\s*$/);
     return m ? parseInt(m[1],10) : null;
   }catch(e){ return null; }
+}
+/* 📧 selos de e-mail da linha (21/10/2026, pedido do Fabio): registro visual
+   dos envios — 📩 abertura / 📨 conclusão com data e hora; ⚠️ quando a OS do
+   sistema não teve o envio; OS importada do Field mostra '—' (não se aplica). */
+function osEmailSelos(o){
+  const fmt = (ts)=>{ try{ return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); }catch(_){ return ''; } };
+  const selo = (txt, cor)=>`<span class="text-[11px] font-bold px-2 py-0.5 rounded-full border ${cor}">${txt}</span>`;
+  const VERDE='bg-green-50 text-green-700 border-green-200', AMB='bg-amber-50 text-amber-700 border-amber-200', CINZA='bg-gray-50 text-gray-400 border-gray-200';
+  let h = '';
+  if(o.email_abertura_enviado_em) h += selo(`📩 Abertura ${fmt(o.email_abertura_enviado_em)}`, VERDE);
+  else if(o.origem==='fieldcontrol') h += selo('📩 Abertura —', CINZA);
+  else h += selo('⚠️ Abertura não enviada', AMB);
+  if(o.status==='concluida'){
+    if(o.email_enviado_em) h += selo(`📨 Conclusão ${fmt(o.email_enviado_em)}`, VERDE);
+    else h += selo('⚠️ Conclusão não enviada', AMB);
+  }
+  return h;
 }
 function osFiltrosQuery(){
   let f = '';
@@ -6081,6 +6105,11 @@ function osFiltrosQuery(){
   else if(OS_SITUACAO==='concluida') f += '&status=eq.concluida';
   if(fc) f += '&cliente_id=eq.'+fc;
   if(ft) f += '&tipo_os_id=eq.'+ft;
+  const fe = (document.getElementById('osFiltroEmail')||{}).value||'';
+  if(fe==='ab_env') f += '&email_abertura_enviado_em=not.is.null';
+  else if(fe==='ab_nao') f += '&email_abertura_enviado_em=is.null&origem=eq.sistema';
+  else if(fe==='cc_env') f += '&email_enviado_em=not.is.null';
+  else if(fe==='cc_nao') f += '&email_enviado_em=is.null&status=eq.concluida';
   return f;
 }
 let OS_SITUACAO = 'aberto'; /* padrão: só as em aberto, sem poluir a tela */
@@ -6111,11 +6140,18 @@ const FC_CFG = {
   os:   { hidden:'osFiltroCliente',  label:'osFcLabel',  lista:'osFcLista',  busca:'osFcBusca',  opcoes:'osFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   tec:  { hidden:'tecFiltroCliente', label:'tecFcLabel', lista:'tecFcLista', busca:'tecFcBusca', opcoes:'tecFcOpcoes', todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os tipos',    vazio:'Nenhum tipo encontrado.' },
+  email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
 let OS_TP_ITENS = [];   // [{valor, rotulo}] — tipos de OS (de TIPOS_OS)
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : OS_FC_ITENS; }
+const OS_EM_ITENS = [   // filtro 📧 E-mails (21/10/2026): registro de envios
+  { valor:'ab_env', rotulo:'📩 Abertura enviada' },
+  { valor:'ab_nao', rotulo:'⚠️ Abertura não enviada' },
+  { valor:'cc_env', rotulo:'📨 Conclusão enviada' },
+  { valor:'cc_nao', rotulo:'⚠️ Conclusão não enviada' },
+];
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
@@ -6129,7 +6165,7 @@ function fcAbrir(qual, ev){
   l.classList.remove('hidden');
   if(b) setTimeout(()=>{ try{ b.focus(); }catch(_){ } }, 30);
 }
-function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista').forEach(x=>x.classList.add('hidden')); }
+function fcFecharTodas(){ document.querySelectorAll('#osFcLista,#tecFcLista,#osTpLista,#osEmLista').forEach(x=>x.classList.add('hidden')); }
 function fcRender(qual){
   const cfg = FC_CFG[qual], div = document.getElementById(cfg.opcoes);
   if(!div) return;
@@ -6150,6 +6186,19 @@ function fcEscolher(qual, valorEnc){
   fcFecharTodas();
   if(qual==='tec'){ TEC_FILTRO_CLIENTE_ROTULO = valor && it ? it.rotulo : ''; tecFiltroClienteMudou(); }
   else if(qual==='tipo'){ osRecarregar(); }
+  else if(qual==='email'){
+    // conclusão só existe em OS concluída: força a situação p/ 'todas'
+    if(valor==='cc_env' || valor==='cc_nao'){
+      OS_SITUACAO = 'todas';
+      const sf = document.getElementById('osFiltroStatus'); if(sf) sf.value = '';
+      document.querySelectorAll('#osFiltroSituacao button').forEach(b=>{
+        const ativo = b.dataset.sit==='todas';
+        b.classList.toggle('!bg-red-600', ativo); b.classList.toggle('!text-white', ativo);
+        b.classList.toggle('!border-red-600', ativo); b.classList.toggle('font-bold', ativo);
+      });
+    }
+    osRecarregar();
+  }
   else osFiltroClienteMudou();
 }
 function fcSincronizar(qual){
@@ -6161,7 +6210,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -6317,6 +6366,7 @@ function renderOSLista(){
         <div class="font-semibold text-sm">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
         <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
         ${(o.etiquetas&&o.etiquetas.length)?`<div class="mt-1 flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
+        <div class="mt-1 flex gap-1 flex-wrap">${osEmailSelos(o)}</div>
       </div>
       <div class="text-xs text-gray-500 max-w-[260px] truncate">${esc(o.descricao_servico||'')}</div>
       ${osPrazoBadge(o)}
