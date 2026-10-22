@@ -6045,13 +6045,21 @@ async function osCarregarPagina(){
   const buscar = async (sel)=>{
     if(!q) return { rows: await apiGET(`${sel}&limit=${OS_PAGE}&offset=${OS_OFFSET}`), total: await apiCount(sel), busca: false };
     const qq = encodeURIComponent('*'+q+'*');
-    const [a,b,c] = await Promise.all([
-      apiGET(`${sel}&or=(numero.ilike.${qq},descricao_servico.ilike.${qq})&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[]),
-      apiGET(`${sel}&clientes.nome=ilike.${qq}&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[]),
-      apiGET(`${sel}&equipamentos.nome=ilike.${qq}&limit=${OS_PAGE}&offset=${OS_OFFSET}`).catch(()=>[])
-    ]);
+    // 🔎 CORREÇÃO (21/10/2026): filtrar por coluna de tabela embutida
+    // (clientes.nome=ilike) NÃO filtra as OSs no PostgREST sem join interno —
+    // a busca voltava com as 200 OSs mais recentes, ignorando o termo.
+    // Agora é em 2 passos: acha os IDs de clientes/equipamentos pelo nome
+    // e filtra as OSs por cliente_id/equipamento_id.
+    const partes = [
+      apiGET(`${sel}&or=(numero.ilike.${qq},descricao_servico.ilike.${qq})&limit=500`).catch(()=>[])
+    ];
+    const clis = await apiGET(`clientes?select=id&nome=ilike.${qq}&limit=100`).catch(()=>[]);
+    if(clis && clis.length) partes.push(apiGET(`${sel}&cliente_id=in.(${clis.map(c=>c.id).join(',')})&limit=500`).catch(()=>[]));
+    const eqs = await apiGET(`equipamentos?select=id&nome=ilike.${qq}&limit=100`).catch(()=>[]);
+    if(eqs && eqs.length) partes.push(apiGET(`${sel}&equipamento_id=in.(${eqs.map(e=>e.id).join(',')})&limit=500`).catch(()=>[]));
+    const listas = await Promise.all(partes);
     const map = new Map();
-    [...a,...b,...c].forEach(o=>{ if(o && o.id!=null && !map.has(o.id)) map.set(o.id,o); });
+    listas.flat().forEach(o=>{ if(o && o.id!=null && !map.has(o.id)) map.set(o.id,o); });
     const merged = [...map.values()].sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||''))).slice(0,OS_PAGE);
     return { rows: merged, total: null, busca: true };
   };
