@@ -1141,7 +1141,7 @@
               <option value="concluida">✅ Concluída</option>
               <option value="cancelada">❌ Cancelada</option>
             </select>
-            <select id="osFiltroCliente" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os clientes</option></select>
+            <select id="osFiltroCliente" class="inp text-sm" onchange="osFiltroClienteMudou()"><option value="">Todos os clientes</option></select>
             <select id="osFiltroTipo" class="inp text-sm" onchange="osRecarregar()"><option value="">Todos os tipos</option></select>
             <div class="flex gap-2">
               <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">🏷️ Tipos</button>
@@ -6052,6 +6052,25 @@ function osMudarSituacao(sit){
   osRecarregar();
 }
 function osBuscaDebounce(){ clearTimeout(OS_BUSCA_T); OS_BUSCA_T = setTimeout(osRecarregar, 450); }
+/* ---------- filtro por CLIENTE (21/10/2026, pedido do Fabio) ----------
+   Ao selecionar um cliente, a lista mostra TODAS as OSs dele — abertas E
+   concluídas: a situação vai pra 'todas' sozinha. É daqui que se localiza
+   a OS pra reenviar o e-mail (botão 📧 da linha) sem garimpar a caixa. */
+function osFiltroClienteMudou(){
+  const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
+  if(fc){
+    OS_SITUACAO = 'todas';
+    const sel = document.getElementById('osFiltroStatus'); if(sel) sel.value = '';
+    document.querySelectorAll('#osFiltroSituacao button').forEach(b=>{
+      const ativo = b.dataset.sit==='todas';
+      b.classList.toggle('!bg-red-600', ativo);
+      b.classList.toggle('!text-white', ativo);
+      b.classList.toggle('!border-red-600', ativo);
+      b.classList.toggle('font-bold', ativo);
+    });
+  }
+  osRecarregar();
+}
 async function osRecarregar(){
   OS_CACHE = []; OS_OFFSET = 0; OS_TEM_MAIS = false; OS_TOTAL = null;
   const box = document.getElementById('osLista');
@@ -6197,6 +6216,7 @@ function renderOSLista(){
       <div class="text-xs text-gray-500 max-w-[260px] truncate">${esc(o.descricao_servico||'')}</div>
       ${osPrazoBadge(o)}
       ${osStatusBadge(o.status)}
+      ${o.status!=='cancelada' ? `<button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm shrink-0" title="${o.status==='concluida' ? 'Reenviar o e-mail da OS concluída' : 'Reenviar o protocolo de abertura de chamado'}" onclick="event.stopPropagation();osReenviarEmail('${o.id}',this,'${o.status==='concluida' ? '' : 'abertura'}')">📧</button>` : ''}
     </div>`).join('') +
     (OS_TEM_MAIS ? `<button class="btn-ghost text-sm mt-1" onclick="osCarregarPagina()">Mostrar mais</button>` : '');
 }
@@ -10090,26 +10110,27 @@ async function osEnviarEmail(){
    MESMO endpoint/payload/headers do envio automático (osEnviarEmailAuto) e do botão
    da ficha (osEnviarEmail) — a diferença é que o reenvio NÃO aplica o dedupe por
    email_enviado_em: reenviar é justamente para quando o cliente diz que não recebeu. */
-async function osReenviarEmail(osId, btn){
+async function osReenviarEmail(osId, btn, tipo){
   let os = null;
   try{ [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,clientes(email)`); }catch(e){}
   const numero = (os && os.numero) || 'OS';
   const email = ((os && os.clientes && os.clientes.email) || '').trim();
   if(!email){ toast('Cliente sem e-mail cadastrado — não é possível reenviar.','alerta'); return false; }
-  if(!confirm(`Reenviar a ${numero} para ${email}?`)) return false;
+  const ehAbertura = tipo==='abertura';
+  if(!confirm(`Reenviar ${ehAbertura ? 'o protocolo de abertura da' : 'o e-mail da'} ${numero} para ${email}?`)) return false;
   const txtOrig = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Enviando…'; }
   try{
     const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
       method:'POST',
       headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ os_id: osId })
+      body: JSON.stringify(ehAbertura ? { os_id: osId, tipo: 'abertura' } : { os_id: osId })
     });
     const j = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(j.erro || j.message || ('HTTP '+r.status));
     const nomeUser = (typeof sessao!=='undefined' && sessao && sessao.nome) || 'usuário';
-    await osLog(osId, `E-mail reenviado por ${nomeUser} para ${email}`);
-    toast(`📧 E-mail da ${numero} reenviado para ${email}`,'ok');
+    await osLog(osId, ehAbertura ? `Protocolo de abertura reenviado por ${nomeUser} para ${email}` : `E-mail reenviado por ${nomeUser} para ${email}`);
+    toast(ehAbertura ? `📧 Protocolo de abertura da ${numero} reenviado para ${email}` : `📧 E-mail da ${numero} reenviado para ${email}`,'ok');
     return true;
   }catch(e){
     toast('Não foi possível reenviar o e-mail: '+e.message,'erro');
