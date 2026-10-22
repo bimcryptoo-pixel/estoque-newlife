@@ -7298,7 +7298,7 @@ function osAbaGeral(d){
   const criacaoTl = criDt ? `<div class="relative pl-7 pb-4">
       <span class="absolute left-[7px] top-1 w-3 h-3 rounded-full border-2 bg-brand border-brand"></span>
       ${d.atividades.length?'<span class="absolute left-[12px] top-5 bottom-0 w-[2px] bg-gray-200"></span>':''}
-      <div class="text-sm">🆕 <b>OS criada</b></div>
+      <div class="text-sm"><b>OS criada</b> 🆕</div>
       <div class="text-xs text-gray-500">${criDt.toLocaleDateString('pt-BR',{timeZone:'America/Fortaleza'})} · ${criDt.toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})}</div>
     </div>` : '';
   const tlAtv = criacaoTl + (d.atividades.length ? d.atividades.map(a=>{
@@ -7307,7 +7307,7 @@ function osAbaGeral(d){
     return `<div class="relative pl-7 pb-4 last:pb-0">
       <span class="absolute left-[7px] top-1 w-3 h-3 rounded-full border-2 ${a.status==='concluida'?'bg-green-600 border-green-600':'bg-white border-brand'}"></span>
       ${a.status!=='concluida'?'<span class="absolute left-[12px] top-5 bottom-0 w-[2px] bg-gray-200"></span>':''}
-      <div class="text-sm"><b>${esc(a.tecnico||'—')}</b> ${st.label}</div>
+      <div class="text-sm"><b>${esc(a.tecnico||'—')}</b> ${esc(st.label.split(' ').slice(1).join(' '))} ${esc(st.label.split(' ')[0])}</div>
       <div class="text-xs text-gray-500">${dt}${a.inicio?' · '+String(a.inicio).slice(0,5):''}${a.fim?' → '+String(a.fim).slice(0,5):''}${osDuracaoReal(a)?' · '+osDuracaoReal(a):''}</div>
       ${a.descricao_conclusao?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(a.descricao_conclusao)}</div>`:''}
     </div>`;
@@ -7364,7 +7364,7 @@ function osAbaGeral(d){
       : ''}
     ${(d.assinaturas||[]).filter(s=>s.url && s.url!==o.assinatura_url).map(s=>`
           <div class="mb-3"><img src="${esc(s.url)}" class="max-w-full h-auto max-h-32 border rounded-lg bg-white">
-          <div class="text-xs text-gray-500 mt-1">Assinatura de <b>${esc(s.nome_assinante||'—')}</b>${s.created_at?' · '+new Date(s.created_at).toLocaleString('pt-BR'):''}</div></div>`).join('')}
+          <div class="text-sm font-bold text-gray-900 mt-1" style="text-transform:uppercase;letter-spacing:.4px">${esc(String(s.nome_assinante||'').toUpperCase() || '—')}</div></div>`).join('')}
     ${!o.assinatura_url && !(d.assinaturas||[]).length
       ? (editavel?`<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirAssinatura()">✍️ Coletar assinatura</button>`:'<span class="text-gray-400 text-xs">Sem assinatura.</span>')
       : ''}
@@ -7691,7 +7691,7 @@ function osAbaAssinaturas(d){
   cards.push(...sigs.map(s=>`
     <div class="border rounded-xl p-4 bg-white">
       <img src="${esc(s.url)}" class="max-w-full h-auto max-h-40 bg-white border rounded-lg mb-2">
-      <div class="text-sm">Assinatura de <b>${esc(s.nome_assinante||'—')}</b></div>
+      <div class="text-sm font-bold" style="text-transform:uppercase;letter-spacing:.4px">${esc(String(s.nome_assinante||'').toUpperCase() || '—')}</div>
       <div class="text-xs text-gray-500">${s.created_at?new Date(s.created_at).toLocaleString('pt-BR'):''} · coletada no celular do técnico</div>
       ${ehAdmin?`<button class="text-xs text-red-600 font-bold underline mt-1" onclick="osRemoverAssinatura('${s.id}','${esc(s.url)}')">🗑️ remover assinatura</button>`:''}
     </div>`));
@@ -8421,7 +8421,7 @@ async function osSalvarAssinatura(tipo){
   // 🛡️ trava anti-duplicada (22/10/2026): o MESMO desenho já salvo nesta sessão
   // (toque repetido) não cria outra assinatura — segue o fluxo normal.
   const __sigImp = await osSigImpressao(blob);
-  if(__sigImp && window.__sigSalvasOS && window.__sigSalvasOS[osId + ':' + __sigImp]){
+  if(__sigImp && window.__sigSalvasOS && window.__sigSalvasOS[osId + ':' + tipo + ':' + __sigImp]){
     toast('Essa assinatura já foi salva. ✓', 'ok');
     await osAssPosSalvar(osId, tipo);
     return;
@@ -8453,7 +8453,7 @@ async function osSalvarAssinatura(tipo){
       await apiPOST('os_assinaturas', { os_id: osId, url, nome_assinante: nome, tipo: 'tecnico' });
       await osLog(osId, 'assinou como técnico responsável').catch(()=>{});
     }
-    if(__sigImp){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[osId + ':' + __sigImp] = url; }
+    if(__sigImp){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[osId + ':' + tipo + ':' + __sigImp] = url; }
     toast(`Assinatura ${tipo === 'tecnico' ? 'do técnico' : 'do cliente'} salva. ✓`, 'ok');
     if(tipo === 'cliente'){
       const stFecha = await osFecharSeTudoConcluido(osId).catch(()=>null);
@@ -9757,6 +9757,7 @@ function tecRenderConcluidas(){ /* concluidas: sem navegação — o 🧭 é do 
   }
   lista.innerHTML = atvs.map(a=>{
     const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
+    const temAssTecCard = tecTemAssinaturaTecOS(a); // ✍️ selo do técnico (a variante usava a variável sem defini-la aqui — ReferenceError esvaziava a aba)
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf].filter(Boolean).join(', ');
     return `
     <div class="border rounded-2xl p-4 bg-white shadow-sm">
@@ -9855,7 +9856,7 @@ async function tecVerOSConc(atvId){
         <div class="grid gap-2">${videos.map(u=>`<video src="${esc(u)}" controls preload="metadata" playsinline class="w-full rounded-lg border bg-black" style="max-height:260px"></video>`).join('')}</div></div>`:''}
       ${sigs.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ ${sigs.length>1?`Assinaturas do cliente (${sigs.length})`:'Assinatura do cliente'}</div>
         ${sigs.map(s=>`<div class="mb-2"><img src="${esc(s.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
-        <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(s.nome||'Cliente')}${s.tipo==='tecnico'?' (Técnico)':''}${s.em?' · '+new Date(s.em).toLocaleString('pt-BR'):''}</div></div>`).join('')}</div>`:''}
+        <div class="text-sm font-bold text-gray-900 mt-1" style="text-transform:uppercase;letter-spacing:.4px">${esc(String(s.nome||'').toUpperCase() || (s.tipo==='tecnico' ? 'TÉCNICO' : 'CLIENTE'))}</div></div>`).join('')}</div>`:''}
       <div class="flex flex-col min-[400px]:flex-row gap-2 mt-4">
         <button type="button" class="btn-brand flex-1 !w-auto !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
         <button type="button" class="btn-ghost flex-1 !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>
@@ -10632,7 +10633,7 @@ async function tecFluxoFinalizar(){
       // 🛡️ mesmo desenho já salvo neste atendimento (passo da assinatura)?
       // reaproveita a URL — nada de salvar a assinatura 2x (OS-2026-0003).
       const __impFin = await osSigImpressao(sigBlob);
-      const __jaUrl = (__impFin && window.__sigSalvasOS) ? window.__sigSalvasOS[F.osId + ':' + __impFin] : null;
+      const __jaUrl = (__impFin && window.__sigSalvasOS) ? window.__sigSalvasOS[F.osId + ':cliente:' + __impFin] : null;
       if(__jaUrl){
         sigUrl = __jaUrl;
       }else{
@@ -10644,7 +10645,7 @@ async function tecFluxoFinalizar(){
         sigUrl = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(sname)}`;
         await apiPATCH('os_clientes', `id=eq.${F.osId}`, { assinatura_url:sigUrl, assinatura_em:new Date().toISOString() });
         try{ await apiPOSTsafe('os_assinaturas', { os_id:F.osId, url:sigUrl, nome_assinante:nome.trim()||null }); }catch(_){}
-        if(__impFin){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[F.osId + ':' + __impFin] = sigUrl; }
+        if(__impFin){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[F.osId + ':cliente:' + __impFin] = sigUrl; }
       }
     }
     // 2) salva observação + conclui atividade (só depois da assinatura salva)
@@ -11237,7 +11238,7 @@ function osMontarHtmlImpressao(d){
     .thumb{max-height:92px;border:1px solid #ddd;border-radius:8px;margin:0 6px 6px 0;}
     .ass{margin-top:6px;text-align:center;}
     .ass img{max-height:76px;border-bottom:1px solid #333;padding:0 14px 2px;}
-    .ass .quem{font-size:11px;color:#555;margin-top:4px;}
+    .ass .quem{font-size:13px;color:#111;margin-top:5px;letter-spacing:.4px;}
     .rodape{position:fixed;bottom:0;left:0;right:0;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9.5px;color:#999;background:#fff;}
     .noprint{} @media print{ .noprint{display:none} }
   </style></head><body>
@@ -11287,8 +11288,7 @@ function osMontarHtmlImpressao(d){
     if(!sigs.length) return '';
     return `<div class="sec"><span>Assinatura${sigs.length>1?'s':''}</span></div>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:4px 0 2px">` + sigs.map(s=>`
-      <div class="ass" style="margin-top:0;min-width:180px;flex:1;max-width:260px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem"><b>${esc(s.nome||'Cliente')}</b></div>
-      <div class="mut">${s.tipo==='tecnico' ? 'Técnico responsável' : 'Assinatura do cliente'}${s.em ? ' · Assinado em: ' + new Date(s.em).toLocaleString('pt-BR') : ''}</div></div>`).join('') + `</div>`;
+      <div class="ass" style="margin-top:0;min-width:180px;flex:1;max-width:260px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem"><b>${esc(String(s.nome||'').toUpperCase() || (s.tipo==='tecnico' ? 'TÉCNICO' : 'CLIENTE'))}</b></div></div>`).join('') + `</div>`;
   })()}
   ${anexoSec}
   <div class="rodape"><span>Documento gerado pelo sistema New Life Diagnóstico</span><span>Impresso em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div>
