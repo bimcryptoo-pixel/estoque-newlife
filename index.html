@@ -1148,34 +1148,38 @@
 
       <!-- ===== 📊 PAINEL OS — analítico ===== -->
       <section id="aba-ospainel" class="hidden">
-        <div class="card p-4 mb-3 max-w-6xl">
+        <div class="card p-4 md:p-6 mb-3 w-full xl:max-w-none max-w-6xl mx-auto">
           <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div class="font-bold text-lg">📊 Painel de Atendimentos</div>
-            <div class="text-xs text-gray-500" id="osPainelFonte">Carregando dados…</div>
+            <div class="flex items-center gap-2">
+              <div class="text-xs text-gray-500" id="osPainelFonte">Carregando dados…</div>
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="OS_PAINEL=null;carregarPainelOS()">🔄 Atualizar</button>
+            </div>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <select id="osPFiltroAno" class="inp text-sm" onchange="osPainelRender()"><option value="">📅 Todos os anos</option></select>
             <select id="osPFiltroCliente" class="inp text-sm" onchange="osPainelRender()"><option value="">🏥 Todos os clientes</option></select>
             <select id="osPFiltroTipo" class="inp text-sm" onchange="osPainelRender()"><option value="">🔧 Todos os tipos</option></select>
             <select id="osPFiltroTecnico" class="inp text-sm" onchange="osPainelRender()"><option value="">👤 Todos os técnicos</option></select>
           </div>
-          <div id="osPainelKPIs" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3"></div>
-          <div class="grid md:grid-cols-2 gap-3 mb-3">
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🏥 Clientes com mais atendimentos</div><div id="osPRankCli"></div></div>
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🔧 Tipos de OS</div><div id="osPRankTipo"></div></div>
+          <div id="osPainelKPIs" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4"></div>
+          <div class="grid xl:grid-cols-3 gap-3 mb-3">
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-3">🏥 Clientes com mais atendimentos</div><div id="osPRankCli"></div></div>
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-3">🔧 Tipos de OS</div><div id="osPRankTipo"></div></div>
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-3">👤 Atendimentos por técnico</div><div id="osPRankTec"></div></div>
           </div>
-          <div class="grid md:grid-cols-3 gap-3 mb-3">
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">👤 Atendimentos por técnico</div><div id="osPRankTec"></div></div>
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">🔄 Corretiva x Preventiva</div><canvas id="osPDonut" height="180"></canvas></div>
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📅 Dia da semana</div><canvas id="osPSemana" height="180"></canvas></div>
+          <div class="grid xl:grid-cols-12 gap-3 mb-3">
+            <div class="border rounded-2xl p-4 bg-white shadow-sm xl:col-span-8"><div class="font-bold text-sm mb-2">📈 Evolução — últimos 12 meses</div><div class="relative h-72"><canvas id="osPMes12"></canvas></div></div>
+            <div class="border rounded-2xl p-4 bg-white shadow-sm xl:col-span-4"><div class="font-bold text-sm mb-2">🔄 Corretiva x Preventiva</div><div class="relative h-72"><canvas id="osPDonut"></canvas></div></div>
           </div>
-          <div class="grid md:grid-cols-2 gap-3 mb-3">
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📈 Sazonalidade — atendimentos por mês</div><canvas id="osPMes" height="160"></canvas></div>
-            <div class="border rounded-xl p-3"><div class="font-bold text-sm mb-2">📊 Evolução anual</div><canvas id="osPAno" height="160"></canvas></div>
+          <div class="grid xl:grid-cols-3 gap-3 mb-3">
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-2">📅 Sazonalidade — atendimentos por mês</div><div class="relative h-56"><canvas id="osPMes"></canvas></div></div>
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-2">🗓️ Dia da semana</div><div class="relative h-56"><canvas id="osPSemana"></canvas></div></div>
+            <div class="border rounded-2xl p-4 bg-white shadow-sm"><div class="font-bold text-sm mb-2">📊 Evolução anual</div><div class="relative h-56"><canvas id="osPAno"></canvas></div></div>
           </div>
-          <div class="border rounded-xl p-4 bg-amber-50 border-amber-200">
-            <div class="font-bold text-sm mb-2">💡 Leituras automáticas</div>
-            <div id="osPInsights" class="text-sm text-gray-700 grid gap-1"></div>
+          <div class="border rounded-2xl p-4 bg-gradient-to-br from-amber-50 to-white border-amber-200">
+            <div class="font-bold text-sm mb-3">💡 Leituras automáticas</div>
+            <div id="osPInsights" class="grid md:grid-cols-2 xl:grid-cols-3 gap-2"></div>
           </div>
         </div>
       </section>
@@ -8081,7 +8085,7 @@ async function carregarPainelOS(){
       fonte.textContent = 'Carregando dados…';
       const [oss, atvs] = await Promise.all([
         apiGETall('os_clientes?select=id,numero,cliente_id,tipo_os_id,status,created_at,clientes(nome),tipos_os(descricao)&order=created_at.asc'),
-        apiGETall('os_atividades?select=os_id,tecnico,data&order=data.asc'),
+        apiGETall('os_atividades?select=os_id,tecnico,data,inicio,fim,status&order=data.asc'),
       ]);
       OS_PAINEL = { oss, atvs };
       // preenche filtros
@@ -8111,67 +8115,118 @@ function osPainelRender(){
     (!fTec || atvs.some(a=>a.os_id===o.id && (a.tecnico||'').toLowerCase()===fTec)));
   const fids = new Set(fos.map(o=>o.id));
   const fat = atvs.filter(a=>fids.has(a.os_id));
-  document.getElementById('osPainelFonte').textContent = `${fos.length.toLocaleString('pt-BR')} OSs no filtro · dados ao vivo`;
-  // ---- KPIs
+  const tot = fos.length;
+  document.getElementById('osPainelFonte').textContent = `${tot.toLocaleString('pt-BR')} OSs no filtro · dados ao vivo`;
+  // ---- agregados profissionais
   const nCli = new Set(fos.map(o=>o.cliente_id).filter(Boolean)).size;
   const ehPrev = d => /preventiv/i.test(d||'');
   const nPrev = fos.filter(o=>ehPrev(o.tipos_os&&o.tipos_os.descricao)).length;
-  const pPrev = fos.length? (nPrev/fos.length*100):0;
+  const pPrev = tot? (nPrev/tot*100):0;
+  const nConc = fos.filter(o=>o.status==='concluida').length;
+  const pConc = tot? (nConc/tot*100):0;
+  const abertas = fos.filter(o=>o.status==='aberta'||o.status==='em_atendimento');
+  const agoraMs = Date.now();
+  const idadeMedia = abertas.length? abertas.reduce((s,o)=> s + (agoraMs - new Date(o.created_at).getTime()), 0)/abertas.length/86400000 : 0;
+  const maisAntiga = abertas.length? abertas.reduce((a,o)=> (o.created_at < a.created_at? o : a)) : null;
+  let durSoma=0, durN=0;
+  fat.forEach(a=>{
+    if(a.inicio && a.fim){
+      const p1 = String(a.inicio).split(':').map(Number), p2 = String(a.fim).split(':').map(Number);
+      const d = (p2[0]*60+(p2[1]||0)) - (p1[0]*60+(p1[1]||0));
+      if(d>0 && d<=720){ durSoma += d; durN++; }
+    }
+  });
+  const durMedia = durN? durSoma/durN : 0;
+  const fmtDur = min => !min? '—' : (min>=60? `${Math.floor(min/60)}h${String(Math.round(min%60)).padStart(2,'0')}` : `${Math.round(min)}min`);
+  // ---- KPIs
+  const kpi = (ic, cor, valor, rot, sub) => `
+    <div class="border rounded-2xl p-3.5 bg-white shadow-sm flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0" style="background:${cor}1a">${ic}</div>
+      <div class="min-w-0">
+        <div class="text-[22px] leading-6 font-black text-gray-800">${valor}</div>
+        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wide">${rot}</div>
+        <div class="text-[11px] text-gray-400 truncate" title="${sub}">${sub}</div>
+      </div>
+    </div>`;
   document.getElementById('osPainelKPIs').innerHTML = [
-    [fos.length.toLocaleString('pt-BR'),'ATENDIMENTOS'],
-    [nCli.toLocaleString('pt-BR'),'CLIENTES ATENDIDOS'],
-    [(100-pPrev).toFixed(0)+'%','CORRETIVAS'],
-    [pPrev.toFixed(1)+'%','PREVENTIVAS'],
-  ].map(([v,l])=>`<div class="border rounded-xl p-3 bg-white"><div class="text-2xl font-black text-brand">${v}</div><div class="text-[11px] text-gray-500 uppercase">${l}</div></div>`).join('');
-  // ---- ranking clientes
+    kpi('📋','#C1272D', tot.toLocaleString('pt-BR'), 'Atendimentos', 'OSs no filtro atual'),
+    kpi('🏥','#7c3aed', nCli.toLocaleString('pt-BR'), 'Clientes atendidos', 'clientes únicos no filtro'),
+    kpi('✅','#16a34a', pConc.toFixed(0)+'%', 'Taxa de conclusão', `${nConc.toLocaleString('pt-BR')} OSs concluídas`),
+    kpi('📂','#d97706', abertas.length.toLocaleString('pt-BR'), 'Em aberto', abertas.length? `idade média de ${idadeMedia.toFixed(0)} dias` : 'nada em aberto'),
+    kpi('⏱️','#2563eb', fmtDur(durMedia), 'Duração média', durN? 'tempo médio em campo' : 'sem horários registrados'),
+    kpi('🛡️','#0891b2', pPrev.toFixed(1)+'%', 'Preventivas', `corretivas: ${(100-pPrev).toFixed(1)}%`),
+  ].join('');
+  // ---- rankings
   const rc = {};
   fos.forEach(o=>{ const n=o.clientes?o.clientes.nome:'—'; rc[n]=(rc[n]||0)+1; });
-  document.getElementById('osPRankCli').innerHTML = osPainelBarras(Object.entries(rc).sort((a,b)=>b[1]-a[1]).slice(0,10), '#C1272D');
-  // ---- tipos
+  document.getElementById('osPRankCli').innerHTML = osPainelBarras(Object.entries(rc).sort((a,b)=>b[1]-a[1]).slice(0,10), '#C1272D', tot);
   const rt = {};
   fos.forEach(o=>{ const n=o.tipos_os?o.tipos_os.descricao:'Sem tipo'; rt[n]=(rt[n]||0)+1; });
-  document.getElementById('osPRankTipo').innerHTML = osPainelBarras(Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,10), '#2563eb');
-  // ---- técnicos (normalizado case-insensitive)
+  document.getElementById('osPRankTipo').innerHTML = osPainelBarras(Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,10), '#2563eb', tot);
   const rte = {};
   fat.forEach(a=>{ const n=(a.tecnico||'').trim(); const k=n.toLowerCase(); if(k) rte[k]={n, c:((rte[k]||{}).c||0)+1}; });
-  document.getElementById('osPRankTec').innerHTML = osPainelBarras(Object.values(rte).sort((a,b)=>b.c-a.c).slice(0,10).map(e=>[e.n,e.c]), '#16a34a');
+  document.getElementById('osPRankTec').innerHTML = osPainelBarras(Object.values(rte).sort((a,b)=>b.c-a.c).slice(0,10).map(e=>[e.n,e.c]), '#16a34a', fat.length);
   // ---- gráficos
   osPainelDestroy();
+  const TT = { backgroundColor:'#111827', titleFont:{weight:'bold', size:12}, bodyFont:{size:12}, padding:10, cornerRadius:8, displayColors:false };
+  const gradV = hex => c => { const {ctx, chartArea} = c.chart; if(!chartArea) return hex; const g = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top); g.addColorStop(0, hex+'30'); g.addColorStop(1, hex); return g; };
+  const gradA = hex => c => { const {ctx, chartArea} = c.chart; if(!chartArea) return hex+'40'; const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); g.addColorStop(0, hex+'55'); g.addColorStop(1, hex+'00'); return g; };
+  const scX = { grid:{display:false}, border:{display:false}, ticks:{font:{size:11}, color:'#6b7280'} };
+  const scY = { beginAtZero:true, grid:{color:'#f1f5f9'}, border:{display:false}, ticks:{font:{size:11}, color:'#6b7280'} };
   const mk = (id,cfg)=>{ const el=document.getElementById(id); if(el) OS_PAINEL_CH[id]=new Chart(el,cfg); };
-  mk('osPDonut',{type:'doughnut',data:{labels:['Corretivas','Preventivas'],datasets:[{data:[fos.length-nPrev,nPrev],backgroundColor:['#C1272D','#fbbf24']}]},options:{plugins:{legend:{position:'bottom'}}}});
+  const donutCentro = { id:'osDonutCentro', afterDraw(ch){ const o = (ch.config.options.plugins||{}).osCentro; if(!o) return; const m = ch.getDatasetMeta(0); if(!m.data[0]) return; const {x, y} = m.data[0]; const ctx = ch.ctx; ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#111827'; ctx.font='900 25px system-ui, sans-serif'; ctx.fillText(o.valor, x, y-8); ctx.fillStyle='#6b7280'; ctx.font='600 10px system-ui, sans-serif'; ctx.fillText(o.rot, x, y+13); ctx.restore(); } };
+  mk('osPDonut',{type:'doughnut',data:{labels:['Corretivas','Preventivas'],datasets:[{data:[tot-nPrev,nPrev],backgroundColor:['#C1272D','#f59e0b'],borderColor:'#ffffff',borderWidth:2,hoverOffset:6}]},plugins:[donutCentro],options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'circle',font:{size:11},padding:14}},tooltip:TT,osCentro:{valor:tot.toLocaleString('pt-BR'),rot:'OSs NO FILTRO'}}}});
+  // evolução — últimos 12 meses
+  const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const c12 = {};
+  fos.forEach(o=>{ const k=(o.created_at||'').slice(0,7); if(k) c12[k]=(c12[k]||0)+1; });
+  const ord12 = Object.keys(c12).sort();
+  let [uy, um] = (ord12.length? ord12[ord12.length-1] : new Date().toISOString().slice(0,7)).split('-').map(Number);
+  const lab12 = [], dat12 = [], tmp12 = [];
+  for(let i=0;i<12;i++){ tmp12.unshift(`${uy}-${String(um).padStart(2,'0')}`); um--; if(um===0){ um=12; uy--; } }
+  tmp12.forEach(k=>{ lab12.push(`${meses[parseInt(k.slice(5,7),10)-1]}/${k.slice(2,4)}`); dat12.push(c12[k]||0); });
+  mk('osPMes12',{type:'bar',data:{labels:lab12,datasets:[{data:dat12,backgroundColor:gradV('#C1272D'),borderRadius:6,maxBarThickness:44}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>` ${c.parsed.y.toLocaleString('pt-BR')} OSs`}}},scales:{x:scX,y:scY}}});
+  // sazonalidade (mês do ano, todos os anos do filtro)
+  const cm=[0,0,0,0,0,0,0,0,0,0,0,0];
+  fos.forEach(o=>{ const m=parseInt((o.created_at||'').slice(5,7),10); if(m>=1&&m<=12) cm[m-1]++; });
+  mk('osPMes',{type:'bar',data:{labels:meses,datasets:[{data:cm,backgroundColor:gradV('#7c3aed'),borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},scales:{x:scX,y:scY}}});
+  // dia da semana (pelas atividades)
   const sem = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   const cs = [0,0,0,0,0,0,0];
   fat.forEach(a=>{ if(a.data){ const d=new Date(a.data+'T12:00:00'); if(!isNaN(d)) cs[d.getDay()]++; } });
-  mk('osPSemana',{type:'bar',data:{labels:sem,datasets:[{data:cs,backgroundColor:'#2563eb'}]},options:{plugins:{legend:{display:false}}}});
-  const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const cm=[0,0,0,0,0,0,0,0,0,0,0,0];
-  fos.forEach(o=>{ const m=parseInt((o.created_at||'').slice(5,7),10); if(m>=1&&m<=12) cm[m-1]++; });
-  mk('osPMes',{type:'bar',data:{labels:meses,datasets:[{data:cm,backgroundColor:'#C1272D'}]},options:{plugins:{legend:{display:false}}}});
+  const maxSem = Math.max(...cs);
+  mk('osPSemana',{type:'bar',data:{labels:sem,datasets:[{data:cs,backgroundColor:cs.map(v=> v===maxSem && maxSem>0? '#2563eb' : '#bfdbfe'),borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},scales:{x:scX,y:scY}}});
+  // evolução anual
   const ca={};
   fos.forEach(o=>{ const a=(o.created_at||'').slice(0,4); if(a) ca[a]=(ca[a]||0)+1; });
   const anos=Object.keys(ca).sort();
-  mk('osPAno',{type:'line',data:{labels:anos,datasets:[{data:anos.map(a=>ca[a]),borderColor:'#C1272D',backgroundColor:'rgba(193,39,45,.12)',fill:true,tension:.3}]},options:{plugins:{legend:{display:false}}}});
+  mk('osPAno',{type:'line',data:{labels:anos,datasets:[{data:anos.map(a=>ca[a]),borderColor:'#C1272D',backgroundColor:gradA('#C1272D'),fill:true,tension:.35,pointRadius:3,pointBackgroundColor:'#C1272D',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},scales:{x:scX,y:scY}}});
   // ---- insights
   const ins = [];
-  if(fos.length){
+  if(tot){
     const topC = Object.entries(rc).sort((a,b)=>b[1]-a[1])[0];
-    if(topC) ins.push(`🏥 <b>${esc(topC[0])}</b> lidera com <b>${topC[1].toLocaleString('pt-BR')}</b> atendimentos (${(topC[1]/fos.length*100).toFixed(1)}% do total).`);
-    ins.push(`🔄 Corretivas: <b>${(100-pPrev).toFixed(1)}%</b> · Preventivas: <b>${pPrev.toFixed(1)}%</b> — ${pPrev<10?'há espaço para crescer o plano preventivo.':'bom equilíbrio preventivo.'}`);
+    if(topC) ins.push(['🏥', `<b>${esc(topC[0])}</b> lidera com <b>${topC[1].toLocaleString('pt-BR')}</b> atendimentos (${(topC[1]/tot*100).toFixed(1)}% do total).`]);
+    ins.push(['🔄', `Corretivas: <b>${(100-pPrev).toFixed(1)}%</b> · Preventivas: <b>${pPrev.toFixed(1)}%</b> — ${pPrev<10?'há espaço para crescer o plano preventivo.':'bom equilíbrio preventivo.'}`]);
     const mi = cm.indexOf(Math.max(...cm));
-    if(cm[mi]>0) ins.push(`📅 Pico de demanda em <b>${meses[mi]}</b> (${cm[mi].toLocaleString('pt-BR')} OSs) — reforce a escala nesse mês.`);
+    if(cm[mi]>0) ins.push(['📅', `Pico de demanda em <b>${meses[mi]}</b> (${cm[mi].toLocaleString('pt-BR')} OSs) — reforce a escala nesse mês.`]);
     const si = cs.indexOf(Math.max(...cs));
-    ins.push(`🗓️ <b>${['domingo','segunda','terça','quarta','quinta','sexta','sábado'][si]}</b> é o dia de pico (${cs[si].toLocaleString('pt-BR')} atendimentos).`);
+    if(cs[si]>0) ins.push(['🗓️', `<b>${['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][si]}</b> é o dia de pico (${cs[si].toLocaleString('pt-BR')} atendimentos).`]);
+    if(durN) ins.push(['⏱️', `Um atendimento leva em média <b>${fmtDur(durMedia)}</b> em campo (${durN.toLocaleString('pt-BR')} visitas com horário registrado).`]);
+    if(maisAntiga) ins.push(['📂', `<b>${abertas.length.toLocaleString('pt-BR')}</b> OSs em aberto · a mais antiga é de <b>${new Date(maisAntiga.created_at).toLocaleDateString('pt-BR')}</b> (${Math.floor((agoraMs - new Date(maisAntiga.created_at).getTime())/86400000)} dias).`]);
   }
-  document.getElementById('osPInsights').innerHTML = ins.map(i=>`<div>• ${i}</div>`).join('') || '<span class="text-gray-400">Sem dados no filtro.</span>';
+  document.getElementById('osPInsights').innerHTML = ins.length? ins.map(([ic,h])=>`<div class="bg-white/80 border border-amber-100 rounded-xl px-3 py-2.5 text-[13px] text-gray-700 flex gap-2 items-start"><span class="text-base leading-5">${ic}</span><div>${h}</div></div>`).join('') : '<span class="text-gray-400 text-sm">Sem dados no filtro.</span>';
 }
-function osPainelBarras(entries, cor){
+function osPainelBarras(entries, cor, totalGeral){
   if(!entries.length) return '<span class="text-gray-400 text-xs">Sem dados.</span>';
   const max = entries[0][1]||1;
-  return entries.map(([n,v])=>`
-    <div class="flex items-center gap-2 mb-1.5">
-      <div class="text-xs w-32 shrink-0 truncate" title="${esc(n)}">${esc(n)}</div>
-      <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden"><div class="h-4 rounded-full" style="width:${(v/max*100).toFixed(1)}%;background:${cor}"></div></div>
-      <div class="text-xs font-bold w-12 text-right">${v.toLocaleString('pt-BR')}</div>
+  const total = totalGeral || entries.reduce((s,e)=>s+e[1],0) || 1;
+  return entries.map(([n,v],i)=>`
+    <div class="flex items-center gap-2 mb-2">
+      <div class="text-[11px] font-black text-gray-300 w-5 text-right">${i+1}</div>
+      <div class="text-xs w-40 xl:w-52 shrink-0 truncate" title="${esc(n)}">${esc(n)}</div>
+      <div class="flex-1 bg-gray-100 rounded-full h-[18px] overflow-hidden"><div class="h-full rounded-full" style="width:${Math.max(2,(v/max*100)).toFixed(1)}%;background:linear-gradient(90deg, ${cor}, ${cor}b3)"></div></div>
+      <div class="text-xs font-bold w-14 text-right">${v.toLocaleString('pt-BR')}</div>
+      <div class="text-[11px] text-gray-400 w-11 text-right">${(v/total*100).toFixed(1)}%</div>
     </div>`).join('');
 }
 /* ================= 🗺️ GPS DA EQUIPE EM TEMPO REAL ================= */
