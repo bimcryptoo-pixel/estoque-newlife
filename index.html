@@ -9840,10 +9840,19 @@ document.addEventListener('click', function(ev){
 }, true);
 
 function renderPainelTecnico(atvs, fotoCount){
-  fotoCount = fotoCount||{};
+  // 📴 fotos na FILA OFFLINE contam como foto da OS (cartão + trava da
+  // assinatura) — a foto guardada no aparelho libera os próximos passos do
+  // mesmo jeito que a já enviada (regra do Fabio, 22/10/2026). O cache
+  // guarda a contagem BRUTA (só os_anexos); a soma é refeita a cada render.
+  const __fcBruto = fotoCount||{};
+  fotoCount = {...__fcBruto};
+  try{
+    const __ff = (TEC_PEND && TEC_PEND.fotosFila) || {};
+    Object.keys(__ff).forEach(k=>{ fotoCount[k] = (fotoCount[k]||0) + __ff[k]; });
+  }catch(e){}
   TEC_FOTOS = fotoCount;
   TEC_ATIVIDADES = atvs || [];
-  TEC_AB_CACHE = { atvs: atvs || [], fotoCount };
+  TEC_AB_CACHE = { atvs: atvs || [], fotoCount: __fcBruto };
   const box = document.getElementById('tecLista');
   const cntAb = document.getElementById('tecAbCount');
   if(!atvs.length){
@@ -10399,21 +10408,49 @@ async function tecUploadFoto(input){
   const osId = TEC_FOTO_OS; TEC_FOTO_OS = null;
   if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
   const file = input.files[0];
+  input.value='';
+  // Path gerado NA CAPTURA (mesmo padrão do fluxo): retry nunca duplica.
+  const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
+  const nome = `os/${osId}-${Date.now()}.${ext}`;
+  const nomeOriginal = file.name||('foto-'+Date.now()+'.jpg');
+  // 📴 OFFLINE (regra do Fabio, 22/10/2026): a foto avulsa do cartão segue a
+  // MESMA regra do fluxo — sem sinal, ela NÃO se perde: vai pra fila do
+  // aparelho, conta como foto da OS (libera a Assinatura e a conclusão) e
+  // sincroniza quando o sinal voltar, antes da conclusão da mesma OS.
+  const enfileirar = async (blob, jaNoStorage) => {
+    await nlFilaAdd({ tipo:'foto', osId, path:nome, nomeOriginal, jaNoStorage:!!jaNoStorage, ts:Date.now() }, blob||null);
+    await nlAtualizarPendCache();
+    toast('📴 Sem internet: foto guardada no aparelho — será enviada ao voltar o sinal.','alerta');
+    if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+  };
+  if(navigator.onLine===false){
+    try{ await enfileirar(file, false); }
+    catch(e){ toast('Erro ao guardar a foto no aparelho: '+e.message,'erro'); }
+    return;
+  }
   try{
     toast('Enviando foto…','ok');
-    const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'').slice(0,5);
-    const nome = `os/${osId}-${Date.now()}.${ext}`;
     const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
       method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'image/jpeg' }, body: file
     });
     if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
     const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
-    await apiPOST('os_anexos', { os_id:osId, url, nome:file.name||('foto-'+Date.now()+'.jpg') });
+    try{
+      await apiPOST('os_anexos', { os_id:osId, url, nome:nomeOriginal });
+    }catch(ePost){
+      // arquivo subiu, mas o vínculo falhou por REDE: enfileira só o vínculo
+      if(nlEhErroRede(ePost)){ await enfileirar(null, true); return; }
+      throw ePost;
+    }
     try{ await osLog(osId, 'anexou uma foto do atendimento'); }catch(e){}
     toast('Foto incluída na OS. ✓','ok');
     await carregarPainelTecnico();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
-  input.value='';
+  }catch(e){
+    if(nlEhErroRede(e)){
+      try{ await enfileirar(file, false); }
+      catch(e2){ toast('Erro: '+e2.message,'erro'); }
+    } else toast('Erro: '+e.message,'erro');
+  }
 }
 async function tecSincronizarOS(osId){  try{
     const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=status`);
@@ -10797,7 +10834,7 @@ const NL_DB_NOME = 'nl-offline';
 const NL_OVERLAY_KEY = 'nl_tec_overlay';
 let __nlDbPromise = null;
 let TEC_OVERLAY = {};   // cache em memória do overlay (render é síncrono)
-let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set() };
+let TEC_PEND = { total:0, conclusaoAtvs:new Set(), statusAtvs:new Set(), fotosFila:{} };
 let NL_SYNC_ANDANDO = false;
 
 /* Falha de REDE (não erro HTTP do servidor): fetch rejeita com TypeError,
@@ -10892,13 +10929,20 @@ function nlOverlayLimpar(atvId){
 
 /* Recarrega TEC_PEND/TEC_OVERLAY a partir da fila (fonte da verdade) e
    descarta overlay órfão (atividade sem nenhuma intent pendente). */
-async function nlAtualizarPendCache(){
-  const itens = await nlFilaAll();
-  TEC_PEND = {
+/* Monta o retrato de pendências a partir da fila — ÚNICA fonte dos dois
+   lugares que montam TEC_PEND (nlAtualizarPendCache e o laço do nlSync):
+   fotosFila = fotos guardadas no aparelho por OS (liberam a assinatura). */
+function nlMontarPend(itens){
+  return {
     total: itens.length,
     conclusaoAtvs: new Set(itens.filter(i=>i.tipo==='conclusao').map(i=>i.atvId)),
-    statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId))
+    statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId)),
+    fotosFila: itens.filter(i=>i.tipo==='foto').reduce((m,i)=>{ if(i.osId) m[i.osId]=(m[i.osId]||0)+1; return m; }, {})
   };
+}
+async function nlAtualizarPendCache(){
+  const itens = await nlFilaAll();
+  TEC_PEND = nlMontarPend(itens);
   const comIntent = new Set(itens.map(i=>i.atvId).filter(Boolean));
   const ov = nlOverlayLer();
   let mudou = false;
@@ -11062,11 +11106,7 @@ async function nlSync(manual){
   try{
     for(;;){
       const itens = await nlFilaAll();
-      TEC_PEND = {
-        total: itens.length,
-        conclusaoAtvs: new Set(itens.filter(i=>i.tipo==='conclusao').map(i=>i.atvId)),
-        statusAtvs: new Set(itens.filter(i=>i.tipo==='status').map(i=>i.atvId))
-      };
+      TEC_PEND = nlMontarPend(itens);
       nlPintarSelo();
       if(!itens.length) break;
       const it = itens[0];
