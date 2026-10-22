@@ -7381,7 +7381,7 @@ function osAbaAtividades(d){
       <div class="text-xs text-gray-500">Observação: <b class="text-gray-700">${esc(a.descricao_conclusao||'Não atribuído')}</b></div>
       ${editavel?`<div class="mt-1 flex gap-2 flex-wrap">
         <button class="text-xs text-brand font-bold" onclick="osEditarAtividade('${a.id}')">✏️ Editar</button>
-        ${a.status!=='concluida'&&a.status!=='cancelada'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button>`:''}
+        ${a.status!=='concluida'&&a.status!=='cancelada'?`<button class="text-xs text-green-700 font-bold" onclick="osToggleAtividade('${a.id}')">✅ Concluir</button><button class="text-xs text-red-700 font-bold" onclick="osCancelarAtividade('${a.id}')">❌ Cancelar</button>`:''}
         <button class="text-xs text-red-700 font-bold" onclick="osExcluirAtividade('${a.id}')">🗑️</button>
       </div>`:''}
     </div>`;
@@ -7953,6 +7953,22 @@ async function osExcluirAtividade(id){
   if(!confirm('Excluir esta atividade?')) return;
   try{ await apiDELETE('os_atividades', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+/* ❌ Cancelar atividade pelo ESCRITÓRIO (OS Clientes) — regra do Fabio
+   (22/10/2026): cancelar NÃO é ação do técnico no Minhas OS, só do módulo
+   OS Clientes. Mesma consequência do ✅ Concluir daqui: se todas as
+   atividades ficarem concluídas/canceladas, a OS fecha (só com assinatura). */
+async function osCancelarAtividade(id){
+  if(!confirm('Cancelar esta atividade?')) return;
+  try{
+    await apiPATCH('os_atividades', `id=eq.${id}`, { status:'cancelada' });
+    await osLog(OS_DETALHE.os.id, 'cancelou uma atividade');
+    const novoStatus = await osFecharSeTudoConcluido(OS_DETALHE.os.id);
+    if(novoStatus==='concluida') toast('OS concluída por completo. ✓','ok');
+    else if(novoStatus==='sem_assinatura') toast('Falta a assinatura do cliente: a OS só fecha com a assinatura.','erro');
+    else toast('Atividade cancelada. ✓','ok');
+    await verOS(OS_DETALHE.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ---------- produtos (baixa/estorno de estoque) ---------- */
@@ -9819,14 +9835,16 @@ function renderPainelTecnico(atvs, fotoCount){
     // 📷🎥✍️ ORDEM (regra do Fabio, 22/10/2026): Foto e Vídeo SEMPRE antes da
     // Assinatura; a Assinatura desceu pro lugar do Vídeo (largura cheia, por
     // último) e só ativa depois da foto; o Vídeo fica DESATIVADO pra todos.
+    // 📧 Reenviar protocolo NÃO entra na sequência: é uso avulso do operador
+    // (só quando o cliente solicita) — link discreto FORA da grade, embaixo.
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
     btns += `<button type="button" class="btn-ghost w-full !py-2.5 text-sm tec-travado" data-atv="${a.id}" data-act="video" title="🎥 Vídeo desativado por enquanto" aria-disabled="true" onclick="tecVideoOS('${os.id||a.os_id||''}')">🔒 🎥 Vídeo</button>`;
-    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm min-[360px]:col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo</button>`;
     const fotosN = fotoCount[os.id] || fotoCount[a.os_id] || 0;
     const travAss = trav || fotosN < 1;
     const attrAss = trav ? attrTrav : (travAss ? ` title="${TRAVA_ASS_TITULO}" aria-disabled="true"` : '');
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm min-[360px]:col-span-2${travAss?' tec-travado':''}" data-atv="${a.id}" data-act="assinatura"${attrAss} onclick="tecAssinaturaAbrir('${os.id}')">${travAss?'🔒 ':''}✍️ Assinatura</button>`;
-    btns += `<button class="min-[360px]:col-span-2 whitespace-nowrap text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
+    // ❌ REGRA (Fabio, 22/10/2026): cancelar atividade NÃO existe no Minhas
+    // OS — é ação do escritório, no módulo OS Clientes (osCancelarAtividade).
     }
     return `
     <div class="border rounded-2xl p-4 bg-white shadow-sm">
@@ -9844,6 +9862,7 @@ function renderPainelTecnico(atvs, fotoCount){
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
       <div class="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
+      ${!pendConc?`<div class="mt-1.5 text-center"><button type="button" class="text-xs text-gray-400 font-semibold py-1 whitespace-nowrap" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')" title="Uso avulso do operador — só quando o cliente solicitar">📧 Reenviar protocolo</button></div>`:''}
       ${(pendConc||pendSt)?`<div class="text-xs font-bold mt-2" style="color:#9a3412">⏳ aguardando envio</div>`:''}
     </div>`;
   }).join('');
