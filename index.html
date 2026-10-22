@@ -10382,14 +10382,13 @@ function imprimirOS(){
     const addSig=(url,nome,em)=>{ if(!url) return; const k=chaveSig(url); if(sigVistas.has(k)) return; sigVistas.add(k); sigs.push({url, nome:nome||'Cliente', em}); };
     addSig(o.assinatura_url,'Cliente',o.assinatura_em);
     (d.assinaturas||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
-    /* REGRA DO USUÁRIO (20/10/2026): a impressão mostra SOMENTE 1 campo de assinatura —
-       a MAIS RECENTE. Vale p/ a duplicata acima E p/ assinaturas de eventos diferentes. */
-    let sigFinal=null;
-    for(const s of sigs){ if(!sigFinal){ sigFinal=s; continue; } const tS=new Date(s.em||0).getTime(), tF=new Date(sigFinal.em||0).getTime(); if(tS>=tF) sigFinal=s; }
-    const sigs1=sigFinal?[sigFinal]:[];
-    if(!sigs1.length) return '';
-    return `<div class="sec"><span>Assinatura${sigs1.length>1?'s':''}</span></div>
-    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px">` + sigs1.map(s=>`
+    /* REGRA DO USUÁRIO (atualizada 21/10/2026, decisão dele após o caso da OS 12675):
+       a impressão mostra TODAS as assinaturas DISTINTAS (a desduplicação por URL acima
+       continua valendo — a mesma assinatura gravada 2x aparece 1x só). Substitui a
+       regra de 20/10/2026 ("somente a mais recente"). */
+    if(!sigs.length) return '';
+    return `<div class="sec"><span>Assinatura${sigs.length>1?'s':''}</span></div>
+    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:8px 0 4px">` + sigs.map(s=>`
       <div class="ass" style="margin-top:0;min-width:220px;flex:1;max-width:320px;page-break-inside:avoid;break-inside:avoid"><img src="${esc(s.url||'')}" style="max-width:100%"><div class="quem">Assinatura de ${esc(s.nome||'Cliente')}</div>
       ${s.em?`<div class="mut">Assinado em: ${new Date(s.em).toLocaleString('pt-BR')}</div>`:''}</div>`).join('') + `</div>`;
   })()}
