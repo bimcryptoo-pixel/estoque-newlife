@@ -6395,10 +6395,12 @@ function renderOSLista(){
   box.innerHTML = `<div class="text-xs text-gray-500 mb-1">${cont}</div>` +
     rows.map(o=>{
       const equipNome = o._equip || (o.equipamentos ? o.equipamentos.nome : '');
+      // 📱 REGRA (pedido do Fabio, 22/10/2026): no SMARTPHONE o cartão mostra
+      // só o equipamento — técnico e cidade só no desktop (md:), pra limpar.
       const ctx = [];
-      if(equipNome) ctx.push(`🔧 ${esc(equipNome)}`);
-      if(o._tec) ctx.push(`👤 ${esc(o._tec)}`);
-      if(o.clientes && o.clientes.cidade) ctx.push(`📍 ${esc(o.clientes.cidade)}`);
+      if(equipNome) ctx.push(`<span class="whitespace-nowrap">🔧 ${esc(equipNome)}</span>`);
+      if(o._tec) ctx.push(`<span class="whitespace-nowrap hidden md:inline">👤 ${esc(o._tec)}</span>`);
+      if(o.clientes && o.clientes.cidade) ctx.push(`<span class="whitespace-nowrap hidden md:inline">📍 ${esc(o.clientes.cidade)}</span>`);
       const selos = osEmailSelos(o);
       const conts = [];
       if(o._fotos) conts.push(`📷 ${o._fotos}`);
@@ -6407,11 +6409,11 @@ function renderOSLista(){
       return `
     <div class="border rounded-xl p-3 min-w-0 hover:bg-gray-50 cursor-pointer flex flex-col gap-1.5" onclick="verOS('${o.id}')">
       <div class="flex items-start gap-2">
-        <div class="font-bold flex-1 min-w-0" style="font-size:15px;line-height:1.25">🏥 ${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
+        <div class="font-bold flex-1 min-w-0" style="font-size:15px;line-height:1.25">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
         <div class="font-bold text-brand text-[13px] whitespace-nowrap pt-[2px]">${esc(o.numero)}</div>
       </div>
       <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
-      ${ctx.length?`<div class="text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-0.5">${ctx.map(c=>`<span class="whitespace-nowrap">${c}</span>`).join('')}</div>`:''}
+      ${ctx.length?`<div class="text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-0.5">${ctx.join('')}</div>`:''}
       ${(o.etiquetas&&o.etiquetas.length)?`<div class="flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
       ${selos?`<div class="flex gap-1 flex-wrap">${selos}</div>`:''}
       <div class="text-xs text-gray-500 truncate min-w-0">${esc(o.descricao_servico||'')}</div>
@@ -9366,6 +9368,19 @@ async function carregarPainelTecnico(){
       ).catch(()=>[]);
       const alvo = String(tnome||'').trim().toLowerCase();
       atvs = (amplas||[]).filter(a=>String(a.tecnico||'').trim().toLowerCase()===alvo);
+    }
+    // 👁️ VISÃO TEMPORÁRIA (22/10/2026 — pedido do Fabio): enquanto ele ajusta
+    // o layout do piloto, o Minhas OS do Fabio também mostra as 3 OSs
+    // designadas ao Fabrício (OS-2026-0001/0002/0003, HUC). É só LEITURA de
+    // lista: nenhuma atividade é criada e as designações não mudam.
+    // REMOVER quando ele avisar ("deixar somente para ele").
+    if(String(tnome||'').trim() === 'Fabio'){
+      try{
+        const idsPiloto = '07d23c7f-f7d9-4991-a37d-3ffafdfc33e0,9af00372-6500-465e-a0c5-4853b1f367a7,cbc47d4f-1351-491c-ac59-faec2f4e4cfc';
+        const ex = await apiGET('os_atividades?os_id=in.(' + idsPiloto + ')&status=not.in.(concluida,cancelada)&select=' + selAtv + ordAtv).catch(()=>[]);
+        const vistos = new Set((atvs||[]).map(a=>a.id));
+        (ex||[]).forEach(a=>{ if(a && !vistos.has(a.id)){ atvs.push(a); vistos.add(a.id); } });
+      }catch(e){}
     }
     // 📋 REGRA (pedido do Fabio, 21/10/2026): TODAS as OSs do técnico sempre
     // aparecem no Minhas OS — sem janela de dias escondendo nada. A antiga
