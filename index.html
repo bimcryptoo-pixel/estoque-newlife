@@ -9886,7 +9886,7 @@ function renderPainelTecnico(atvs, fotoCount){
         <div class="font-black text-brand text-lg">${esc(os.numero||'')}</div>
         ${atvTecBadge(stExib)}
       </div>
-      <div class="font-bold text-sm">${end?`<span class="cursor-pointer" title="🧭 Abrir navegação pro endereço do cliente" onclick="tecNavegar('${os.id||a.os_id||''}')">${esc(fmtCliNome(cli.nome||'—', cli.tipo))} <span class="text-brand">🧭</span></span>`:esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
+      <div class="font-bold text-sm">${end?`<span class="cursor-pointer" title="Abrir navegação pro endereço do cliente" onclick="tecNavegar('${os.id||a.os_id||''}')">${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</span>`:esc(fmtCliNome(cli.nome||'—', cli.tipo))}</div>
       ${end?`<div class="text-xs text-gray-500 cursor-pointer" title="🧭 Abrir navegação pro endereço do cliente" onclick="tecNavegar('${os.id||a.os_id||''}')">📍 ${esc(end)}</div>`:''}
       ${cli.email?`<div class="text-xs text-gray-500">✉️ ${esc(cli.email)}</div>`:''}
       ${eq.nome?`<div class="text-xs text-gray-500">🔧 ${esc(eq.nome)}${eq.numero_serie?' · SN '+esc(eq.numero_serie):''}</div>`:''}
