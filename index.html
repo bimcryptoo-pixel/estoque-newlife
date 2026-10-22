@@ -8076,6 +8076,8 @@ function atvTecBadge(st){
   return `<span style="${s.badge};font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap">${s.label}</span>`;
 }
 /* ================= 📊 PAINEL OS — analítico ================= */
+/* Normaliza nome de técnico (sem acento/caixa) — unificação de grafias (21/10/2026) */
+function osNormNome(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
 let OS_PAINEL = null, OS_PAINEL_CH = {};
 function osPainelDestroy(){ Object.values(OS_PAINEL_CH).forEach(c=>{try{c.destroy()}catch(e){}}); OS_PAINEL_CH = {}; }
 async function carregarPainelOS(){
@@ -8095,8 +8097,10 @@ async function carregarPainelOS(){
       document.getElementById('osPFiltroCliente').innerHTML = '<option value="">🏥 Todos os clientes</option>' + clis.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join('');
       const tipos = [...new Set(oss.map(o=>o.tipos_os?o.tipos_os.descricao:'').filter(Boolean))].sort();
       document.getElementById('osPFiltroTipo').innerHTML = '<option value="">🔧 Todos os tipos</option>' + tipos.map(t=>`<option>${esc(t)}</option>`).join('');
-      const tecs = [...new Set(atvs.map(a=>(a.tecnico||'').trim()).filter(Boolean))].sort();
-      document.getElementById('osPFiltroTecnico').innerHTML = '<option value="">👤 Todos os técnicos</option>' + tecs.map(t=>`<option>${esc(t)}</option>`).join('');
+      const tecMap = {};
+      atvs.forEach(a=>{ const t=(a.tecnico||'').trim(); if(!t) return; const k=osNormNome(t); if(!tecMap[k]) tecMap[k]={}; tecMap[k][t]=(tecMap[k][t]||0)+1; });
+      const tecs = Object.entries(tecMap).map(([k,vars])=>({ k, rot: Object.entries(vars).sort((a,b)=>b[1]-a[1])[0][0] })).sort((a,b)=>a.rot.localeCompare(b.rot));
+      document.getElementById('osPFiltroTecnico').innerHTML = '<option value="">👤 Todos os técnicos</option>' + tecs.map(t=>`<option value="${esc(t.k)}">${esc(t.rot)}</option>`).join('');
     }
     osPainelRender();
   }catch(e){ fonte.textContent = 'Erro ao carregar: '+e.message; }
@@ -8112,9 +8116,12 @@ function osPainelRender(){
     (!fAno || (o.created_at||'').slice(0,4)===fAno) &&
     (!fCli || o.cliente_id===fCli) &&
     (!fTipo || (o.tipos_os&&o.tipos_os.descricao===fTipo)) &&
-    (!fTec || atvs.some(a=>a.os_id===o.id && (a.tecnico||'').toLowerCase()===fTec)));
+    (!fTec || atvs.some(a=>a.os_id===o.id && osNormNome(a.tecnico)===fTec)));
   const fids = new Set(fos.map(o=>o.id));
   const fat = atvs.filter(a=>fids.has(a.os_id));
+  // Com filtro de técnico, as estatísticas POR ATIVIDADE (ranking, duração, dia da
+  // semana) contam só as atividades DELE — não as de colegas na mesma OS (21/10/2026).
+  const fatTec = fTec ? fat.filter(a=>osNormNome(a.tecnico)===fTec) : fat;
   const tot = fos.length;
   document.getElementById('osPainelFonte').textContent = `${tot.toLocaleString('pt-BR')} OSs no filtro · dados ao vivo`;
   // ---- agregados profissionais
@@ -8129,7 +8136,7 @@ function osPainelRender(){
   const idadeMedia = abertas.length? abertas.reduce((s,o)=> s + (agoraMs - new Date(o.created_at).getTime()), 0)/abertas.length/86400000 : 0;
   const maisAntiga = abertas.length? abertas.reduce((a,o)=> (o.created_at < a.created_at? o : a)) : null;
   let durSoma=0, durN=0;
-  fat.forEach(a=>{
+  fatTec.forEach(a=>{
     if(a.inicio && a.fim){
       const p1 = String(a.inicio).split(':').map(Number), p2 = String(a.fim).split(':').map(Number);
       const d = (p2[0]*60+(p2[1]||0)) - (p1[0]*60+(p1[1]||0));
@@ -8164,8 +8171,8 @@ function osPainelRender(){
   fos.forEach(o=>{ const n=o.tipos_os?o.tipos_os.descricao:'Sem tipo'; rt[n]=(rt[n]||0)+1; });
   document.getElementById('osPRankTipo').innerHTML = osPainelBarras(Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,10), '#2563eb', tot);
   const rte = {};
-  fat.forEach(a=>{ const n=(a.tecnico||'').trim(); const k=n.toLowerCase(); if(k) rte[k]={n, c:((rte[k]||{}).c||0)+1}; });
-  document.getElementById('osPRankTec').innerHTML = osPainelBarras(Object.values(rte).sort((a,b)=>b.c-a.c).slice(0,10).map(e=>[e.n,e.c]), '#16a34a', fat.length);
+  fatTec.forEach(a=>{ const n=(a.tecnico||'').trim(); const k=osNormNome(n); if(!k) return; if(!rte[k]) rte[k]={n, c:0, vars:{}}; rte[k].c++; rte[k].vars[n]=(rte[k].vars[n]||0)+1; if(rte[k].vars[n] > (rte[k].vars[rte[k].n]||0)) rte[k].n = n; });
+  document.getElementById('osPRankTec').innerHTML = osPainelBarras(Object.values(rte).sort((a,b)=>b.c-a.c).slice(0,10).map(e=>[e.n,e.c]), '#16a34a', fatTec.length);
   // ---- gráficos
   osPainelDestroy();
   const TT = { backgroundColor:'#111827', titleFont:{weight:'bold', size:12}, bodyFont:{size:12}, padding:10, cornerRadius:8, displayColors:false };
@@ -8193,7 +8200,7 @@ function osPainelRender(){
   // dia da semana (pelas atividades)
   const sem = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   const cs = [0,0,0,0,0,0,0];
-  fat.forEach(a=>{ if(a.data){ const d=new Date(a.data+'T12:00:00'); if(!isNaN(d)) cs[d.getDay()]++; } });
+  fatTec.forEach(a=>{ if(a.data){ const d=new Date(a.data+'T12:00:00'); if(!isNaN(d)) cs[d.getDay()]++; } });
   const maxSem = Math.max(...cs);
   mk('osPSemana',{type:'bar',data:{labels:sem,datasets:[{data:cs,backgroundColor:cs.map(v=> v===maxSem && maxSem>0? '#2563eb' : '#bfdbfe'),borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},scales:{x:scX,y:scY}}});
   // evolução anual
