@@ -9669,7 +9669,23 @@ function tecReenviarEmail(atvId, btn){
    incluso — mesma conta do render): se já existe transição pendente de
    sync, o status cru 'pendente' NÃO bloqueia ninguém. */
 let TEC_ATIVIDADES = [];   // última lista renderizada no painel (lookup da trava e das guardas)
+let TEC_FOTOS = {};        // fotoCount da última renderização (trava da assinatura)
 const TRAVA_TITULO = 'Primeiro toque em 🚗 A caminho — o atendimento começa pelo deslocamento.';
+/* ✍️ ORDEM DOS BOTÕES (regra do Fabio, 22/10/2026): 📷 Foto e 🎥 Vídeo vêm
+   SEMPRE antes da ✍️ Assinatura, que desceu pro lugar do Vídeo (último botão
+   de ação) e só ATIVA depois da foto do atendimento — como o Vídeo está
+   DESATIVADO pra todos (VIDEO_LIBERADO=false, estrutura mantida), a
+   sequência que libera a assinatura é: A caminho → Iniciar → Foto. */
+const TRAVA_ASS_TITULO = 'A assinatura libera depois da 📷 Foto do atendimento.';
+function tecFotosDaOS(a){
+  if(!a) return 0;
+  const osId = (a.os_clientes && a.os_clientes.id) || a.os_id;
+  return (TEC_FOTOS && TEC_FOTOS[osId]) || 0;
+}
+function tecAssinaturaLiberada(a){ return tecFotosDaOS(a) > 0; }
+function tecAvisoAssinatura(){
+  toast('📷 A assinatura libera depois da foto do atendimento — toque em Foto primeiro.','alerta');
+}
 const TRAVA_CSS = '.tec-travado{opacity:.45;filter:grayscale(.4);cursor:not-allowed}';
 (function tecTravaStyle(){
   try{
@@ -9712,6 +9728,7 @@ function tecAtvPorOs(osId){
 function tecAssinaturaAbrir(osId){
   const a = tecAtvPorOs(osId);
   if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
+  if(a && !tecAssinaturaLiberada(a)){ tecAvisoAssinatura(); return; }
   osAbrirAssinatura(osId);
 }
 /* Clique em botão travado NÃO executa a ação: mostra o aviso da regra.
@@ -9727,11 +9744,27 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     ev.stopImmediatePropagation();
     tecAvisoTrava();
+    return;
+  }
+  const act = el.getAttribute('data-act');
+  if(act==='video' && !podeUsarVideo()){
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    toast(VIDEO_LIBERADO ? '🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.' : '🎥 Vídeo desativado por enquanto.','alerta');
+    return;
+  }
+  if(act==='assinatura' && a && !tecAssinaturaLiberada(a)){
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    tecAvisoAssinatura();
   }
 }, true);
 
 function renderPainelTecnico(atvs, fotoCount){
   fotoCount = fotoCount||{};
+  TEC_FOTOS = fotoCount;
   TEC_ATIVIDADES = atvs || [];
   TEC_AB_CACHE = { atvs: atvs || [], fotoCount };
   const box = document.getElementById('tecLista');
@@ -9783,11 +9816,16 @@ function renderPainelTecnico(atvs, fotoCount){
       btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
     }
     if(!pendConc){
-    btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
+    // 📷🎥✍️ ORDEM (regra do Fabio, 22/10/2026): Foto e Vídeo SEMPRE antes da
+    // Assinatura; a Assinatura desceu pro lugar do Vídeo (largura cheia, por
+    // último) e só ativa depois da foto; o Vídeo fica DESATIVADO pra todos.
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
+    btns += `<button type="button" class="btn-ghost w-full !py-2.5 text-sm tec-travado" data-atv="${a.id}" data-act="video" title="🎥 Vídeo desativado por enquanto" aria-disabled="true" onclick="tecVideoOS('${os.id||a.os_id||''}')">🔒 🎥 Vídeo</button>`;
     btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm min-[360px]:col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo</button>`;
-    const __podeVid = podeUsarVideo();
-    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm min-[360px]:col-span-2${__podeVid?'':' tec-travado'}"${__podeVid?'':` title="Vídeo liberado só para o admin e o Fabricio por enquanto"`} onclick="tecVideoOS('${os.id||a.os_id||''}')">${__podeVid?'':'🔒 '}🎥 Vídeo</button>`;
+    const fotosN = fotoCount[os.id] || fotoCount[a.os_id] || 0;
+    const travAss = trav || fotosN < 1;
+    const attrAss = trav ? attrTrav : (travAss ? ` title="${TRAVA_ASS_TITULO}" aria-disabled="true"` : '');
+    btns += `<button class="btn-ghost w-full !py-2.5 text-sm min-[360px]:col-span-2${travAss?' tec-travado':''}" data-atv="${a.id}" data-act="assinatura"${attrAss} onclick="tecAssinaturaAbrir('${os.id}')">${travAss?'🔒 ':''}✍️ Assinatura</button>`;
     btns += `<button class="min-[360px]:col-span-2 whitespace-nowrap text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
     }
     return `
@@ -10194,7 +10232,12 @@ function tecFotoOS(osId){
    padrão da trava de fluxo). Vídeo é arquivo grande: upload SÓ online
    (não entra na fila offline) e com teto de 30s / 48 MB. */
 function osEhVideoNome(s){ return /\.(mp4|mov|webm|m4v|3gp)$/i.test(String(s||'').split('?')[0]); }
+/* 🎥 REGRA (Fabio, 22/10/2026): Vídeo DESATIVADO para todos por enquanto —
+   o botão e toda a estrutura (upload, trava, tipos) continuam construídos;
+   pra reativar é só virar esta chave (volta a valer a regra admin/Fabricio). */
+const VIDEO_LIBERADO = false;
 function podeUsarVideo(){
+  if(!VIDEO_LIBERADO) return false;
   try{
     if(typeof sessao==='undefined' || !sessao) return false;
     if(sessao.perfil==='admin') return true;
@@ -10205,7 +10248,7 @@ function podeUsarVideo(){
 }
 let TEC_VIDEO_OS = null;
 function tecVideoOS(osId){
-  if(!podeUsarVideo()){ toast('🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.','alerta'); return; }
+  if(!podeUsarVideo()){ toast(VIDEO_LIBERADO ? '🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.' : '🎥 Vídeo desativado por enquanto.','alerta'); return; }
   // mesma trava de fluxo da foto: anexo avulso só depois do 🚗 A caminho
   const __aTravVideo = tecAtvPorOs(osId);
   if(__aTravVideo && tecBloqueado(__aTravVideo)){ tecAvisoTrava(); return; }
@@ -10219,7 +10262,7 @@ async function tecUploadVideo(input){
   if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
   const file = input.files[0];
   if(input) input.value='';
-  if(!podeUsarVideo()){ toast('🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.','alerta'); return; }
+  if(!podeUsarVideo()){ toast(VIDEO_LIBERADO ? '🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.' : '🎥 Vídeo desativado por enquanto.','alerta'); return; }
   try{
     if(file.type && !/^video\//i.test(file.type)) throw new Error('O arquivo escolhido não é um vídeo.');
     if(file.size > 48*1024*1024) throw new Error(`Vídeo muito grande (${Math.round(file.size/1048576)} MB). O limite é 48 MB — grave em 1080p, de 15 a 20 segundos.`);
