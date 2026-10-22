@@ -1,15 +1,24 @@
 /* NEW LIFE — Service Worker (PWA / modo offline)
-   Escopo MÍNIMO e proposital:
-   - Só intercepta GET same-origin (o "shell" do app: documento, logo, ícones, manifest).
-   - TODO o resto passa direto, sem tocar: cross-origin (Supabase, CDNs), qualquer
-     método != GET (REST POST/PATCH/DELETE, uploads de foto/assinatura) e HEAD
-     (a trava anti-cache __checkVersion usa HEAD no-store e continua intacta).
+   Missão: o sistema tem que ABRIR e NAVEGAR sem sinal (regra do Fabio,
+   22/10/2026) — o técnico chega em hospital/subsolo sem internet e a página
+   não pode abrir em branco. Para isso o aparelho guarda o pacote COMPLETO
+   do sistema no primeiro acesso com internet.
+   Desde a v6 o pacote é 100% same-origin: as bibliotecas das quais a
+   página depende (Tailwind, Chart.js, Leaflet + imagens) foram VENDORADAS
+   para dentro do repositório (pasta js/) — nenhum script vem mais de CDN.
+   Sem elo externo, não há o que ficar de fora do pacote.
+   O que ele NUNCA intercepta:
+   - qualquer método != GET (REST POST/PATCH/DELETE, uploads) e HEAD
+     (a trava anti-cache __checkVersion usa HEAD no-store e segue intacta);
+   - o Supabase (REST, auth e storage) — dado é sempre da rede; offline,
+     quem responde é o snapshot + a fila do próprio app (IndexedDB).
    Estratégia:
-   - Documento (navegação): network-first — online o app é SEMPRE o mais novo
-     (preserva a trava anti-cache); offline, cai para a cópia do cache e o app abre.
-   - Demais arquivos do shell: stale-while-revalidate (abre instantâneo do cache
-     e atualiza em segundo plano). */
-const NL_CACHE = 'nl-shell-v4';
+   - Documento (navegação): network-first — online o app é SEMPRE o mais
+     novo (preserva a trava anti-cache); offline, cai para a cópia do
+     cache e o app abre.
+   - Demais arquivos do pacote: stale-while-revalidate (abre instantâneo
+     do cache e atualiza em segundo plano). */
+const NL_CACHE = 'nl-shell-v6';
 const NL_SHELL = [
   './',
   './index.html',
@@ -17,16 +26,26 @@ const NL_SHELL = [
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
-  './icon-maskable-512.png'
+  './icon-maskable-512.png',
+  './js/tailwind-3.4.17.js',
+  './js/chart.umd.min.js',
+  './js/leaflet/leaflet.js',
+  './js/leaflet/leaflet.css',
+  './js/leaflet/images/marker-icon.png',
+  './js/leaflet/images/marker-icon-2x.png',
+  './js/leaflet/images/marker-shadow.png',
+  './js/leaflet/images/layers.png',
+  './js/leaflet/images/layers-2x.png'
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(NL_CACHE)
-      .then((c) => c.addAll(NL_SHELL))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const c = await caches.open(NL_CACHE);
+    // um a um, com catch individual: UMA URL quebrada nunca derruba o
+    // pacote inteiro (o addAll antigo era tudo-ou-nada).
+    for (const u of NL_SHELL) { try { await c.add(u); } catch (_) {} }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
@@ -42,7 +61,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return; // POST/PATCH/DELETE/HEAD: não intercepta
   let url;
   try { url = new URL(req.url); } catch (_) { return; }
-  if (url.origin !== self.location.origin) return; // Supabase/CDNs: não intercepta
+  if (url.hostname.endsWith('supabase.co')) return; // dados: sempre rede
+  if (url.origin !== self.location.origin) return; // cross-origin: direto
 
   // Documento: network-first (online = versão nova; offline = cache)
   if (req.mode === 'navigate' || req.destination === 'document') {
@@ -60,7 +80,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Demais GET same-origin (logo, ícones, manifest, sw assets): stale-while-revalidate
+  // Demais GET same-origin (pacote: js, logo, ícones, manifest):
+  // stale-while-revalidate
   e.respondWith(
     caches.open(NL_CACHE).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: true });

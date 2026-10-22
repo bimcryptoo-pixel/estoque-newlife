@@ -10,10 +10,10 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/tailwind-3.4.17.js"></script>
+<script src="js/chart.umd.min.js"></script>
+<link rel="stylesheet" href="js/leaflet/leaflet.css">
+<script src="js/leaflet/leaflet.js"></script>
 <style>
   :root, [data-theme="claro"]{
     --brand:#C1272D; --brand-dark:#9c1e23;
@@ -8733,8 +8733,8 @@ async function carregarMapaEquipe(){
     const centro = ativos.length ? [ativos[0].lat, ativos[0].lng] : [-3.717, -38.543]; // Fortaleza
     MAPA_EQ = L.map('mapaEquipe').setView(centro, 11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(MAPA_EQ);
-    const iconV = new L.Icon({ iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41] });
-    const iconC = new L.Icon({ iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className:'grayscale opacity-60' });
+    const iconV = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41] });
+    const iconC = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className:'grayscale opacity-60' });
     const bounds = [];
     (rows||[]).forEach(r=>{
       const mk = L.marker([r.lat, r.lng], { icon: r.ativa?iconV:iconC }).addTo(MAPA_EQ);
@@ -9974,7 +9974,7 @@ function tecFluxoRender(){
       <input type="file" id="tecFluxoFotoArquivoInput" accept="image/*" class="hidden" onchange="tecFluxoFotoUp(this)">
       <div class="text-xs text-gray-500 mb-1">Foto saiu borrada? Toque no ✕ para apagar.</div>
       <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map((f,i)=>{ const u=(typeof f==='string')?f:f.objUrl; const local=(typeof f!=='string'); return `<div class="relative"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border"><button class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-7 h-7 text-sm font-bold shadow" onclick="tecFluxoFotoDel(${i})" title="Apagar foto">✕</button>${local?`<div class="absolute bottom-1 left-1 text-[10px] font-bold rounded px-1.5 py-0.5" style="background:#ffedd5;color:#9a3412">⏳ aguardando envio</div>`:''}</div>`; }).join('')}</div>
-      ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)${F.fotos.some(f=>typeof f!=='string')?` · ${F.fotos.filter(f=>typeof f!=='string').length} aguardando envio`:''}</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
+      ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)${F.fotos.some(f=>typeof f!=='string')?` · ${F.fotos.filter(f=>typeof f!=='string').length} aguardando envio`:''}</div>`:'<div class="text-xs text-red-600 font-bold mb-2">🚨 Nenhuma foto ainda — a foto é obrigatória para concluir.</div>'}
       <div class="flex gap-2"><button class="btn-ghost flex-1 !py-3" onclick="tecFluxoVoltar()">← Voltar</button>
       <button class="btn-brand flex-1 !w-auto !py-3" onclick="tecFluxoAvancar()">Avançar →</button></div>`;
   }else if(F.passo===3){
@@ -9989,12 +9989,27 @@ function tecFluxoRender(){
   openOsModal(`<div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>${tecFluxoBarra()}${corpo}`);
   if(F.passo===3) tecFluxoInitPad();
 }
+/* 🚨 REGRA (Fabio, 22/10/2026): o Concluir só finaliza com FOTO + ASSINATURA.
+   A foto vale de QUALQUER origem: tirada/escolhida neste fluxo, anexada
+   avulsa pelo cartão, ou guardada na fila offline da OS. */
+function tecFluxoTemFoto(){
+  const F = TEC_FLUXO; if(!F) return false;
+  if(F.fotos && F.fotos.length) return true;
+  const naOs = (typeof TEC_FOTOS!=='undefined' && TEC_FOTOS && TEC_FOTOS[F.osId]) || 0;
+  const naFila = (typeof TEC_PEND!=='undefined' && TEC_PEND && TEC_PEND.fotosFila && TEC_PEND.fotosFila[F.osId]) || 0;
+  return (naOs + naFila) > 0;
+}
 function tecFluxoAvancar(){
   const F = TEC_FLUXO; if(!F) return;
   if(F.passo===1){
     F.obs = document.getElementById('tecFluxoObs').value;
     // descrição vazia NÃO avança (pré-piloto): é o texto que vai pra OS e pro cliente
     if(!String(F.obs||'').trim()){ toast('⚠️ Descreva o serviço executado antes de avançar.','erro'); return; }
+  }
+  if(F.passo===2 && !tecFluxoTemFoto()){
+    // 🚨 sem foto não sai do passo das fotos: coletar foto E assinatura
+    toast('🚨 Colete a foto do atendimento para continuar — a conclusão exige foto e assinatura.','erro');
+    return;
   }
   if(F.passo<3){ F.passo++; tecFluxoRender(); }
 }
@@ -10116,6 +10131,14 @@ async function tecFluxoFinalizar(){
   const cv = document.getElementById('tecFluxoPad');
   const padDesenhado = !!(cv && !tecPadVazio(cv));
   const offline = (navigator.onLine===false);
+  // 🚨 Regra 22/10/2026 (defesa em profundidade): sem FOTO também não conclui —
+  //    o passo das fotos já barra o avanço; se algo chegar aqui sem foto,
+  //    volta pro passo da foto com o alerta.
+  if(!tecFluxoTemFoto()){
+    F.passo = 2; tecFluxoRender();
+    toast('🚨 Falta a foto do atendimento: colete a foto e a assinatura para concluir.', 'erro');
+    return;
+  }
   // 🖊️ Regra 20/10/2026: sem assinatura (desenhada agora ou já salva), NÃO conclui nada.
   //    Clicar no aviso volta pra página da assinatura.
   if(!padDesenhado){
