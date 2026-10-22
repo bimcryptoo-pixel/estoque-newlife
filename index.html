@@ -1224,6 +1224,14 @@
             <button id="tecAbaAbertas" type="button" class="btn-brand flex-1 !py-2 text-sm" onclick="tecAba('abertas')">📋 Abertas</button>
             <button id="tecAbaConcluidas" type="button" class="btn-ghost flex-1 !py-2 text-sm" onclick="tecAba('concluidas')">✅ Concluídas</button>
           </div>
+          <div id="tecAbFiltro" class="flex items-center gap-2 flex-wrap mb-3">
+            <span class="text-xs font-bold text-gray-500">📅 De</span>
+            <input type="date" id="tecAbDe" class="inp !w-auto text-sm !mb-0" onchange="tecAbFiltrar()">
+            <span class="text-xs font-bold text-gray-500">até</span>
+            <input type="date" id="tecAbAte" class="inp !w-auto text-sm !mb-0" onchange="tecAbFiltrar()">
+            <button class="btn-ghost !w-auto !py-1.5 !px-3 text-xs" onclick="tecAbLimparFiltro()">Limpar</button>
+            <span id="tecAbCount" class="text-xs text-gray-500 font-bold"></span>
+          </div>
           <div id="tecLista" class="grid gap-3"><span class="text-gray-400 text-sm">Carregando…</span></div>
           <div id="tecConcWrap" class="hidden">
             <div class="flex items-center gap-2 flex-wrap mb-2">
@@ -9081,7 +9089,7 @@ async function carregarPainelTecnico(){
     // as atividades de "Fabio Filho". Se o eq vier vazio, busca ampla + filtro
     // por igualdade normalizada (trim + caixa) no cliente.
     const selAtv = '*,os_clientes(id,numero,descricao_servico,status,assinatura_url,clientes(nome,tipo,endereco,numero,bairro,cidade,uf,email),equipamentos(nome,numero_serie))';
-    const ordAtv = '&order=data.asc,created_at.asc&limit=200';
+    const ordAtv = '&order=data.desc,created_at.desc&limit=200';
     let atvs = await apiGET(
       'os_atividades?tecnico=eq.'+encodeURIComponent(tnome)+'&status=not.in.(concluida,cancelada)' +
       '&select=' + selAtv + ordAtv
@@ -9147,6 +9155,31 @@ let TEC_ABA = 'abertas';      // aba ativa do painel: 'abertas' | 'concluidas'
 let TEC_TNOME = '';           // tecnico_nome resolvido (carregarPainelTecnico)
 let TEC_CONC = [];            // cache das concluídas carregadas
 let TEC_CONC_FILTRO = '';     // filtro de data da aba Concluídas (aaaa-mm-dd)
+let TEC_AB_FILTRO = { de:'', ate:'' }; // 📅 filtro De/Até da aba Abertas (21/10/2026)
+let TEC_AB_CACHE = null;              // última carga da Abertas (refiltrar sem rede)
+/* 📅 data de referência da atividade: a data agendada; sem ela, a de criação */
+function tecDataAtv(a){ return String((a && a.data) || (a && a.created_at) || '').slice(0,10); }
+/* 📅 REGRA (pedido do Fabio, 21/10/2026): no Minhas OS as OSs aparecem sempre da
+   data MAIS ATUAL pra mais antiga — regra do sistema, vale pra todos os
+   funcionários e operadores, sem configuração individual. */
+function tecOrdenarDesc(lista){
+  return [...(lista||[])].sort((x,y)=>{
+    const dx = tecDataAtv(x), dy = tecDataAtv(y);
+    if(dx !== dy) return dy < dx ? -1 : 1;
+    return String(y.created_at||'').localeCompare(String(x.created_at||''));
+  });
+}
+function tecAbFiltrar(){
+  const de = document.getElementById('tecAbDe'), ate = document.getElementById('tecAbAte');
+  TEC_AB_FILTRO = { de: de ? de.value : '', ate: ate ? ate.value : '' };
+  if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+}
+function tecAbLimparFiltro(){
+  const de = document.getElementById('tecAbDe'), ate = document.getElementById('tecAbAte');
+  if(de) de.value = ''; if(ate) ate.value = '';
+  TEC_AB_FILTRO = { de:'', ate:'' };
+  if(TEC_AB_CACHE) renderPainelTecnico(TEC_AB_CACHE.atvs, TEC_AB_CACHE.fotoCount);
+}
 function tecAtualizarPainel(){
   if(TEC_ABA==='concluidas') tecCarregarConcluidas();
   else carregarPainelTecnico();
@@ -9158,6 +9191,8 @@ function tecAba(qual){
   if(bA) bA.className = (TEC_ABA==='abertas' ? 'btn-brand' : 'btn-ghost') + ' flex-1 !py-2 text-sm';
   if(bC) bC.className = (TEC_ABA==='concluidas' ? 'btn-brand' : 'btn-ghost') + ' flex-1 !py-2 text-sm';
   if(lA) lA.classList.toggle('hidden', TEC_ABA!=='abertas');
+  const fAb = document.getElementById('tecAbFiltro');
+  if(fAb) fAb.classList.toggle('hidden', TEC_ABA!=='abertas');
   if(wC) wC.classList.toggle('hidden', TEC_ABA!=='concluidas');
   if(TEC_ABA==='concluidas') tecCarregarConcluidas();
 }
@@ -9385,12 +9420,24 @@ document.addEventListener('click', function(ev){
 function renderPainelTecnico(atvs, fotoCount){
   fotoCount = fotoCount||{};
   TEC_ATIVIDADES = atvs || [];
+  TEC_AB_CACHE = { atvs: atvs || [], fotoCount };
   const box = document.getElementById('tecLista');
+  const cntAb = document.getElementById('tecAbCount');
   if(!atvs.length){
+    if(cntAb) cntAb.textContent = '';
     box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">🎉 Nenhuma atividade pendente para você.</div>';
     return;
   }
-  const __cardsTec = atvs.map(a=>{
+  // 📅 regra: mais atual primeiro; filtro De/Até quando preenchido
+  let lista = tecOrdenarDesc(atvs);
+  const { de, ate } = TEC_AB_FILTRO;
+  if(de || ate) lista = lista.filter(a=>{ const d = tecDataAtv(a); return (!de || d>=de) && (!ate || d<=ate); });
+  if(cntAb) cntAb.textContent = (de||ate) ? `${lista.length} de ${atvs.length} OSs` : `${atvs.length} OSs`;
+  if(!lista.length){
+    box.innerHTML = '<div class="border rounded-xl p-6 text-center text-gray-500 text-sm">📅 Nenhuma OS nesse período — ajuste as datas ou toque em Limpar.</div>';
+    return;
+  }
+  const __cardsTec = lista.map(a=>{
     const os = a.os_clientes||{}, cli = os.clientes||{}, eq = os.equipamentos||{};
     const ovSt = TEC_OVERLAY[a.id] ? TEC_OVERLAY[a.id].status : null;
     if(ovSt==='cancelada') return ''; // 📴 cancelada offline: some da lista (o servidor confirma no envio)
