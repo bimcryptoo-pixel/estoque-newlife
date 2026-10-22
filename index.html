@@ -80,7 +80,13 @@
      continua abrindo no toque. Escopo: só os campos com a classe .inp-data. */
   .inp-data{ -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; text-align:left; }
   label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
-  .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; }
+  .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; white-space:nowrap; }
+  .btn-ghost{ white-space:nowrap; }
+  /* 📱 celular: botão com texto menor e respiro lateral menor — cabe SEM quebrar
+     (regra do Fabio, 21/10/2026: nenhum botão do sistema quebra o texto no celular) */
+  @media (max-width:640px){
+    button.btn-brand, button.btn-ghost{ font-size:.82rem; padding-left:.6rem; padding-right:.6rem; }
+  }
   .btn-brand:active{ background:var(--brand-dark); }
   .btn-ghost{ border:1px solid var(--input-border); border-radius:0.7rem; padding:0.6rem 0.9rem; font-weight:600; font-size:.85rem; color:var(--text); background:transparent; }
   .badge{ font-size:.68rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; white-space:nowrap; }
@@ -9356,7 +9362,7 @@ function tecRenderConcluidas(){
       ${os.descricao_servico?`<div class="text-xs text-gray-600 mt-1">📝 ${esc(os.descricao_servico)}</div>`:''}
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1" style="white-space:pre-wrap">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
-      <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">
+      <div class="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">
         <button type="button" class="btn-ghost w-full !py-2.5 text-sm" onclick="tecVerOSConc('${a.id}')">👁️ Ver OS</button>
         <button type="button" class="btn-brand w-full !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
       </div>
@@ -9436,7 +9442,7 @@ async function tecVerOSConc(atvId){
       ${sigFinal?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ Assinatura do cliente</div>
         <img src="${esc(sigFinal.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
         <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(sigFinal.nome||'Cliente')}${sigFinal.em?' · '+new Date(sigFinal.em).toLocaleString('pt-BR'):''}</div></div>`:''}
-      <div class="flex gap-2 mt-4">
+      <div class="flex flex-col min-[400px]:flex-row gap-2 mt-4">
         <button type="button" class="btn-brand flex-1 !w-auto !py-2.5 text-sm" onclick="tecReenviarEmail('${a.id}',this)">📧 Reenviar e-mail</button>
         <button type="button" class="btn-ghost flex-1 !py-2.5 text-sm" onclick="closeOsModal()">Fechar</button>
       </div>`);
@@ -9566,7 +9572,7 @@ function renderPainelTecnico(atvs, fotoCount){
       btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','a_caminho')">🚗 A caminho</button>`;
       btns += `<button class="btn-brand w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="iniciar"${attrTrav} onclick="tecMudarStatus('${a.id}','em_atendimento')">${lkTrav}▶️ Iniciar</button>`;
     }else if(stExib==='a_caminho'){
-      btns += `<button class="btn-brand w-full !py-2.5 text-sm col-span-2" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
+      btns += `<button class="btn-brand w-full !py-2.5 text-sm min-[360px]:col-span-2" data-atv="${a.id}" data-act="iniciar" onclick="tecMudarStatus('${a.id}','em_atendimento')">▶️ Cheguei — iniciar</button>`;
     }else if(stExib==='em_atendimento'){
       btns += `<button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecMudarStatus('${a.id}','pausada')">⏸️ Pausar</button>`;
       btns += `<button class="btn-brand w-full !py-2.5 text-sm" onclick="tecConcluirModal('${a.id}','${os.id||''}')">✅ Concluir</button>`;
@@ -9577,10 +9583,10 @@ function renderPainelTecnico(atvs, fotoCount){
     if(!pendConc){
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
-    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo de abertura</button>`;
+    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm min-[360px]:col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo</button>`;
     const __podeVid = podeUsarVideo();
-    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm col-span-2${__podeVid?'':' tec-travado'}"${__podeVid?'':` title="Vídeo liberado só para o admin e o Fabricio por enquanto"`} onclick="tecVideoOS('${os.id||a.os_id||''}')">${__podeVid?'':'🔒 '}🎥 Vídeo</button>`;
-    btns += `<button class="col-span-2 text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
+    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm min-[360px]:col-span-2${__podeVid?'':' tec-travado'}"${__podeVid?'':` title="Vídeo liberado só para o admin e o Fabricio por enquanto"`} onclick="tecVideoOS('${os.id||a.os_id||''}')">${__podeVid?'':'🔒 '}🎥 Vídeo</button>`;
+    btns += `<button class="min-[360px]:col-span-2 whitespace-nowrap text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
     }
     return `
     <div class="border rounded-2xl p-4 bg-white shadow-sm">
@@ -9597,7 +9603,7 @@ function renderPainelTecnico(atvs, fotoCount){
       ${a.descricao_conclusao?`<div class="text-xs text-green-800 bg-green-50 rounded p-1.5 mt-1">${esc(a.descricao_conclusao)}</div>`:''}
       ${os.assinatura_url?`<div class="text-xs text-green-700 mt-1">✍️ Cliente assinou</div>`:''}
       ${fotoCount[os.id]?`<div class="text-xs text-gray-500 mt-1">📷 ${fotoCount[os.id]} foto(s) na OS</div>`:''}
-      <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
+      <div class="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 mt-3 pt-3 border-t">${btns}</div>
       ${(pendConc||pendSt)?`<div class="text-xs font-bold mt-2" style="color:#9a3412">⏳ aguardando envio</div>`:''}
     </div>`;
   }).join('');
