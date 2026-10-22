@@ -1269,6 +1269,7 @@
             <div id="tecConcLista" class="grid gap-3"></div>
           </div>
           <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
+          <input type="file" id="tecVideoInput" accept="video/*" capture="environment" class="hidden" onchange="tecUploadVideo(this)">
         </div>
       </section>
 
@@ -7462,8 +7463,18 @@ function osAbaAnexos(d){
   const urlDe = a => a.url || a.arquivo_url || '';
   const ehFoto = a => /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(String(a.nome||'').split('?')[0])
                    || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(String(urlDe(a)).split('?')[0]);
-  const fotos  = (d.anexos||[]).filter(ehFoto);
-  const outros = (d.anexos||[]).filter(a=>!ehFoto(a));
+  const ehVideo = a => osEhVideoNome(a.nome) || osEhVideoNome(urlDe(a));
+  const videos = (d.anexos||[]).filter(ehVideo);
+  const fotos  = (d.anexos||[]).filter(a=>ehFoto(a) && !ehVideo(a));
+  const outros = (d.anexos||[]).filter(a=>!ehFoto(a) && !ehVideo(a));
+  const videoCard = (a,i)=>`
+    <div class="border rounded-xl overflow-hidden bg-white">
+      <video src="${esc(urlDe(a))}" controls preload="metadata" playsinline class="w-full h-56 sm:h-64 lg:h-80 bg-black block"></video>
+      <div class="flex items-center gap-2 px-2 py-1.5">
+        <span class="text-xs font-bold text-gray-600 tracking-wide flex-1">🎥 VÍDEO ${i+1}</span>
+        ${editavel?`<button class="text-xs text-red-700 font-bold shrink-0" onclick="osExcluirAnexo('${a.id}')">🗑️</button>`:''}
+      </div>
+    </div>`;
   const fotoCard = (a,i)=>`
     <div class="border rounded-xl overflow-hidden bg-white">
       <a href="${esc(urlDe(a))}" target="_blank" title="Abrir a foto em tamanho real" class="block">
@@ -7482,6 +7493,7 @@ function osAbaAnexos(d){
     </div>`;
   const partes = [];
   if(fotos.length)  partes.push(`<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">${fotos.map(fotoCard).join('')}</div>`);
+  if(videos.length) partes.push(`<div class="grid gap-3 mb-3">${videos.map(videoCard).join('')}</div>`);
   if(outros.length) partes.push(`<div class="grid gap-2 mb-3">${outros.map(outroRow).join('')}</div>`);
   if(!partes.length) partes.push('<div class="mb-3"><span class="text-gray-400 text-xs">Sem anexos.</span></div>');
   return partes.join('') + (editavel?`<label class="btn-ghost !w-auto !py-2 !px-4 text-sm inline-block cursor-pointer">＋ Anexar arquivo<input type="file" class="hidden" onchange="osUploadAnexo(this)"></label>`:'');
@@ -9165,8 +9177,8 @@ async function carregarPainelTecnico(){
     try{
       const osIds = [...new Set((atvs||[]).map(a=>a.os_clientes&&a.os_clientes.id).filter(Boolean))];
       if(osIds.length){
-        const rows = await apiGET(`os_anexos?os_id=in.(${osIds.join(',')})&select=os_id`);
-        (rows||[]).forEach(r=>{ fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; });
+        const rows = await apiGET(`os_anexos?os_id=in.(${osIds.join(',')})&select=os_id,nome`);
+        (rows||[]).forEach(r=>{ if(!osEhVideoNome(r.nome)) fotoCount[r.os_id]=(fotoCount[r.os_id]||0)+1; });
       }
     }catch(e){}
     // 📴 MODO OFFLINE: salva o SNAPSHOT desta lista no aparelho — é ele que
@@ -9383,7 +9395,8 @@ async function tecVerOSConc(atvId){
     (sigRows||[]).forEach(s=>addSig(s.url||s.arquivo_url, s.nome_assinante||'Cliente', s.created_at));
     let sigFinal = null;
     for(const s of sigs){ if(!sigFinal || new Date(s.em||0).getTime() >= new Date(sigFinal.em||0).getTime()) sigFinal = s; }
-    const fotos = (anexos||[]).map(x=>x.url||x.arquivo_url).filter(Boolean);
+    const fotos = (anexos||[]).filter(x=>!osEhVideoNome(x.nome) && !osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
+    const videos = (anexos||[]).filter(x=>osEhVideoNome(x.nome) || osEhVideoNome(x.url||x.arquivo_url)).map(x=>x.url||x.arquivo_url).filter(Boolean);
     openOsModal(`
       <div class="flex items-center justify-between gap-2 mb-1">
         <div class="font-black text-brand text-lg">${esc(o.numero||'')}</div>
@@ -9404,6 +9417,8 @@ async function tecVerOSConc(atvId){
       ${fotos.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">📷 Fotos do atendimento (${fotos.length})</div>
         <div class="grid grid-cols-3 gap-2">${fotos.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border" loading="lazy" alt="Foto do atendimento"></a>`).join('')}</div>
         <div class="text-[11px] text-gray-400 mt-1">Toque numa foto para ver em tamanho real.</div></div>`:''}
+      ${videos.length?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">🎥 Vídeos do atendimento (${videos.length})</div>
+        <div class="grid gap-2">${videos.map(u=>`<video src="${esc(u)}" controls preload="metadata" playsinline class="w-full rounded-lg border bg-black" style="max-height:260px"></video>`).join('')}</div></div>`:''}
       ${sigFinal?`<div class="mt-3"><div class="text-[11px] font-bold text-gray-400 uppercase mb-1">✍️ Assinatura do cliente</div>
         <img src="${esc(sigFinal.url)}" class="max-w-full border rounded-lg bg-white" style="max-height:140px" alt="Assinatura do cliente">
         <div class="text-xs text-gray-500 mt-1">Assinatura de ${esc(sigFinal.nome||'Cliente')}${sigFinal.em?' · '+new Date(sigFinal.em).toLocaleString('pt-BR'):''}</div></div>`:''}
@@ -9549,6 +9564,8 @@ function renderPainelTecnico(atvs, fotoCount){
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="assinatura"${attrTrav} onclick="tecAssinaturaAbrir('${os.id}')">${lkTrav}✍️ Assinatura</button>`;
     btns += `<button class="btn-ghost w-full !py-2.5 text-sm${clsTrav}" data-atv="${a.id}" data-act="foto"${attrTrav} onclick="tecFotoOS('${os.id}')">${lkTrav}📷 Foto</button>`;
     btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm col-span-2" onclick="osReenviarEmail('${os.id||a.os_id||''}',this,'abertura')">📧 Reenviar protocolo de abertura</button>`;
+    const __podeVid = podeUsarVideo();
+    btns += `<button type="button" class="btn-ghost w-full !py-2 text-sm col-span-2${__podeVid?'':' tec-travado'}"${__podeVid?'':` title="Vídeo liberado só para o admin e o Fabricio por enquanto"`} onclick="tecVideoOS('${os.id||a.os_id||''}')">${__podeVid?'':'🔒 '}🎥 Vídeo</button>`;
     btns += `<button class="col-span-2 text-xs text-red-600 font-bold py-1.5" onclick="tecMudarStatus('${a.id}','cancelada')" title="Cancelar atividade">❌ Cancelar atividade</button>`;
     }
     return `
@@ -9948,6 +9965,58 @@ function tecFotoOS(osId){
   const inp = document.getElementById('tecFotoInput');
   if(inp) inp.click(); else toast('Não foi possível abrir a câmera.','erro');
 }
+/* ---------- 🎥 VÍDEO do atendimento (21/10/2026, pedido do Fabio) ----------
+   Vídeo curto (15–20s) mostrando o erro/uso da máquina, como no Field.
+   TRAVA: por enquanto só o ADMIN e o FABRICIO — pros demais o botão aparece
+   travado (🔒) e a função confere de novo (defesa em profundidade, mesmo
+   padrão da trava de fluxo). Vídeo é arquivo grande: upload SÓ online
+   (não entra na fila offline) e com teto de 30s / 48 MB. */
+function osEhVideoNome(s){ return /\.(mp4|mov|webm|m4v|3gp)$/i.test(String(s||'').split('?')[0]); }
+function podeUsarVideo(){
+  try{
+    if(typeof sessao==='undefined' || !sessao) return false;
+    if(sessao.perfil==='admin') return true;
+    if(String(sessao.login||'').trim().toLowerCase()==='fabricio') return true;
+    if(osNormNome(sessao.nome||'')==='fabricio de oliveira maranhao') return true;
+    return false;
+  }catch(e){ return false; }
+}
+let TEC_VIDEO_OS = null;
+function tecVideoOS(osId){
+  if(!podeUsarVideo()){ toast('🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.','alerta'); return; }
+  // mesma trava de fluxo da foto: anexo avulso só depois do 🚗 A caminho
+  const __aTravVideo = tecAtvPorOs(osId);
+  if(__aTravVideo && tecBloqueado(__aTravVideo)){ tecAvisoTrava(); return; }
+  if(typeof navigator!=='undefined' && navigator.onLine===false){ toast('📴 Vídeo precisa de internet — tente quando estiver conectado.','alerta'); return; }
+  TEC_VIDEO_OS = osId;
+  const inp = document.getElementById('tecVideoInput');
+  if(inp) inp.click(); else toast('Não foi possível abrir a câmera.','erro');
+}
+async function tecUploadVideo(input){
+  const osId = TEC_VIDEO_OS; TEC_VIDEO_OS = null;
+  if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
+  const file = input.files[0];
+  if(input) input.value='';
+  if(!podeUsarVideo()){ toast('🔒 Vídeo liberado só para o admin e o Fabricio por enquanto.','alerta'); return; }
+  try{
+    if(file.type && !/^video\//i.test(file.type)) throw new Error('O arquivo escolhido não é um vídeo.');
+    if(file.size > 48*1024*1024) throw new Error(`Vídeo muito grande (${Math.round(file.size/1048576)} MB). O limite é 48 MB — grave em 1080p, de 15 a 20 segundos.`);
+    const dur = await new Promise(res=>{ try{ const v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=()=>{ const d=v.duration; try{ URL.revokeObjectURL(v.src); }catch(_){} res(isFinite(d)?d:0); }; v.onerror=()=>res(0); v.src=URL.createObjectURL(file); }catch(_){ res(0); } });
+    if(dur && dur>30) throw new Error(`Vídeo de ${Math.round(dur)}s — o limite é 30 segundos (o ideal é de 15 a 20s).`);
+    toast('Enviando vídeo… pode demorar um pouco.','ok');
+    const ext = (file.name.split('.').pop()||'mp4').replace(/[^a-zA-Z0-9]/g,'').slice(0,5).toLowerCase()||'mp4';
+    const nome = `os/${osId}-video-${Date.now()}.${ext}`;
+    const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/${encodeURIComponent(nome)}`, {
+      method:'POST', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type': file.type||'video/mp4' }, body: file
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error('Upload falhou ('+r.status+'): '+t.slice(0,150)); }
+    const url = `${SUPA_URL}/storage/v1/object/public/recibos/${encodeURIComponent(nome)}`;
+    await apiPOST('os_anexos', { os_id:osId, url, nome:'video-'+(file.name||('video.'+ext)) });
+    try{ await osLog(osId, 'anexou um vídeo do atendimento'); }catch(e){}
+    toast('Vídeo incluído na OS. ✓','ok');
+    await carregarPainelTecnico();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
 async function tecUploadFoto(input){
   const osId = TEC_FOTO_OS; TEC_FOTO_OS = null;
   if(!osId || !input.files || !input.files[0]){ if(input) input.value=''; return; }
@@ -10214,16 +10283,18 @@ function imprimirOS(){
     <div class="card"><div class="v"><b>${esc(e.nome||'—')}</b></div><div class="mut">Nº de série: ${esc(e.numero_serie||'—')} · Tipo: ${esc(e.tipo||'—')}</div></div>`).join('')
     : '<div class="mut">—</div>';
   const anexosValidos = (d.anexos||[]).filter(a=>a.url || a.arquivo_url);
-  const anexoHtml = anexosValidos.map((a,i)=>{
+  const fotosImp = anexosValidos.filter(a=>/\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(String(a.nome||'').split('?')[0]) || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(String(a.url||a.arquivo_url||'').split('?')[0]));
+  const videosImp = anexosValidos.filter(a=>osEhVideoNome(a.nome) || osEhVideoNome(a.url||a.arquivo_url||''));
+  const anexoHtml = fotosImp.map((a,i)=>{
     const imgUrl = a.url || a.arquivo_url || '';
     return `
     <div style="page-break-inside:avoid;break-inside:avoid;text-align:center">
       <img src="${esc(imgUrl)}" style="max-width:100%;max-height:140px;border:1px solid #ddd;border-radius:8px">
       <div class="mut" style="margin-top:2px;font-size:10px;font-weight:700">FOTO ${i+1}</div>
     </div>`;}).join('');
-  const anexoSec = anexosValidos.length
-    ? `<div style="page-break-before:auto"><div class="sec" style="break-after:avoid;page-break-after:avoid;margin:12px 0 6px"><span>Anexos — fotos do atendimento (${anexosValidos.length})</span></div>
-       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0">${anexoHtml}</div></div>` : '';
+  const anexoSec = (fotosImp.length || videosImp.length)
+    ? `<div style="page-break-before:auto">${fotosImp.length?`<div class="sec" style="break-after:avoid;page-break-after:avoid;margin:12px 0 6px"><span>Anexos — fotos do atendimento (${fotosImp.length})</span></div>
+       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0">${anexoHtml}</div>`:''}${videosImp.length?`<div class="mut" style="margin:6px 0">🎥 ${videosImp.length} vídeo(s) do atendimento anexado(s) — assista no sistema (não entra na impressão).</div>`:''}</div>` : '';
   const agora = new Date();
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>OS ${esc(o.numero)}</title>
   <style>
