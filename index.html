@@ -1315,6 +1315,7 @@
             <div id="tecConcLista" class="grid gap-3"></div>
           </div>
           <input type="file" id="tecFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecUploadFoto(this)">
+          <input type="file" id="tecFotoArquivoInput" accept="image/*" class="hidden" onchange="tecUploadFoto(this)">
           <input type="file" id="tecVideoInput" accept="video/*" capture="environment" class="hidden" onchange="tecUploadVideo(this)">
         </div>
       </section>
@@ -9958,9 +9959,10 @@ function tecFluxoRender(){
       <button class="btn-brand w-full !py-3.5 text-base" onclick="tecFluxoAvancar()">Avançar →</button>`;
   }else if(F.passo===2){
     corpo = `<div class="font-extrabold text-base mb-1">📷 Fotos do atendimento</div>
-      <div class="text-xs text-gray-500 mb-3">Toque para abrir a câmera. Quantas precisar.</div>
-      <button class="w-full p-5 border-2 border-dashed border-brand rounded-xl bg-red-50 text-brand font-extrabold text-base mb-2" onclick="document.getElementById('tecFluxoFotoInput').click()">📷 Tirar foto</button>
+      <div class="text-xs text-gray-500 mb-3">Use a câmera em tempo real ou um arquivo já registrado no celular. Quantas precisar.</div>
+      <button class="w-full p-5 border-2 border-dashed border-brand rounded-xl bg-red-50 text-brand font-extrabold text-base mb-2" onclick="tecFotoAbrirFonte('fluxo')">📷 Adicionar foto</button>
       <input type="file" id="tecFluxoFotoInput" accept="image/*" capture="environment" class="hidden" onchange="tecFluxoFotoUp(this)">
+      <input type="file" id="tecFluxoFotoArquivoInput" accept="image/*" class="hidden" onchange="tecFluxoFotoUp(this)">
       <div class="text-xs text-gray-500 mb-1">Foto saiu borrada? Toque no ✕ para apagar.</div>
       <div class="grid grid-cols-3 gap-2 mb-2">${F.fotos.map((f,i)=>{ const u=(typeof f==='string')?f:f.objUrl; const local=(typeof f!=='string'); return `<div class="relative"><img src="${esc(u)}" class="w-full h-24 object-cover rounded-lg border"><button class="absolute top-1 right-1 bg-red-600 text-white rounded-full w-7 h-7 text-sm font-bold shadow" onclick="tecFluxoFotoDel(${i})" title="Apagar foto">✕</button>${local?`<div class="absolute bottom-1 left-1 text-[10px] font-bold rounded px-1.5 py-0.5" style="background:#ffedd5;color:#9a3412">⏳ aguardando envio</div>`:''}</div>`; }).join('')}</div>
       ${F.fotos.length?`<div class="text-xs text-green-700 font-bold mb-2">✓ ${F.fotos.length} foto(s) anexada(s)${F.fotos.some(f=>typeof f!=='string')?` · ${F.fotos.filter(f=>typeof f!=='string').length} aguardando envio`:''}</div>`:'<div class="text-xs text-gray-400 mb-2">Nenhuma foto ainda — você pode pular.</div>'}
@@ -10304,13 +10306,37 @@ async function tecMudarStatus(id, novo, obs){
 }
 /* ---------- fotos do atendimento (técnico em campo) ---------- */
 let TEC_FOTO_OS = null;
+/* 📷 FONTE DA FOTO (pedido do Fabio, 22/10/2026): tocar em Foto NÃO abre a
+   câmera direto — abre a caixinha de escolha: 📷 CÂMERA (tempo real) ou
+   🖼️ ARQUIVO (foto já registrada no celular, ex.: batida antes e esquecida
+   de anexar). Vale pros dois caminhos: foto avulsa do cartão ('avulsa') e
+   passo de fotos do fluxo de conclusão ('fluxo'). A diferença técnica é o
+   atributo capture: com ele o iPhone abre a câmera; sem ele, a galeria. */
+let TEC_FOTO_CTX = 'avulsa';
+function tecFotoAbrirFonte(ctx){
+  TEC_FOTO_CTX = ctx || 'avulsa';
+  const m = document.getElementById('modalFotoFonte');
+  if(m) m.style.display = 'flex';
+}
+function tecFotoFecharFonte(){
+  const m = document.getElementById('modalFotoFonte');
+  if(m) m.style.display = 'none';
+}
+function tecFotoEscolher(origem){
+  tecFotoFecharFonte();
+  const fluxo = TEC_FOTO_CTX === 'fluxo';
+  const id = origem === 'camera'
+    ? (fluxo ? 'tecFluxoFotoInput' : 'tecFotoInput')
+    : (fluxo ? 'tecFluxoFotoArquivoInput' : 'tecFotoArquivoInput');
+  const inp = document.getElementById(id);
+  if(inp) inp.click(); else toast('Não foi possível abrir.','erro');
+}
 function tecFotoOS(osId){
   // 🔒 fluxo obrigatório: foto avulsa só depois do 🚗 A caminho
   const __aTravFotoOS = tecAtvPorOs(osId);
   if(__aTravFotoOS && tecBloqueado(__aTravFotoOS)){ tecAvisoTrava(); return; }
   TEC_FOTO_OS = osId;
-  const inp = document.getElementById('tecFotoInput');
-  if(inp) inp.click(); else toast('Não foi possível abrir a câmera.','erro');
+  tecFotoAbrirFonte('avulsa');
 }
 /* ---------- 🎥 VÍDEO do atendimento (21/10/2026, pedido do Fabio) ----------
    Vídeo curto (15–20s) mostrando o erro/uso da máquina, como no Field.
@@ -11110,6 +11136,26 @@ try{
   // senão, fica na tela de login
 })();
 </script>
+<!-- 📷 Caixinha de fonte da foto (Minhas OS): câmera em tempo real × arquivo do celular -->
+<div id="modalFotoFonte" class="fixed inset-0 items-end sm:items-center justify-center" style="display:none;background:rgba(0,0,0,.45);z-index:10065" onclick="if(event.target===this)tecFotoFecharFonte()">
+  <div class="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl sm:m-4">
+    <div class="font-black text-base mb-1">📷 Foto do atendimento</div>
+    <div class="text-xs text-gray-500 mb-4">A foto vai ser de agora ou uma já registrada no celular?</div>
+    <div class="grid grid-cols-2 gap-3">
+      <button type="button" class="border-2 border-gray-200 rounded-2xl py-5 px-2 flex flex-col items-center gap-1.5 active:bg-gray-50" onclick="tecFotoEscolher('camera')">
+        <span class="text-4xl">📷</span>
+        <span class="font-extrabold text-sm">Câmera</span>
+        <span class="text-[11px] text-gray-400 font-semibold">em tempo real</span>
+      </button>
+      <button type="button" class="border-2 border-gray-200 rounded-2xl py-5 px-2 flex flex-col items-center gap-1.5 active:bg-gray-50" onclick="tecFotoEscolher('arquivo')">
+        <span class="text-4xl">🖼️</span>
+        <span class="font-extrabold text-sm">Arquivo</span>
+        <span class="text-[11px] text-gray-400 font-semibold">já registrado no celular</span>
+      </button>
+    </div>
+    <button type="button" class="w-full !py-2.5 mt-3 text-sm text-gray-500 font-semibold" onclick="tecFotoFecharFonte()">Cancelar</button>
+  </div>
+</div>
 <!-- 🧭 Caixinha de navegação (Minhas OS): escolha do app com o endereço do cliente -->
 <div id="modalNavegar" class="fixed inset-0 items-end sm:items-center justify-center" style="display:none;background:rgba(0,0,0,.45);z-index:10060" onclick="if(event.target===this)tecNavegarFechar()">
   <div class="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl sm:m-4">
