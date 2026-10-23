@@ -3476,7 +3476,7 @@ async function carregarCadastros(){
       apiGET('produtos?select=id,nome,linha,unidade,codigo,ncm,cfop,cst,aliquota_icms,fracionavel,fracao_unidade_id,fracoes_por_unidade,ativo&order=nome.asc'),
       apiGET('fornecedores?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
       apiGET('transportadoras?select=id,nome,contato,cnpj,ativo&order=nome.asc'),
-      apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc'),
+      apiGET('clientes?select=id,nome,tipo,cnpj,ativo,origem&order=nome.asc'),
     ]);
     CAD.produtos = prods; CAD.fornecedores = forns; CAD.transportadoras = trans; CLIENTES = clis;
     ['produtos','fornecedores','transportadoras','clientes'].forEach(t=>renderBuscaCad(t));
@@ -3779,7 +3779,7 @@ function fmtCliNome(nome, tipo){ return '🏥 ' + nome; } // REGRA do Fabio (21/
 
 async function carregarClientesCache(){
   try{
-    CLIENTES = await apiGET('clientes?select=id,nome,tipo,cnpj,ativo&order=nome.asc');
+    CLIENTES = await apiGET('clientes?select=id,nome,tipo,cnpj,ativo,origem&order=nome.asc');
     const ativos = CLIENTES.filter(c=>c.ativo);
     const opts = ativos.map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome, c.tipo))}${c.tipo!=='cliente'?' · '+c.tipo:''}</option>`).join('');
     const selC = document.getElementById('cCliente');
@@ -6494,7 +6494,7 @@ async function carregarOSClientes(){
   }catch(e){}
   try{
     if(Array.isArray(CLIENTES)){
-      OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false).map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+      OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
       fcSincronizar('os');
     }
     OS_TP_ITENS = (TIPOS_OS||[]).map(t=>({ valor: t.id, rotulo: t.descricao })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
@@ -6581,8 +6581,8 @@ async function osRecarregarListaClientes(){
   try{
     await carregarClientesCache(); /* mantém o global CLIENTES fresco p/ Nova OS e filtros */
     /* esta lista usa select detalhado: o cache compartilhado só traz id/nome/tipo/cnpj/ativo */
-    const rows = await apiGET('clientes?select=id,nome,tipo,telefone,email,cidade,uf,ativo&order=nome.asc');
-    OSCLI_LISTA.itens = (rows||[]).filter(c=>c.ativo!==false);
+    const rows = await apiGET('clientes?select=id,nome,tipo,telefone,email,cidade,uf,ativo,origem&order=nome.asc');
+    OSCLI_LISTA.itens = (rows||[]).filter(c=>c.ativo!==false && c.origem!=='planilha');
   }catch(e){
     OSCLI_LISTA.itens = [];
     toast('Erro ao carregar clientes: '+e.message,'erro');
@@ -6817,7 +6817,7 @@ function osCliFiltrar(v){ osCliRender((v||'').toUpperCase()); }
 function osCliRender(filtro){
   const div = document.getElementById('nosCliOpcoes');
   if(!div) return;
-  const lista = (typeof CLIENTES!=='undefined'?CLIENTES:[]).filter(c=>c.ativo!==false).filter(c=>{
+  const lista = (typeof CLIENTES!=='undefined'?CLIENTES:[]).filter(c=>c.ativo!==false && c.origem!=='planilha').filter(c=>{
     if(!filtro) return true;
     return fmtCliNome(c.nome,c.tipo).toUpperCase().includes(filtro);
   });
@@ -11111,7 +11111,7 @@ async function osTelaEquipamentos(){
   const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
     .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
   EQ_TP_ITENS = LINHAS.map(l=>({ valor: l, rotulo: l }));
-  if(!(OS_FC_ITENS||[]).length && (CLIENTES||[]).length) OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false).map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+  if(!(OS_FC_ITENS||[]).length && (CLIENTES||[]).length) OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
