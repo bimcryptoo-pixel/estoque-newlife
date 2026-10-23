@@ -6228,7 +6228,7 @@ function osPeriodoRange(){
    igual ao Painel). O filtro usa a coluna os_clientes.tecnico (1a atividade,
    a mesma regra do 👤 do cartao) com in.(todas as grafias do operador). */
 async function osCarregarOperadores(){
-  if(OS_OP_CARREGADO) return; OS_OP_CARREGADO = true;
+  if(OS_OP_CARREGADO || OS_OP_CARREGANDO) return; OS_OP_CARREGANDO = true;
   try{
     const atvs = await apiGETall('os_atividades?select=tecnico&tecnico=not.is.null&order=tecnico.asc');
     const mapa = {};
@@ -6240,8 +6240,15 @@ async function osCarregarOperadores(){
       itens.push({ valor: k, rotulo: '👤 ' + dominante });
     });
     OS_OP_ITENS = itens.sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+    /* vazio NÃO trava: uma resposta vazia (ex.: REST ainda sem o token da
+       sessão no instante da 1ª carga) não pode condenar a lista pela sessão
+       inteira — a próxima abertura tenta de novo */
+    if(OS_OP_ITENS.length) OS_OP_CARREGADO = true;
     fcSincronizar('oper');
-  }catch(e){ OS_OP_CARREGADO = false; }
+    const lp = document.getElementById('osOpLista');
+    if(lp && !lp.classList.contains('hidden')) fcRender('oper');
+  }catch(e){ /* erro de rede também não trava: tenta na próxima abertura */ }
+  finally{ OS_OP_CARREGANDO = false; }
 }
 function osPeriodoMudou(){
   const modo = (document.getElementById('osFiltroPeriodo')||{}).value||'';
@@ -6312,6 +6319,7 @@ let OS_TP_ITENS = [];   // [{valor, rotulo}] — tipos de OS (de TIPOS_OS)
 let OS_OP_ITENS = [];   // [{valor, rotulo}] — 👤 operadores (de os_atividades — base Field)
 let OS_OP_VARS = {};    // chave normalizada -> [grafias] (o filtro usa tecnico=in.(grafias))
 let OS_OP_CARREGADO = false;
+let OS_OP_CARREGANDO = false;
 const OS_EM_ITENS = [   // filtro 📧 E-mails (21/10/2026): registro de envios
   { valor:'ab_env', rotulo:'📩 Abertura enviada' },
   { valor:'ab_nao', rotulo:'⚠️ Abertura não enviada' },
@@ -6329,6 +6337,7 @@ const OS_PER_ITENS = [  // 📅 filtro de Período da OS Clientes (22/10/2026)
 function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='oper' ? OS_OP_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
+  if(qual==='oper' && !OS_OP_ITENS.length) osCarregarOperadores();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
   if(!l) return;
   const estavaFechada = l.classList.contains('hidden');
