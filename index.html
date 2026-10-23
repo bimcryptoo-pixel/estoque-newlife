@@ -1256,6 +1256,7 @@
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="mapaComparativo()">📊 Comparativo</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarMapaEquipe()">🔄 Atualizar</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapa3d" onclick="mapa3dAlternar()">🧊 3D</button>
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapaRua" onclick="mapaRuaAlternar()">🧍 Rua</button>
             </div>
           </div>
           <div id="mapaEquipeAlertas" class="mb-3"></div>
@@ -1264,6 +1265,7 @@
               <div id="mapaEquipe" class="rounded-xl border xl:!h-[560px]" style="height:420px;z-index:0"></div>
               <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[560px] hidden" style="height:420px"></div>
               <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
+              <div id="mapaRuaPainel" class="hidden mt-3"></div>
             </div>
             <div class="xl:w-80 shrink-0">
               <div class="font-bold text-sm mb-2">👷 Equipe <span id="mapaEquipeCount" class="text-gray-500 font-normal"></span></div>
@@ -9031,6 +9033,7 @@ function mapa3dAlternar(){
       try{ estilo3d = await mapa3dEstiloSatelite(); }catch(e){}
       MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style: estilo3d, center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
       MAPA3D.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+      MAPA3D.on('click', e=>{ if(MAPA_RUA_ATIVO) mapaRuaBuscar(e.lngLat.lat, e.lngLat.lng); });
       let feito3d = false;
       const aoCarregar3d = ()=>{ if(feito3d) return; feito3d = true; mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); };
       if(MAPA3D.loaded()) aoCarregar3d();
@@ -9044,6 +9047,56 @@ function mapa3dAlternar(){
     }
   });
 }
+// ===== 🧍 Foto da rua (Mapillary — chave publica de leitura, embutida por design) =====
+const MLY_TOKEN = 'MLY|29038247602474382|8ca7932f51b527db3eb1d5eb1aa4eb3e';
+let MAPA_RUA_ATIVO = false, MAPA_RUA_FOTOS = [], MAPA_RUA_IDX = 0;
+function mapaRuaAlternar(){
+  MAPA_RUA_ATIVO = !MAPA_RUA_ATIVO;
+  const btn = document.getElementById('btnMapaRua');
+  if(btn){ btn.classList.toggle('btn-brand', MAPA_RUA_ATIVO); btn.classList.toggle('btn-ghost', !MAPA_RUA_ATIVO); }
+  if(MAPA_RUA_ATIVO) toast('🧍 Modo Rua ligado — toque num ponto do mapa pra ver a foto da rua');
+  else mapaRuaFechar();
+}
+function mapaRuaDistM(aLat, aLng, bLat, bLng){
+  const dx = (aLng - bLng) * Math.cos(aLat * Math.PI / 180) * 111320, dy = (aLat - bLat) * 110540;
+  return Math.round(Math.sqrt(dx * dx + dy * dy));
+}
+async function mapaRuaBuscar(lat, lng){
+  toast('🔎 Procurando foto da rua…');
+  let fotos = [];
+  for(const r of [0.0013, 0.004]){
+    try{
+      const bbox = (lng - r) + ',' + (lat - r * 0.9) + ',' + (lng + r) + ',' + (lat + r * 0.9);
+      const resp = await fetch('https://graph.mapillary.com/images?access_token=' + MLY_TOKEN + '&fields=id,computed_geometry,thumb_1024_url,thumb_2048_url,captured_at,is_pano&bbox=' + bbox + '&limit=40');
+      const j = await resp.json();
+      fotos = (((j && j.data) || []))
+        .filter(f => f.computed_geometry && f.computed_geometry.coordinates && (f.thumb_2048_url || f.thumb_1024_url))
+        .map(f => ({ id: f.id, img: f.thumb_2048_url || f.thumb_1024_url, data: f.captured_at, dist: mapaRuaDistM(lat, lng, f.computed_geometry.coordinates[1], f.computed_geometry.coordinates[0]) }))
+        .sort((a, b) => a.dist - b.dist);
+      if(fotos.length) break;
+    }catch(e){}
+  }
+  if(!fotos.length){ toast('📭 Nenhuma foto de rua aqui perto — a cobertura da Mapillary é em manchas'); return; }
+  MAPA_RUA_FOTOS = fotos.slice(0, 12); MAPA_RUA_IDX = 0;
+  mapaRuaMostrar();
+}
+function mapaRuaMostrar(){
+  const f = MAPA_RUA_FOTOS[MAPA_RUA_IDX]; if(!f) return;
+  const p = document.getElementById('mapaRuaPainel'); if(!p) return;
+  const quando = f.data ? new Date(f.data).toLocaleDateString('pt-BR') : '';
+  p.innerHTML = '<div class="rounded-xl border overflow-hidden">'
+    + '<img src="' + f.img + '" alt="Foto da rua" class="w-full max-h-[420px] object-contain bg-black">'
+    + '<div class="flex items-center justify-between gap-2 px-3 py-2 bg-white">'
+    + '<button class="btn-ghost !w-auto !py-1 !px-3 text-sm" onclick="mapaRuaNav(-1)">◀ Anterior</button>'
+    + '<div class="text-xs text-gray-600 text-center">🧍 Foto ' + (MAPA_RUA_IDX + 1) + ' de ' + MAPA_RUA_FOTOS.length + ' · a ' + f.dist + ' m do ponto' + (quando ? ' · 📅 ' + quando : '') + '<br><span class="text-gray-400">Foto: Mapillary (colaboradores)</span></div>'
+    + '<button class="btn-ghost !w-auto !py-1 !px-3 text-sm" onclick="mapaRuaNav(1)">Próxima ▶</button>'
+    + '<button class="btn-ghost !w-auto !py-1 !px-2 text-sm" onclick="mapaRuaFechar()">✕</button>'
+    + '</div></div>';
+  p.classList.remove('hidden');
+  p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function mapaRuaNav(d){ if(!MAPA_RUA_FOTOS.length) return; MAPA_RUA_IDX = (MAPA_RUA_IDX + d + MAPA_RUA_FOTOS.length) % MAPA_RUA_FOTOS.length; mapaRuaMostrar(); }
+function mapaRuaFechar(){ const p = document.getElementById('mapaRuaPainel'); if(p){ p.classList.add('hidden'); p.innerHTML = ''; } MAPA_RUA_FOTOS = []; MAPA_RUA_IDX = 0; }
 function mapa3dEnquadrar(){
   if(!MAPA3D) return;
   const rows = (MAPA_EQ_ROWS||[]).filter(r=>r.lat && r.lng);
@@ -9110,6 +9163,7 @@ async function carregarMapaEquipe(){
     const centro = ativos.length ? [ativos[0].lat, ativos[0].lng] : [-3.717, -38.543]; // Fortaleza
     MAPA_EQ = L.map('mapaEquipe').setView(centro, 11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(MAPA_EQ);
+    MAPA_EQ.on('click', e=>{ if(MAPA_RUA_ATIVO) mapaRuaBuscar(e.latlng.lat, e.latlng.lng); });
     const iconV = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41] });
     const iconC = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className:'grayscale opacity-60' });
     const bounds = [];
