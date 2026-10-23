@@ -71,7 +71,10 @@
   .tabbtn.active{ color:var(--brand); }
   .tabbtn.active .tabdot{ opacity:1; }
   .card{ background:var(--surface); border:1px solid var(--border); border-radius:0.9rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .inp{ width:100%; border:1px solid var(--input-border); border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:var(--input-bg); color:var(--text); }
+  .inp{ width:100%; box-sizing:border-box; max-width:100%; border:1px solid var(--input-border); border-radius:0.6rem; padding:0.6rem 0.75rem; font-size:0.95rem; background:var(--input-bg); color:var(--text); }
+  /* TRAVA ANTI-VAZAMENTO HORIZONTAL (mobile, todos os módulos): a página nunca rola de lado */
+  html,body{ overflow-x:clip; }
+  input,select,textarea,img,video,canvas{ max-width:100%; }
   .inp::placeholder{ color:var(--faint); }
   .inp:focus{ outline:2px solid var(--brand); border-color:var(--brand); }
   /* 📱 iOS/Safari (21/10/2026): o input de data NATIVO não encolhe no flex/grade e
@@ -3255,12 +3258,12 @@ async function carregarAdmin(){
     }
     document.getElementById('listaUsuarios').innerHTML = (cacheUsuarios = users).map(u=>`
       <div class="py-1.5 rowline">
-        <div class="flex items-center justify-between">
-          <div><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div class="min-w-0"><b>${esc(u.nome)}</b> <span class="text-gray-400">@${esc(u.login)}</span>
             <span class="badge ${u.perfil==='admin'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-600'} ml-1">${esc(u.perfil)}</span>
             ${u.ativo?'':'<span class="badge bg-gray-200 text-gray-500 ml-1">inativo</span>'}
             ${u.tecnico_nome?`<span class="badge bg-blue-100 text-blue-800 ml-1">👷 ${esc(u.tecnico_nome)}</span>`:''}</div>
-          ${u.ativo?`<span class="shrink-0 whitespace-nowrap"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button><button class="text-xs font-bold underline mr-2 brand" onclick="vincularTecnico('${u.id}')">👷 técnico</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:`<span class="shrink-0 whitespace-nowrap"><button class="text-xs text-green-700 font-bold underline" onclick="reativarUsuario('${u.id}')">reativar</button></span>`}
+          ${u.ativo?`<span class="flex flex-wrap items-center gap-x-1 gap-y-1"><button class="text-xs font-bold underline mr-2 brand" onclick="abrirEditorSenha('${u.id}')">🔑 senha</button>${u.perfil!=='admin'?`<button class="text-xs font-bold underline mr-2 brand" onclick="togglePermissoes('${u.id}')">🗂️ módulos</button><button class="text-xs font-bold underline mr-2 brand" onclick="vincularTecnico('${u.id}')">👷 técnico</button>`:''}${u.id!==sessao.id?`<button class="text-xs text-red-600 font-bold underline" onclick="desativarUsuario('${u.id}')">desativar</button>`:''}</span>`:`<span class="flex flex-wrap items-center gap-x-1 gap-y-1"><button class="text-xs text-green-700 font-bold underline" onclick="reativarUsuario('${u.id}')">reativar</button></span>`}
         </div>
         <div id="permBox-${u.id}" class="hidden mt-2 border rounded-xl p-3 bg-gray-50"></div>
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
