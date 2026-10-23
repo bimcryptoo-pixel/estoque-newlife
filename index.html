@@ -1255,12 +1255,14 @@
               <div class="text-xs text-gray-500" id="mapaEquipeInfo">Carregando…</div>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="mapaComparativo()">📊 Comparativo</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarMapaEquipe()">🔄 Atualizar</button>
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapa3d" onclick="mapa3dAlternar()">🧊 3D</button>
             </div>
           </div>
           <div id="mapaEquipeAlertas" class="mb-3"></div>
           <div class="flex flex-col xl:flex-row gap-3">
             <div class="flex-1 min-w-0">
               <div id="mapaEquipe" class="rounded-xl border xl:!h-[560px]" style="height:420px;z-index:0"></div>
+              <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[560px] hidden" style="height:420px"></div>
               <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
             </div>
             <div class="xl:w-80 shrink-0">
@@ -8981,6 +8983,63 @@ function mapaTempoAtras(iso){
   if(min < 60) return `há ${min} min`;
   return `há ${Math.floor(min/60)}h ${min%60}min`;
 }
+/* ---------- 🧊 Mapa 3D (MapLibre + OpenFreeMap) — 23/10/2026 ----------
+   Opção selecionável igual à do Google: inclina o mapa (pitch 60°) e levanta
+   os prédios em 3D (dados do OpenStreetMap). O 2D (Leaflet) segue padrão; o
+   3D carrega sob demanda e reaproveita os rows do carregarMapaEquipe. */
+let MAPA3D = null, MAPA3D_ATIVO = false, MAPA3D_MARCADORES = [], MAPA_EQ_ROWS = [];
+function mapa3dNomeCurto(nome){ const p = String(nome||'?').trim().split(/\s+/); return p.length>1 ? p[0]+' '+p[p.length-1] : p[0]; }
+function mapa3dCarregarLib(cb){
+  if(window.maplibregl){ cb(); return; }
+  if(!document.getElementById('maplibreCss')){ const l = document.createElement('link'); l.id='maplibreCss'; l.rel='stylesheet'; l.href='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css'; document.head.appendChild(l); }
+  const s = document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+  s.onload = ()=>cb(); s.onerror = ()=>toast('Não consegui carregar o mapa 3D — confira a conexão.','erro');
+  document.head.appendChild(s);
+}
+function mapa3dAlternar(){
+  const btn = document.getElementById('btnMapa3d');
+  if(MAPA3D_ATIVO){
+    MAPA3D_ATIVO = false;
+    document.getElementById('mapaEquipe3d').classList.add('hidden');
+    document.getElementById('mapaEquipe').classList.remove('hidden');
+    if(btn){ btn.textContent = '🧊 3D'; btn.classList.remove('btn-brand'); btn.classList.add('btn-ghost'); }
+    if(MAPA_EQ) setTimeout(()=>MAPA_EQ.invalidateSize(), 60);
+    return;
+  }
+  mapa3dCarregarLib(()=>{
+    MAPA3D_ATIVO = true;
+    document.getElementById('mapaEquipe').classList.add('hidden');
+    document.getElementById('mapaEquipe3d').classList.remove('hidden');
+    if(btn){ btn.textContent = '🗺️ 2D'; btn.classList.remove('btn-ghost'); btn.classList.add('btn-brand'); }
+    if(!MAPA3D){
+      const rows = MAPA_EQ_ROWS || [];
+      const at = rows.find(r=>r.ativa) || rows[0];
+      MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style:'https://tiles.openfreemap.org/styles/liberty', center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
+      MAPA3D.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+      MAPA3D.on('load', ()=>{ mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); });
+    } else {
+      MAPA3D.resize(); mapa3dSincronizar(MAPA_EQ_ROWS);
+    }
+  });
+}
+function mapa3dEnquadrar(){
+  if(!MAPA3D) return;
+  const rows = (MAPA_EQ_ROWS||[]).filter(r=>r.lat && r.lng);
+  if(rows.length > 1){ const b = new maplibregl.LngLatBounds(); rows.forEach(r=>b.extend([+r.lng, +r.lat])); MAPA3D.fitBounds(b, { padding: 70, pitch: 60, bearing: -20, maxZoom: 16.5 }); }
+  else if(rows.length === 1){ MAPA3D.flyTo({ center: [+rows[0].lng, +rows[0].lat], zoom: 16.5, pitch: 60, bearing: -20 }); }
+}
+function mapa3dSincronizar(rows){
+  if(!MAPA3D || !window.maplibregl) return;
+  MAPA3D_MARCADORES.forEach(m=>m.remove()); MAPA3D_MARCADORES = [];
+  (rows||[]).forEach(r=>{
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer';
+    el.innerHTML = `<div class="mapa-nome-pin" style="${r.ativa?'':'opacity:.65'}">${esc(mapa3dNomeCurto(r.tecnico_nome))}</div><img src="js/leaflet/images/marker-icon.png" width="25" height="41" alt="" style="${r.ativa?'':'filter:grayscale(1);opacity:.6'}">`;
+    const pop = new maplibregl.Popup({ offset: 50 }).setHTML(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍':'📵'} ${r.ativa?'Ativo':'<b>GPS desativado</b>'} · ${mapaTempoAtras(r.updated_at)}<br>${r.os_numero?('OS <b>'+esc(r.os_numero)+'</b>'):''}`);
+    const mk = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([+r.lng, +r.lat]).setPopup(pop).addTo(MAPA3D);
+    MAPA3D_MARCADORES.push(mk);
+  });
+}
 async function carregarMapaEquipe(){
   try{
     // 📍 se quem abriu o mapa é técnico vinculado, envia a própria posição também
@@ -9040,6 +9099,8 @@ async function carregarMapaEquipe(){
       mk.bindPopup(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍':'📵'} ${r.ativa?'Ativo':'<b>GPS desativado</b>'} · ${mapaTempoAtras(r.updated_at)}<br>${r.os_numero?('OS <b>'+esc(r.os_numero)+'</b>'):''}`);
       bounds.push([r.lat, r.lng]);
     });
+    MAPA_EQ_ROWS = rows || [];
+    if(MAPA3D_ATIVO && MAPA3D) mapa3dSincronizar(MAPA_EQ_ROWS);
     if(bounds.length > 1) MAPA_EQ.fitBounds(bounds, { padding:[30,30] });
     const inativos = (rows||[]).filter(r=>!r.ativa);
     document.getElementById('mapaEquipeAlertas').innerHTML = inativos.length
@@ -9232,6 +9293,7 @@ async function mapaGeocodificar(alvos, pdfRef){
   }catch(e){}
 }
 async function verTrajetoTecnico(nome, dataISO){
+  if(MAPA3D_ATIVO) mapa3dAlternar();
   const info = document.getElementById('mapaTrajetoInfo');
   info.classList.remove('hidden');
   const dia = (dataISO && /^\d{4}-\d{2}-\d{2}$/.test(dataISO)) ? dataISO : mapaHojeFortaleza();
@@ -9626,6 +9688,11 @@ function mapaComparativoHtml(dia, diaFmt, linhas){
 async function mapaFocarTecnico(nome){
   try{
     const [r] = await apiGET(`tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(nome)}&select=lat,lng,tecnico_nome,ativa,updated_at,os_numero&limit=1`);
+    if(r && MAPA3D_ATIVO && MAPA3D){
+      MAPA3D.flyTo({ center: [+r.lng, +r.lat], zoom: 16.5, pitch: 60 });
+      setTimeout(()=>{ new maplibregl.Popup({ offset: 50 }).setLngLat([+r.lng, +r.lat]).setHTML(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍 Ativo':'📵 GPS desativado'} · ${mapaTempoAtras(r.updated_at)}${r.os_numero?`<br>OS <b>${esc(r.os_numero)}</b>`:''}`).addTo(MAPA3D); }, 600);
+      return;
+    }
     if(r && MAPA_EQ){
       MAPA_EQ.setView([+r.lat, +r.lng], 15, { animate:true });
       setTimeout(()=>{
