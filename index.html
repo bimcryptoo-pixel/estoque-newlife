@@ -1256,6 +1256,7 @@
             <div class="font-bold text-lg">🗺️ Mapa da Equipe</div>
             <div class="flex gap-2 items-center">
               <div class="text-xs text-gray-500" id="mapaEquipeInfo">Carregando…</div>
+              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapaEqColuna" onclick="mapaEqAlternarColuna()">👥 Equipe</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="mapaComparativo()">📊 Comparativo</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarMapaEquipe()">🔄 Atualizar</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapa3d" onclick="mapa3dAlternar()">🧊 3D</button>
@@ -1265,14 +1266,15 @@
           <div id="mapaEquipeAlertas" class="mb-3"></div>
           <div class="flex flex-col xl:flex-row gap-3">
             <div class="flex-1 min-w-0">
-              <div id="mapaEquipe" class="rounded-xl border xl:!h-[560px]" style="height:420px;z-index:0"></div>
-              <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[560px] hidden" style="height:420px"></div>
+              <div id="mapaEquipe" class="rounded-xl border xl:!h-[calc(100vh-215px)]" style="height:500px;min-height:480px;z-index:0"></div>
+              <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[calc(100vh-215px)] hidden" style="height:500px;min-height:480px"></div>
               <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
               <div id="mapaRuaPainel" class="hidden mt-3"></div>
             </div>
-            <div class="xl:w-80 shrink-0">
+            <div class="xl:w-72 shrink-0" id="mapaEqColuna">
               <div class="font-bold text-sm mb-2">👷 Equipe <span id="mapaEquipeCount" class="text-gray-500 font-normal"></span></div>
-              <div id="mapaEquipeLista" class="grid gap-2 xl:max-h-[560px] xl:overflow-y-auto pr-1"></div>
+              <input id="mapaEqBusca" type="text" placeholder="🔎 Buscar técnico…" class="w-full border rounded-lg px-2.5 py-1.5 text-sm mb-2" oninput="mapaEqFiltrar(this.value)">
+              <div id="mapaEquipeLista" class="grid gap-1.5 max-h-[430px] overflow-y-auto xl:max-h-[calc(100vh-345px)] pr-1"></div>
             </div>
           </div>
         </div>
@@ -9184,45 +9186,10 @@ async function carregarMapaEquipe(){
     const inativos = (rows||[]).filter(r=>!r.ativa);
     document.getElementById('mapaEquipeAlertas').innerHTML = inativos.length
       ? `<div class="bg-red-50 border border-red-300 rounded-xl p-3 text-sm text-red-800 font-bold">📵 Localização desativada: ${inativos.map(r=>`${esc(r.tecnico_nome)} (${mapaTempoAtras(r.updated_at)})`).join(' · ')}</div>` : '';
-    const ordenados = (rows||[]).slice().sort((a,b)=> (b.ativa?1:0)-(a.ativa?1:0) || String(a.tecnico_nome||'').localeCompare(String(b.tecnico_nome||'')));
-    const livres = ordenados.filter(r=>!r.os_numero).length;
+    const livres = (rows||[]).filter(r=>!r.os_numero).length;
     document.getElementById('mapaEquipeCount').textContent = `(${(rows||[]).length} · 🟢 ${livres} livre(s))`;
-    document.getElementById('mapaEquipeLista').innerHTML = ordenados.map((r, idxTec)=>{
-      const nome = r.tecnico_nome||'?';
-      const livre = !r.os_numero;
-      /* ⚠️ ALERTA DE INATIVIDADE (20/10/2026): técnico com OS vinculada (os_id)
-         e sem posição nova há mais de 30 min → selo visual no cartão.
-         LIMIAR FIXO: 30 min. Somente visual — nenhum aviso externo é enviado. */
-      const minSemPos = r.updated_at ? Math.round((Date.now()-new Date(r.updated_at).getTime())/60000) : null;
-      const inativoOS = !!(r.os_id && minSemPos!==null && minSemPos>30);
-      const inativoTxt = minSemPos!==null && minSemPos>=60 ? Math.floor(minSemPos/60)+'h '+(minSemPos%60)+'min' : (minSemPos+' min');
-      const jor = jornadaMap[nome];
-      const des = desempenhoMap[nome]||{concluidas:0,tempoMin:0,nTempo:0};
-      const tMed = des.nTempo? Math.round(des.tempoMin/des.nTempo) : null;
-      const escNome = esc(nome).replace(/'/g,"\\'");
-      return `
-      <div class="border rounded-xl p-2.5 text-sm ${r.ativa?'bg-white':'bg-red-50 border-red-200'}">
-        <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0 text-base">${esc(nome.charAt(0))}</div>
-          <div class="min-w-0 flex-1">
-            <div class="font-bold truncate">${esc(nome)}</div>
-            <div class="text-xs ${r.ativa?'text-green-700':'text-red-700'} font-semibold">${r.ativa?'📍 Ativo':'📵 GPS desativado'} <span class="text-gray-500 font-normal">· ${mapaTempoAtras(r.updated_at)}</span></div>
-          </div>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${livre?'bg-green-100 text-green-800':'bg-blue-100 text-blue-800'}">${livre?'🟢 Livre':'🔵 Ocupado'}</span>
-        </div>
-        ${r.os_numero?`<div class="text-xs text-gray-600 mt-1.5 ml-11">🔧 OS <b>${esc(r.os_numero)}</b></div>`:''}
-        ${inativoOS?`<div class="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 rounded-lg px-2 py-1 mt-1.5 ml-11 inline-block">⚠️ parado há ${inativoTxt} (com OS vinculada)</div>`:''}
-        <div class="text-xs text-gray-500 mt-1 ml-11">
-          ${jor?`⏰ Jornada: <b>${trajetoHora(jor.ini)} → ${trajetoHora(jor.fim)}</b> · `:''}✅ Hoje: <b>${des.concluidas}</b> concluída(s)${tMed!=null?` · ⏱️ média <b>${tMed} min</b>`:''}
-        </div>
-        <div class="flex gap-2 mt-2 ml-11 flex-wrap items-center">
-          <input type="date" id="mapaDataTec${idxTec}" value="${MAPA_TRAJETO_DATA || mapaHojeFortaleza()}" max="${mapaHojeFortaleza()}" class="border rounded-lg px-2 py-1 text-xs w-32" title="Data do trajeto/linha do tempo">
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${escNome}', (document.getElementById('mapaDataTec${idxTec}')||{}).value)">🛣️ Trajeto</button>
-          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${escNome}')">📍 Localizar</button>
-          ${livre?`<button class="btn-ghost !w-auto !py-1 !px-2 text-xs !text-red-700 !border-red-300" onclick="designarOSPara('${escNome}')">📋 Designar OS</button>`:''}
-        </div>
-      </div>`;
-    }).join('') || '<span class="text-gray-400 text-xs">Nenhum técnico com localização registrada ainda.</span>';
+    MAPA_EQ_JORNADA = jornadaMap; MAPA_EQ_DESEMPENHO = desempenhoMap;
+    mapaEqRenderLista();
     info.textContent = `${(rows||[]).length} técnico(s) · atualizado agora`;
     if(MAPA_EQ_TIMER) clearInterval(MAPA_EQ_TIMER);
     MAPA_EQ_TIMER = setInterval(()=>{ if(!document.getElementById('aba-mapaequipe').classList.contains('hidden')) carregarMapaEquipe(); }, 30000);
@@ -9230,6 +9197,70 @@ async function carregarMapaEquipe(){
   }catch(e){
     document.getElementById('mapaEquipeInfo').textContent = 'Erro: '+e.message;
   }
+}
+
+/* ===== 👥 COLUNA DA EQUIPE — compacta, expansível e com busca (escala p/ 14+ técnicos) =====
+   Linha enxuta por técnico; o detalhe (jornada, trajeto, localizar, designar)
+   abre no clique (sanfona, um por vez) e SOBREVIVE à atualização de 30 s. */
+let MAPA_EQ_EXPANDIDO = null, MAPA_EQ_BUSCA = '', MAPA_EQ_JORNADA = {}, MAPA_EQ_DESEMPENHO = {};
+function mapaEqNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+function mapaEqRenderLista(){
+  const el = document.getElementById('mapaEquipeLista'); if(!el) return;
+  const rows = MAPA_EQ_ROWS || [];
+  const ordenados = rows.slice().sort((a,b)=> (b.ativa?1:0)-(a.ativa?1:0) || ((a.os_numero?1:0)-(b.os_numero?1:0)) || String(a.tecnico_nome||'').localeCompare(String(b.tecnico_nome||'')));
+  const busca = mapaEqNorm(MAPA_EQ_BUSCA);
+  const visiveis = ordenados.filter(r=> !busca || mapaEqNorm(r.tecnico_nome).includes(busca));
+  if(!rows.length){ el.innerHTML = '<span class="text-gray-400 text-xs">Nenhum técnico com localização registrada ainda.</span>'; return; }
+  if(!visiveis.length){ el.innerHTML = '<span class="text-gray-400 text-xs">Nenhum técnico encontrado para a busca.</span>'; return; }
+  el.innerHTML = visiveis.map(r=>{
+    const idxTec = ordenados.indexOf(r);
+    const nome = r.tecnico_nome||'?';
+    const livre = !r.os_numero;
+    /* ⚠️ ALERTA DE INATIVIDADE (20/10/2026): OS vinculada e sem posição há +30 min → selo no detalhe. */
+    const minSemPos = r.updated_at ? Math.round((Date.now()-new Date(r.updated_at).getTime())/60000) : null;
+    const inativoOS = !!(r.os_id && minSemPos!==null && minSemPos>30);
+    const inativoTxt = minSemPos!==null && minSemPos>=60 ? Math.floor(minSemPos/60)+'h '+(minSemPos%60)+'min' : (minSemPos+' min');
+    const jor = MAPA_EQ_JORNADA[nome];
+    const des = MAPA_EQ_DESEMPENHO[nome]||{concluidas:0,tempoMin:0,nTempo:0};
+    const tMed = des.nTempo? Math.round(des.tempoMin/des.nTempo) : null;
+    const escNome = esc(nome).replace(/'/g,"\\'");
+    const aberto = MAPA_EQ_EXPANDIDO === nome;
+    return `
+    <div class="eq-row border rounded-xl text-sm ${r.ativa?'bg-white':'bg-red-50 border-red-200'}">
+      <button class="w-full flex items-center gap-2 p-2 text-left" onclick="mapaEqAlternarDetalhe('${escNome}')">
+        <div class="w-8 h-8 rounded-full ${r.ativa?'bg-green-600':'bg-red-600'} text-white flex items-center justify-center font-black shrink-0 text-sm">${esc(nome.charAt(0))}</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold truncate text-[13px] leading-tight">${esc(nome)}</div>
+          <div class="text-[11px] ${r.ativa?'text-green-700':'text-red-700'} font-semibold">${r.ativa?'📍 Ativo':'📵 GPS desativado'} <span class="text-gray-500 font-normal">· ${mapaTempoAtras(r.updated_at)}</span></div>
+        </div>
+        <span class="text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${livre?'bg-green-100 text-green-800':'bg-blue-100 text-blue-800'}">${livre?'🟢 Livre':'🔵 Ocupado'}</span>
+        <span class="text-gray-400 shrink-0 text-xs">${aberto?'▾':'▸'}</span>
+      </button>
+      ${aberto?`
+      <div class="eq-detalhe px-2.5 pb-2.5">
+        ${r.os_numero?`<div class="text-xs text-gray-600 ml-10">🔧 OS <b>${esc(r.os_numero)}</b></div>`:''}
+        ${inativoOS?`<div class="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 rounded-lg px-2 py-1 mt-1.5 ml-10 inline-block">⚠️ parado há ${inativoTxt} (com OS vinculada)</div>`:''}
+        <div class="text-xs text-gray-500 mt-1 ml-10">
+          ${jor?`⏰ Jornada: <b>${trajetoHora(jor.ini)} → ${trajetoHora(jor.fim)}</b> · `:''}✅ Hoje: <b>${des.concluidas}</b> concluída(s)${tMed!=null?` · ⏱️ média <b>${tMed} min</b>`:''}
+        </div>
+        <div class="flex gap-2 mt-2 ml-10 flex-wrap items-center">
+          <input type="date" id="mapaDataTec${idxTec}" value="${MAPA_TRAJETO_DATA || mapaHojeFortaleza()}" max="${mapaHojeFortaleza()}" class="border rounded-lg px-2 py-1 text-xs w-32" title="Data do trajeto/linha do tempo">
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="verTrajetoTecnico('${escNome}', (document.getElementById('mapaDataTec${idxTec}')||{}).value)">🛣️ Trajeto</button>
+          <button class="btn-ghost !w-auto !py-1 !px-2 text-xs" onclick="mapaFocarTecnico('${escNome}')">📍 Localizar</button>
+          ${livre?`<button class="btn-ghost !w-auto !py-1 !px-2 text-xs !text-red-700 !border-red-300" onclick="designarOSPara('${escNome}')">📋 Designar OS</button>`:''}
+        </div>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+function mapaEqAlternarDetalhe(nome){ MAPA_EQ_EXPANDIDO = (MAPA_EQ_EXPANDIDO === nome) ? null : nome; mapaEqRenderLista(); }
+function mapaEqFiltrar(v){ MAPA_EQ_BUSCA = v || ''; mapaEqRenderLista(); }
+function mapaEqAlternarColuna(){
+  const c = document.getElementById('mapaEqColuna'); if(!c) return;
+  c.classList.toggle('hidden');
+  const btn = document.getElementById('btnMapaEqColuna');
+  if(btn){ const oculta = c.classList.contains('hidden'); btn.classList.toggle('btn-brand', oculta); btn.classList.toggle('btn-ghost', !oculta); }
+  setTimeout(()=>{ if(MAPA_EQ) MAPA_EQ.invalidateSize(); if(MAPA3D_ATIVO && MAPA3D && MAPA3D.resize) MAPA3D.resize(); }, 320);
 }
 /* ================= 🛣️ TRAJETO DO TÉCNICO (linha do tempo do deslocamento) ================= */
 let MAPA_TRAJETO_LAYER = null;
