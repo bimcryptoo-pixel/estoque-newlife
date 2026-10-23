@@ -8987,7 +8987,20 @@ function mapaTempoAtras(iso){
    Opção selecionável igual à do Google: inclina o mapa (pitch 60°) e levanta
    os prédios em 3D (dados do OpenStreetMap). O 2D (Leaflet) segue padrão; o
    3D carrega sob demanda e reaproveita os rows do carregarMapaEquipe. */
-let MAPA3D = null, MAPA3D_ATIVO = false, MAPA3D_MARCADORES = [], MAPA_EQ_ROWS = [];
+let MAPA3D = null, MAPA3D_ATIVO = false, MAPA3D_MARCADORES = [], MAPA_EQ_ROWS = [], MAPA3D_ESTILO = null;
+async function mapa3dEstiloSatelite(){
+  if(MAPA3D_ESTILO) return MAPA3D_ESTILO;
+  const r = await fetch('https://tiles.openfreemap.org/styles/liberty');
+  const st = await r.json();
+  // por cima da foto ficam só estradas (line) e rótulos (symbol); caem fora os
+  // fundos/opacos (background, fills de terra/água/parques, prédio chapado) e
+  // os prédios 3D em bloco (fill-extrusion) — pedido dele: satélite sem blocos.
+  st.layers = (st.layers||[]).filter(l=> l.type==='line' || l.type==='symbol');
+  st.layers.unshift({ id:'satelite', type:'raster', source:'satelite', minzoom:0, maxzoom:19 });
+  st.sources.satelite = { type:'raster', tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize:256, maxzoom:18, attribution:'Esri, Maxar, Earthstar Geographics' };
+  MAPA3D_ESTILO = st;
+  return st;
+}
 function mapa3dNomeCurto(nome){ const p = String(nome||'?').trim().split(/\s+/); return p.length>1 ? p[0]+' '+p[p.length-1] : p[0]; }
 function mapa3dCarregarLib(cb){
   if(window.maplibregl){ cb(); return; }
@@ -9006,7 +9019,7 @@ function mapa3dAlternar(){
     if(MAPA_EQ) setTimeout(()=>MAPA_EQ.invalidateSize(), 60);
     return;
   }
-  mapa3dCarregarLib(()=>{
+  mapa3dCarregarLib(async ()=>{
     MAPA3D_ATIVO = true;
     document.getElementById('mapaEquipe').classList.add('hidden');
     document.getElementById('mapaEquipe3d').classList.remove('hidden');
@@ -9014,9 +9027,18 @@ function mapa3dAlternar(){
     if(!MAPA3D){
       const rows = MAPA_EQ_ROWS || [];
       const at = rows.find(r=>r.ativa) || rows[0];
-      MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style:'https://tiles.openfreemap.org/styles/liberty', center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
+      let estilo3d = 'https://tiles.openfreemap.org/styles/liberty';
+      try{ estilo3d = await mapa3dEstiloSatelite(); }catch(e){}
+      MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style: estilo3d, center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
       MAPA3D.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
-      MAPA3D.on('load', ()=>{ mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); });
+      let feito3d = false;
+      const aoCarregar3d = ()=>{ if(feito3d) return; feito3d = true; mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); };
+      if(MAPA3D.loaded()) aoCarregar3d();
+      else {
+        MAPA3D.on('load', aoCarregar3d);
+        const espera3d = setInterval(()=>{ if(!MAPA3D || feito3d){ clearInterval(espera3d); return; } if(MAPA3D.loaded()){ clearInterval(espera3d); aoCarregar3d(); } }, 300);
+        setTimeout(()=>clearInterval(espera3d), 15000);
+      }
     } else {
       MAPA3D.resize(); mapa3dSincronizar(MAPA_EQ_ROWS);
     }
