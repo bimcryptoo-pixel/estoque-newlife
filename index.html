@@ -1144,7 +1144,7 @@
             <button data-sit="concluida" onclick="osMudarSituacao('concluida')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">✅ Concluídas</button>
             <button data-sit="todas" onclick="osMudarSituacao('todas')" class="btn-ghost !w-auto !py-1.5 !px-3 text-sm">📋 Todas</button>
           </div>
-          <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 mb-3">
+          <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2 mb-3">
             <input id="osBusca" class="inp text-sm" placeholder="🔎 Nº, cliente ou equipamento…" oninput="osBuscaDebounce()">
             <select id="osFiltroStatus" class="inp text-sm" onchange="osRecarregar()">
               <option value="">Todos os status</option>
@@ -1178,6 +1178,16 @@
               <button type="button" id="osEmBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('email',event)"><span id="osEmLabel" class="truncate">📧 Todos os e-mails</span><span>▾</span></button>
               <div id="osEmLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
                 <div id="osEmOpcoes" class="overflow-y-auto"></div>
+              </div>
+            </div>
+            <div class="relative" id="osOpWrap">
+              <input type="hidden" id="osFiltroOperador" value="">
+              <button type="button" id="osOpBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('oper',event)"><span id="osOpLabel" class="truncate">👤 Todos os operadores</span><span>▾</span></button>
+              <div id="osOpLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+                <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+                  <input id="osOpBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar operador…" autocomplete="off" oninput="fcRender('oper')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+                </div>
+                <div id="osOpOpcoes" class="overflow-y-auto"></div>
               </div>
             </div>
             <div class="flex gap-2">
@@ -1259,15 +1269,14 @@
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapaEqColuna" onclick="mapaEqAlternarColuna()">👥 Equipe</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="mapaComparativo()">📊 Comparativo</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarMapaEquipe()">🔄 Atualizar</button>
-              <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapa3d" onclick="mapa3dAlternar()">🧊 3D</button>
               <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" id="btnMapaRua" onclick="mapaRuaAlternar()">🧍 Rua</button>
             </div>
           </div>
           <div id="mapaEquipeAlertas" class="mb-3"></div>
           <div class="flex flex-col xl:flex-row gap-3">
             <div class="flex-1 min-w-0">
-              <div id="mapaEquipe" class="rounded-xl border xl:!h-[calc(100vh-215px)]" style="height:500px;min-height:480px;z-index:0"></div>
-              <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[calc(100vh-215px)] hidden" style="height:500px;min-height:480px"></div>
+              <div id="mapaEquipe" class="rounded-xl border xl:!h-[calc(100vh-215px)] hidden" style="height:500px;min-height:480px;z-index:0"></div>
+              <div id="mapaEquipe3d" class="rounded-xl border xl:!h-[calc(100vh-215px)]" style="height:500px;min-height:480px"></div>
               <div id="mapaTrajetoInfo" class="hidden mt-3"></div>
             </div>
             <div class="xl:w-72 shrink-0" id="mapaEqColuna">
@@ -1994,8 +2003,17 @@ const MODULOS = [
 function modulosPermitidos(){
   if(sessao?.perfil==='admin') return MODULOS.map(m=>m[0]);
   const p = sessao?.permissoes;
-  if(Array.isArray(p) && p.length) return p.filter(a=>a!=='admin' && a!=='inventario');
-  return MODULOS.map(m=>m[0]).filter(a=>a!=='admin' && a!=='inventario'); /* padrão: tudo, menos admin/inventário */
+  let lista = (Array.isArray(p) && p.length)
+    ? p.filter(a=>a!=='admin' && a!=='inventario')
+    : MODULOS.map(m=>m[0]).filter(a=>a!=='admin' && a!=='inventario');
+  /* 🗺️ REGRA DEFINITIVA (Fabio, 23/10/2026): o Mapa da Equipe é CONFIDENCIAL.
+     Acesso SOMENTE do administrador e do Fabrício — travado aqui no código:
+     não entra por permissão comum, não aparece no menu/grade de mais ninguém
+     e nem a tela de permissões consegue liberar pra outra pessoa. */
+  const donoMapa = (sessao?.login || '').toLowerCase() === 'fabricio';
+  if(!donoMapa) lista = lista.filter(a=>a!=='mapaequipe');
+  else if(!lista.includes('mapaequipe')) lista = [...lista, 'mapaequipe'];
+  return lista;
 }
 function podeAba(aba){
   if(sessao?.perfil==='admin') return true;
@@ -3335,14 +3353,14 @@ function togglePermissoes(id){
   if(!u || !box) return;
   if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
   const atual = new Set(Array.isArray(u.permissoes) ? u.permissoes : []);
-  const padrao = atual.size===0; /* sem configuração = todos liberados */
+  const padrao = atual.size===0; /* sem configuração = todos liberados, MENOS o Mapa da Equipe (confidencial — só marcando de propósito) */
   box.innerHTML = `<div class="text-xs font-bold text-gray-500 uppercase mb-2">Módulos liberados para ${esc(u.nome)}</div>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">` +
-    MODULOS.filter(([m])=>m!=='admin'&&m!=='inventario').map(([m,rot])=>
+    MODULOS.filter(([m])=>m!=='admin'&&m!=='inventario'&&m!=='mapaequipe').map(([m,rot])=>
       `<label class="flex items-center gap-2 text-sm bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer">
         <input type="checkbox" data-mod="${m}" ${padrao||atual.has(m)?'checked':''} class="accent-red-700"> ${rot}</label>`
     ).join('') +
-    `</div><div class="text-xs text-gray-400 mb-2">⚙️ Admin e 📋 Inventário são sempre só do administrador.</div>
+    `</div><div class="text-xs text-gray-400 mb-2">⚙️ Admin e 📋 Inventário são sempre só do administrador. 🗺️ Mapa da Equipe tem acesso fixo e não aparece aqui.</div>
     <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="salvarPermissoes('${id}')">Salvar permissões</button>`;
   box.classList.remove('hidden');
 }
@@ -6204,6 +6222,27 @@ function osPeriodoRange(){
   }
   return null;
 }
+/* ---------- 👤 Operadores do filtro (23/10/2026, pedido do Fabio) ----------
+   A lista sai da base do Field: os tecnicos das atividades (os_atividades),
+   agrupados por nome normalizado (grafias variantes viram um operador so,
+   igual ao Painel). O filtro usa a coluna os_clientes.tecnico (1a atividade,
+   a mesma regra do 👤 do cartao) com in.(todas as grafias do operador). */
+async function osCarregarOperadores(){
+  if(OS_OP_CARREGADO) return; OS_OP_CARREGADO = true;
+  try{
+    const atvs = await apiGETall('os_atividades?select=tecnico&tecnico=not.is.null&order=tecnico.asc');
+    const mapa = {};
+    (atvs||[]).forEach(a=>{ const t = (a.tecnico||'').trim(); if(!t) return; const k = osNormNome(t); if(!mapa[k]) mapa[k] = {}; mapa[k][t] = (mapa[k][t]||0) + 1; });
+    OS_OP_VARS = {}; const itens = [];
+    Object.entries(mapa).forEach(([k, vars])=>{
+      const grafias = Object.keys(vars); OS_OP_VARS[k] = grafias;
+      const dominante = grafias.slice().sort((a,b)=>vars[b]-vars[a])[0];
+      itens.push({ valor: k, rotulo: '👤 ' + dominante });
+    });
+    OS_OP_ITENS = itens.sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+    fcSincronizar('oper');
+  }catch(e){ OS_OP_CARREGADO = false; }
+}
 function osPeriodoMudou(){
   const modo = (document.getElementById('osFiltroPeriodo')||{}).value||'';
   const mb = document.getElementById('osPeriodoMesBox'), db = document.getElementById('osPeriodoDatasBox');
@@ -6221,6 +6260,8 @@ function osFiltrosQuery(){
   else if(OS_SITUACAO==='concluida') f += '&status=eq.concluida';
   if(fc) f += '&cliente_id=eq.'+fc;
   if(ft) f += '&tipo_os_id=eq.'+ft;
+  const fo = (document.getElementById('osFiltroOperador')||{}).value||'';
+  if(fo){ const vars = (OS_OP_VARS && OS_OP_VARS[fo]) || [fo]; f += '&tecnico=' + encodeURIComponent('in.(' + vars.map(v=>'"' + String(v).replace(/"/g,'') + '"').join(',') + ')'); }
   const fe = (document.getElementById('osFiltroEmail')||{}).value||'';
   if(fe==='ab_env') f += '&email_abertura_enviado_em=not.is.null';
   else if(fe==='ab_nao') f += '&email_abertura_enviado_em=is.null&origem=eq.sistema';
@@ -6259,6 +6300,7 @@ const FC_CFG = {
   tec:  { hidden:'tecFiltroCliente', label:'tecFcLabel', lista:'tecFcLista', busca:'tecFcBusca', opcoes:'tecFcOpcoes', todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os tipos',    vazio:'Nenhum tipo encontrado.' },
   email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
+  oper: { hidden:'osFiltroOperador', label:'osOpLabel',  lista:'osOpLista',  busca:'osOpBusca',  opcoes:'osOpOpcoes',  todos:'👤 Todos os operadores', vazio:'Nenhum operador encontrado.' },
   eqcli:{ hidden:'eqFiltroCliente',  label:'eqFcLabel',  lista:'eqFcLista',  busca:'eqFcBusca',  opcoes:'eqFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   periodo:{ hidden:'osFiltroPeriodo', label:'osPerLabel', lista:'osPerLista', busca:'osPerBusca', opcoes:'osPerOpcoes', todos:'Todas as datas', vazio:'—' },
   eqform:{ hidden:'eqCliente', label:'eqFormLabel', lista:'eqFormLista', busca:'eqFormBusca', opcoes:'eqFormOpcoes', todos:'— cliente —', vazio:'Nenhum cliente encontrado.' },
@@ -6267,6 +6309,9 @@ const FC_CFG = {
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
 let OS_TP_ITENS = [];   // [{valor, rotulo}] — tipos de OS (de TIPOS_OS)
+let OS_OP_ITENS = [];   // [{valor, rotulo}] — 👤 operadores (de os_atividades — base Field)
+let OS_OP_VARS = {};    // chave normalizada -> [grafias] (o filtro usa tecnico=in.(grafias))
+let OS_OP_CARREGADO = false;
 const OS_EM_ITENS = [   // filtro 📧 E-mails (21/10/2026): registro de envios
   { valor:'ab_env', rotulo:'📩 Abertura enviada' },
   { valor:'ab_nao', rotulo:'⚠️ Abertura não enviada' },
@@ -6281,7 +6326,7 @@ const OS_PER_ITENS = [  // 📅 filtro de Período da OS Clientes (22/10/2026)
   { valor:'mesesp', rotulo:'Mês específico…' },
   { valor:'periodo', rotulo:'Período específico…' },
 ];
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : OS_FC_ITENS; }
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='oper' ? OS_OP_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
@@ -6332,6 +6377,7 @@ function fcEscolher(qual, valorEnc){
     }
     osRecarregar();
   }
+  else if(qual==='oper'){ osRecarregar(); }
   else osFiltroClienteMudou();
 }
 function fcSincronizar(qual){
@@ -6343,7 +6389,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap') && !e.target.closest('#osOpWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -6510,6 +6556,7 @@ async function carregarOSClientes(){
     }
     OS_TP_ITENS = (TIPOS_OS||[]).map(t=>({ valor: t.id, rotulo: t.descricao })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
     fcSincronizar('tipo');
+    osCarregarOperadores();
   }catch(e){}
   document.getElementById('osListaBox').classList.remove('hidden');
   document.getElementById('osDetalheBox').classList.add('hidden');
@@ -7233,6 +7280,7 @@ async function carregarTiposOS(){
   try{
     OS_TP_ITENS = (TIPOS_OS||[]).map(t=>({ valor: t.id, rotulo: t.descricao })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
     fcSincronizar('tipo');
+    osCarregarOperadores();
   }catch(e){}
 }
 async function apiGETsafe(path){
@@ -9015,39 +9063,27 @@ function mapa3dCarregarLib(cb){
   s.onload = ()=>cb(); s.onerror = ()=>toast('Não consegui carregar o mapa 3D — confira a conexão.','erro');
   document.head.appendChild(s);
 }
-function mapa3dAlternar(){
-  const btn = document.getElementById('btnMapa3d');
-  if(MAPA3D_ATIVO){
-    MAPA3D_ATIVO = false;
-    document.getElementById('mapaEquipe3d').classList.add('hidden');
-    document.getElementById('mapaEquipe').classList.remove('hidden');
-    if(btn){ btn.textContent = '🧊 3D'; btn.classList.remove('btn-brand'); btn.classList.add('btn-ghost'); }
-    if(MAPA_EQ) setTimeout(()=>MAPA_EQ.invalidateSize(), 60);
-    return;
-  }
+function mapa3dGarantir(){
+  // O Mapa da Equipe e SO satelite (decisao dele, 23/10/2026: opcao 2D desativada).
+  // Garante a lib + o mapa criados e os pinos sincronizados; chamada a cada refresh.
+  if(MAPA3D){ if(MAPA3D.resize) MAPA3D.resize(); mapa3dSincronizar(MAPA_EQ_ROWS); return; }
   mapa3dCarregarLib(async ()=>{
     MAPA3D_ATIVO = true;
-    document.getElementById('mapaEquipe').classList.add('hidden');
-    document.getElementById('mapaEquipe3d').classList.remove('hidden');
-    if(btn){ btn.textContent = '🗺️ 2D'; btn.classList.remove('btn-ghost'); btn.classList.add('btn-brand'); }
-    if(!MAPA3D){
-      const rows = MAPA_EQ_ROWS || [];
-      const at = rows.find(r=>r.ativa) || rows[0];
-      let estilo3d = 'https://tiles.openfreemap.org/styles/liberty';
-      try{ estilo3d = await mapa3dEstiloSatelite(); }catch(e){}
-      MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style: estilo3d, center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
-      MAPA3D.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
-      MAPA3D.on('click', e=>{ if(MAPA_RUA_ATIVO) mapaRuaAbrir(e.lngLat.lat, e.lngLat.lng); });
-      let feito3d = false;
-      const aoCarregar3d = ()=>{ if(feito3d) return; feito3d = true; mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); };
-      if(MAPA3D.loaded()) aoCarregar3d();
-      else {
-        MAPA3D.on('load', aoCarregar3d);
-        const espera3d = setInterval(()=>{ if(!MAPA3D || feito3d){ clearInterval(espera3d); return; } if(MAPA3D.loaded()){ clearInterval(espera3d); aoCarregar3d(); } }, 300);
-        setTimeout(()=>clearInterval(espera3d), 15000);
-      }
-    } else {
-      MAPA3D.resize(); mapa3dSincronizar(MAPA_EQ_ROWS);
+    if(MAPA3D){ mapa3dSincronizar(MAPA_EQ_ROWS); return; }
+    const rows = MAPA_EQ_ROWS || [];
+    const at = rows.find(r=>r.ativa) || rows[0];
+    let estilo3d = 'https://tiles.openfreemap.org/styles/liberty';
+    try{ estilo3d = await mapa3dEstiloSatelite(); }catch(e){}
+    MAPA3D = new maplibregl.Map({ container:'mapaEquipe3d', style: estilo3d, center: at ? [+at.lng, +at.lat] : [-38.543, -3.717], zoom: at ? 16 : 12, pitch: 60, bearing: -20, antialias: true });
+    MAPA3D.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+    MAPA3D.on('click', e=>{ if(MAPA_RUA_ATIVO) mapaRuaAbrir(e.lngLat.lat, e.lngLat.lng); });
+    let feito3d = false;
+    const aoCarregar3d = ()=>{ if(feito3d) return; feito3d = true; mapa3dSincronizar(MAPA_EQ_ROWS); mapa3dEnquadrar(); };
+    if(MAPA3D.loaded()) aoCarregar3d();
+    else {
+      MAPA3D.on('load', aoCarregar3d);
+      const espera3d = setInterval(()=>{ if(!MAPA3D || feito3d){ clearInterval(espera3d); return; } if(MAPA3D.loaded()){ clearInterval(espera3d); aoCarregar3d(); } }, 300);
+      setTimeout(()=>clearInterval(espera3d), 15000);
     }
   });
 }
@@ -9073,10 +9109,10 @@ function mapa3dEnquadrar(){
 function mapa3dSincronizar(rows){
   if(!MAPA3D || !window.maplibregl) return;
   MAPA3D_MARCADORES.forEach(m=>m.remove()); MAPA3D_MARCADORES = [];
-  (rows||[]).forEach(r=>{
+  (rows||[]).forEach((r, idxPin3d)=>{
     const el = document.createElement('div');
     el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer';
-    el.innerHTML = `<div class="mapa-nome-pin" style="${r.ativa?'':'opacity:.65'}">${esc(mapa3dNomeCurto(r.tecnico_nome))}</div><img src="js/leaflet/images/marker-icon.png" width="25" height="41" alt="" style="${r.ativa?'':'filter:grayscale(1);opacity:.6'}">`;
+    el.innerHTML = `<div class="mapa-nome-pin" style="margin-bottom:${(idxPin3d%3)*25}px;${r.ativa?'':'opacity:.65'}">${esc(mapa3dNomeCurto(r.tecnico_nome))}</div><img src="js/leaflet/images/marker-icon.png" width="25" height="41" alt="" style="${r.ativa?'':'filter:grayscale(1);opacity:.6'}">`;
     const pop = new maplibregl.Popup({ offset: 50 }).setHTML(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍':'📵'} ${r.ativa?'Ativo':'<b>GPS desativado</b>'} · ${mapaTempoAtras(r.updated_at)}<br>${r.os_numero?('OS <b>'+esc(r.os_numero)+'</b>'):''}`);
     const mk = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([+r.lng, +r.lat]).setPopup(pop).addTo(MAPA3D);
     MAPA3D_MARCADORES.push(mk);
@@ -9124,27 +9160,8 @@ async function carregarMapaEquipe(){
     }catch(e){}
     const info = document.getElementById('mapaEquipeInfo');
     const div = document.getElementById('mapaEquipe');
-    if(typeof L === 'undefined'){ info.textContent = 'Mapa indisponível (Leaflet não carregou).'; return; }
-    if(MAPA_EQ){ MAPA_EQ.remove(); MAPA_EQ = null; }
-    const ativos = (rows||[]).filter(r=>r.ativa);
-    const centro = ativos.length ? [ativos[0].lat, ativos[0].lng] : [-3.717, -38.543]; // Fortaleza
-    MAPA_EQ = L.map('mapaEquipe').setView(centro, 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(MAPA_EQ);
-    MAPA_EQ.on('click', e=>{ if(MAPA_RUA_ATIVO) mapaRuaAbrir(e.latlng.lat, e.latlng.lng); });
-    const iconV = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41] });
-    const iconC = new L.Icon({ iconUrl:'js/leaflet/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className:'grayscale opacity-60' });
-    const bounds = [];
-    (rows||[]).forEach((r, idxPin)=>{
-      const mk = L.marker([r.lat, r.lng], { icon: r.ativa?iconV:iconC }).addTo(MAPA_EQ);
-      const partesNome = String(r.tecnico_nome||'?').trim().split(/\s+/);
-      const nomePin = partesNome.length>1 ? partesNome[0]+' '+partesNome[partesNome.length-1] : partesNome[0];
-      mk.bindTooltip(esc(nomePin), { permanent:true, direction:'top', offset:[0,-46-(idxPin%3)*25], className:'mapa-nome-pin', opacity:1 });
-      mk.bindPopup(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍':'📵'} ${r.ativa?'Ativo':'<b>GPS desativado</b>'} · ${mapaTempoAtras(r.updated_at)}<br>${r.os_numero?('OS <b>'+esc(r.os_numero)+'</b>'):''}`);
-      bounds.push([r.lat, r.lng]);
-    });
     MAPA_EQ_ROWS = rows || [];
-    if(MAPA3D_ATIVO && MAPA3D) mapa3dSincronizar(MAPA_EQ_ROWS);
-    if(bounds.length > 1) MAPA_EQ.fitBounds(bounds, { padding:[30,30] });
+    mapa3dGarantir();
     const inativos = (rows||[]).filter(r=>!r.ativa);
     document.getElementById('mapaEquipeAlertas').innerHTML = inativos.length
       ? `<div class="bg-red-50 border border-red-300 rounded-xl p-3 text-sm text-red-800 font-bold">📵 Localização desativada: ${inativos.map(r=>`${esc(r.tecnico_nome)} (${mapaTempoAtras(r.updated_at)})`).join(' · ')}</div>` : '';
@@ -9155,7 +9172,7 @@ async function carregarMapaEquipe(){
     info.textContent = `${(rows||[]).length} técnico(s) · atualizado agora`;
     if(MAPA_EQ_TIMER) clearInterval(MAPA_EQ_TIMER);
     MAPA_EQ_TIMER = setInterval(()=>{ if(!document.getElementById('aba-mapaequipe').classList.contains('hidden')) carregarMapaEquipe(); }, 30000);
-    setTimeout(()=>{ if(MAPA_EQ) MAPA_EQ.invalidateSize(); }, 300);
+    setTimeout(()=>{ if(MAPA3D && MAPA3D.resize) MAPA3D.resize(); }, 300);
   }catch(e){
     document.getElementById('mapaEquipeInfo').textContent = 'Erro: '+e.message;
   }
@@ -9364,8 +9381,44 @@ async function mapaGeocodificar(alvos, pdfRef){
     }
   }catch(e){}
 }
+/* ===== 🛣️ Trajeto no mapa satélite (MapLibre) — pontos, linha e limpeza =====
+   (Até 23/10/2026 o trajeto era desenhado no mapa 2D/Leaflet; com o 2D
+   desativado, ele vive no satélite: linha GeoJSON + marcadores-ponto.) */
+let MAPA_TRAJETO_MKS = [], MAPA_PRESENCA_MKS = [];
+function mapaPontoEl(cor, tam){
+  const d = document.createElement('div');
+  d.style.cssText = 'width:' + tam + 'px;height:' + tam + 'px;border-radius:50%;background:' + cor + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);cursor:pointer';
+  return d;
+}
+function mapaTrajetoPonto(lat, lng, cor, tam, html){
+  const m = new maplibregl.Marker({ element: mapaPontoEl(cor, tam) }).setLngLat([+lng, +lat]).setPopup(new maplibregl.Popup({ offset: 14 }).setHTML(html)).addTo(MAPA3D);
+  MAPA_TRAJETO_MKS.push(m); return m;
+}
+function mapaPresencaPonto(lat, lng, html){
+  const m = new maplibregl.Marker({ element: mapaPontoEl('#7c3aed', 18) }).setLngLat([+lng, +lat]).setPopup(new maplibregl.Popup({ offset: 14 }).setHTML(html)).addTo(MAPA3D);
+  MAPA_PRESENCA_MKS.push(m); return m;
+}
+function mapaTrajetoLinha(lngLats){
+  if(!MAPA3D) return;
+  const desenhar = ()=>{ try{
+    mapaTrajetoLimparLinha();
+    MAPA3D.addSource('trajeto-src', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: lngLats } } });
+    MAPA3D.addLayer({ id: 'trajeto-linha', type: 'line', source: 'trajeto-src', paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 0.85 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
+  }catch(e){} };
+  if(MAPA3D.isStyleLoaded()) desenhar(); else MAPA3D.once('style.load', desenhar);
+}
+function mapaTrajetoLimparLinha(){
+  if(!MAPA3D) return;
+  try{ if(MAPA3D.getLayer('trajeto-linha')) MAPA3D.removeLayer('trajeto-linha'); }catch(e){}
+  try{ if(MAPA3D.getSource('trajeto-src')) MAPA3D.removeSource('trajeto-src'); }catch(e){}
+}
+function mapaTrajetoLimpar(){
+  MAPA_TRAJETO_MKS.forEach(m=>{ try{ m.remove(); }catch(e){} }); MAPA_TRAJETO_MKS = [];
+  MAPA_PRESENCA_MKS.forEach(m=>{ try{ m.remove(); }catch(e){} }); MAPA_PRESENCA_MKS = [];
+  mapaTrajetoLimparLinha();
+  MAPA_TRAJETO_LAYER = null; MAPA_PRESENCA_LAYER = null;
+}
 async function verTrajetoTecnico(nome, dataISO){
-  if(MAPA3D_ATIVO) mapa3dAlternar();
   const info = document.getElementById('mapaTrajetoInfo');
   info.classList.remove('hidden');
   const dia = (dataISO && /^\d{4}-\d{2}-\d{2}$/.test(dataISO)) ? dataISO : mapaHojeFortaleza();
@@ -9373,10 +9426,9 @@ async function verTrajetoTecnico(nome, dataISO){
   const diaFmt = dia.split('-').reverse().join('/');
   info.innerHTML = `<div class="text-sm text-gray-500">🛣️ Carregando trajeto de <b>${esc(nome)}</b> em ${diaFmt}…</div>`;
   try{
-    if(!MAPA_EQ){ info.innerHTML = '<div class="text-sm text-red-600">Abra o mapa primeiro.</div>'; return; }
+    if(!MAPA3D){ mapa3dGarantir(); info.innerHTML = '<div class="text-sm text-red-600">Carregando o mapa… toque em 🛣️ Trajeto de novo em alguns segundos.</div>'; return; }
     // limpa trajeto anterior
-    if(MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
-    if(MAPA_PRESENCA_LAYER){ MAPA_EQ.removeLayer(MAPA_PRESENCA_LAYER); MAPA_PRESENCA_LAYER = null; }
+    mapaTrajetoLimpar();
     // dia em America/Fortaleza (UTC-3 fixo): 00:00 local = 03:00Z
     const diaIni = new Date(dia + 'T00:00:00-03:00');
     const diaFim = new Date(diaIni.getTime() + 86400000);
@@ -9418,32 +9470,28 @@ async function verTrajetoTecnico(nome, dataISO){
     const distTotal = segs.filter(s=>s.tipo==='trecho').reduce((sq,s)=>sq+s.distKm,0);
     const temLinhaReta = segs.some(s=>s.tipo==='trecho' && s.linhaReta);
     if((pts||[]).length){
-      const g = L.featureGroup();
       const coords = pts.map(p=>[+p.lat, +p.lng]);
-      L.polyline(coords, { color:'#2563eb', weight:4, opacity:0.85 }).addTo(g);
+      mapaTrajetoLinha(coords.map(c=>[c[1], c[0]]));
       const i0 = pts[0], iN = pts[pts.length-1];
       const primParada = paradas.length && paradas[0].pts[0]===i0 ? paradas[0] : null;
       const ultParada = paradas.length ? paradas[paradas.length-1] : null;
       const fimEmParada = !!(ultParada && ultParada.pts[ultParada.pts.length-1]===iN);
       if(!primParada){
-        L.circleMarker([+i0.lat,+i0.lng], {radius:8, color:'#fff', weight:2, fillColor:'#16a34a', fillOpacity:1})
-          .bindPopup(`<b>Início</b> · ${trajetoHora(i0.created_at)}`).addTo(g);
+        mapaTrajetoPonto(+i0.lat, +i0.lng, '#16a34a', 16, `<b>Início</b> · ${trajetoHora(i0.created_at)}`);
       }
       // marcadores nos CENTROS dos clusters: início verde, fim vermelho, demais âmbar (visual atual)
       paradas.forEach((p,idx)=>{
         const cor = p.pts[0]===i0 ? '#16a34a' : (p.pts[p.pts.length-1]===iN ? '#dc2626' : '#f59e0b');
         const mins = Math.round((p.t1-p.t0)/60000);
         const oss = [...new Set(p.pts.map(q=>q.os_numero).filter(Boolean))];
-        L.circleMarker([p.lat,p.lng], {radius:10, color:'#fff', weight:2, fillColor:cor, fillOpacity:1})
-          .bindPopup(`<b>🛑 Parada ${idx+1}</b><br>${trajetoHora(new Date(p.t0).toISOString())} → ${trajetoHora(new Date(p.t1).toISOString())} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}`).addTo(g);
+        mapaTrajetoPonto(p.lat, p.lng, cor, 20, `<b>🛑 Parada ${idx+1}</b><br>${trajetoHora(new Date(p.t0).toISOString())} → ${trajetoHora(new Date(p.t1).toISOString())} (${mins} min)${oss.length?`<br>OS: <b>${oss.map(esc).join(', ')}</b>`:''}`);
       });
       if(!fimEmParada){
-        L.circleMarker([+iN.lat,+iN.lng], {radius:8, color:'#fff', weight:2, fillColor:'#dc2626', fillOpacity:1})
-          .bindPopup(`<b>Fim</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`).addTo(g);
+        mapaTrajetoPonto(+iN.lat, +iN.lng, '#dc2626', 16, `<b>Fim</b> · ${trajetoHora(iN.created_at)}${iN.os_numero?`<br>OS <b>${esc(iN.os_numero)}</b>`:''}`);
       }
-      g.addTo(MAPA_EQ);
-      MAPA_TRAJETO_LAYER = g;
-      MAPA_EQ.fitBounds(g.getBounds(), { padding:[40,40] });
+      MAPA_TRAJETO_LAYER = true;
+      const bT = new maplibregl.LngLatBounds(); coords.forEach(c=>bT.extend([c[1], c[0]]));
+      MAPA3D.fitBounds(bT, { padding: 40, pitch: 0, maxZoom: 16.5 });
       const durMin = Math.round((new Date(iN.created_at)-new Date(i0.created_at))/60000);
       iniPdf = trajetoHora(i0.created_at); fimPdf = trajetoHora(iN.created_at); distTotalPdf = distTotal; durMinPdf = durMin;
       resumoHtml = `
@@ -9461,16 +9509,14 @@ async function verTrajetoTecnico(nome, dataISO){
     MAPA_GEO_ALVOS = [];
     const evs = mapaEventosDia(dia, pts, segs, atvs, numMap, historico, presenca);
     // 📍 marcadores de presença (login / Minhas OSs) com coordenadas casadas no mapa
-    if((pts||[]).length && MAPA_EQ){
+    if((pts||[]).length && MAPA3D){
       try{
-        const gP = L.featureGroup();
         let algum = false;
         evs.filter(e=>e.lat!=null).forEach(e=>{
           algum = true;
-          L.circleMarker([e.lat, e.lng], { radius:9, color:'#fff', weight:2, fillColor:'#7c3aed', fillOpacity:1 })
-            .bindPopup(`<b>${e.ic||''}</b> ${e.txt||''}<br>${e.hora||''}`).addTo(gP);
+          mapaPresencaPonto(e.lat, e.lng, `<b>${e.ic||''}</b> ${e.txt||''}<br>${e.hora||''}`);
         });
-        if(algum){ gP.addTo(MAPA_EQ); MAPA_PRESENCA_LAYER = gP; }
+        if(algum) MAPA_PRESENCA_LAYER = true;
       }catch(e){}
     }
     // OSs concluídas no dia (p/ o resumo do 📄 PDF do dia)
@@ -9608,8 +9654,7 @@ function mapaEventosDia(dia, pts, segs, atvs, numMap, historico, presenca){
   return evs;
 }
 function limparTrajeto(){
-  if(MAPA_EQ && MAPA_TRAJETO_LAYER){ MAPA_EQ.removeLayer(MAPA_TRAJETO_LAYER); MAPA_TRAJETO_LAYER = null; }
-  if(MAPA_EQ && MAPA_PRESENCA_LAYER){ MAPA_EQ.removeLayer(MAPA_PRESENCA_LAYER); MAPA_PRESENCA_LAYER = null; }
+  mapaTrajetoLimpar();
   MAPA_TRAJETO_PDF = null;
   MAPA_GEO_ALVOS = [];
   document.getElementById('mapaTrajetoInfo').classList.add('hidden');
@@ -9760,19 +9805,12 @@ function mapaComparativoHtml(dia, diaFmt, linhas){
 async function mapaFocarTecnico(nome){
   try{
     const [r] = await apiGET(`tecnico_localizacao?tecnico_nome=eq.${encodeURIComponent(nome)}&select=lat,lng,tecnico_nome,ativa,updated_at,os_numero&limit=1`);
-    if(r && MAPA3D_ATIVO && MAPA3D){
+    if(r && MAPA3D){
       MAPA3D.flyTo({ center: [+r.lng, +r.lat], zoom: 16.5, pitch: 60 });
       setTimeout(()=>{ new maplibregl.Popup({ offset: 50 }).setLngLat([+r.lng, +r.lat]).setHTML(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍 Ativo':'📵 GPS desativado'} · ${mapaTempoAtras(r.updated_at)}${r.os_numero?`<br>OS <b>${esc(r.os_numero)}</b>`:''}`).addTo(MAPA3D); }, 600);
       return;
     }
-    if(r && MAPA_EQ){
-      MAPA_EQ.setView([+r.lat, +r.lng], 15, { animate:true });
-      setTimeout(()=>{
-        L.popup().setLatLng([+r.lat, +r.lng])
-          .setContent(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍 Ativo':'📵 GPS desativado'} · ${mapaTempoAtras(r.updated_at)}${r.os_numero?`<br>OS <b>${esc(r.os_numero)}</b>`:''}`)
-          .openOn(MAPA_EQ);
-      }, 400);
-    }
+    if(r && !MAPA3D){ mapa3dGarantir(); toast('🗺️ O mapa ainda está carregando — tente de novo em alguns segundos.'); }
   }catch(e){ toast('Não foi possível localizar: '+e.message, 'erro'); }
 }
 /* ================= 📋 DESIGNAR OS PELO MAPA ================= */
