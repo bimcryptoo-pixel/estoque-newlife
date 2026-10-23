@@ -80,7 +80,7 @@
      continua abrindo no toque. Escopo: só os campos com a classe .inp-data. */
   .inp-data{ -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; text-align:left; }
   /* etiqueta fixa com o nome do técnico no pino do Mapa da Equipe (23/10/2026) */
-  .mapa-nome-pin{ background:#fff !important; border:1.5px solid #6b7280 !important; border-radius:999px !important; color:#111827 !important; font-weight:700 !important; font-size:11px !important; line-height:1.25 !important; padding:1px 7px !important; box-shadow:0 1px 4px rgba(0,0,0,.3) !important; white-space:nowrap; }
+  .mapa-nome-pin{ background:#fff !important; border:1.5px solid #6b7280 !important; border-radius:999px !important; color:#111827 !important; font-weight:700 !important; font-size:13px !important; line-height:1.25 !important; padding:2px 9px !important; box-shadow:0 1px 4px rgba(0,0,0,.3) !important; white-space:nowrap; }
   .mapa-nome-pin::before{ display:none !important; }
   label.lbl{ display:block; font-size:0.75rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:.03em; }
   .btn-brand{ background:var(--brand); color:#fff; font-weight:700; border-radius:0.7rem; padding:0.75rem 1rem; width:100%; white-space:nowrap; }
@@ -9036,7 +9036,7 @@ async function carregarMapaEquipe(){
       const mk = L.marker([r.lat, r.lng], { icon: r.ativa?iconV:iconC }).addTo(MAPA_EQ);
       const partesNome = String(r.tecnico_nome||'?').trim().split(/\s+/);
       const nomePin = partesNome.length>1 ? partesNome[0]+' '+partesNome[partesNome.length-1] : partesNome[0];
-      mk.bindTooltip(esc(nomePin), { permanent:true, direction:'top', offset:[0,-44-(idxPin%3)*17], className:'mapa-nome-pin', opacity:1 });
+      mk.bindTooltip(esc(nomePin), { permanent:true, direction:'top', offset:[0,-46-(idxPin%3)*25], className:'mapa-nome-pin', opacity:1 });
       mk.bindPopup(`<b>${esc(r.tecnico_nome)}</b><br>${r.ativa?'📍':'📵'} ${r.ativa?'Ativo':'<b>GPS desativado</b>'} · ${mapaTempoAtras(r.updated_at)}<br>${r.os_numero?('OS <b>'+esc(r.os_numero)+'</b>'):''}`);
       bounds.push([r.lat, r.lng]);
     });
