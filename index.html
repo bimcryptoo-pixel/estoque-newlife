@@ -3556,29 +3556,11 @@ function duplicado(tipo, nome, rotulo){
   }
   return false;
 }
-/* Trava de CNPJ/CPF duplicado (clientes): compara SÓ DÍGITOS nas duas colunas
-   (cnpj e cnpj_cpf), cobrindo valores com ou sem máscara. Consulta o banco na hora
-   (o cache CLIENTES pode estar incompleto). Retorna a lista de conflitantes ou null.
-   excluirId = o próprio cliente em edição (manter o próprio documento não bloqueia).
-   Documento vazio → sem trava (cliente sem CNPJ segue permitido). Erro de leitura →
-   NÃO bloqueia (a trava é de qualidade; não pode travar o cadastro por falha de rede). */
-async function cnpjClienteDuplicado(docValor, excluirId){
-  const doc = String(docValor||'').replace(/\D/g,'');
-  if(!doc) return null;
-  let rows;
-  try{ rows = await apiGET('clientes?select=id,nome,cnpj,cnpj_cpf&order=nome.asc'); }
-  catch(e){ return null; }
-  const conf = (rows||[]).filter(x=>String(x.id)!==String(excluirId||'') &&
-    [x.cnpj, x.cnpj_cpf].some(v=>String(v||'').replace(/\D/g,'')===doc));
-  return conf.length ? conf : null;
-}
-/* texto do alerta da trava de documento duplicado */
-function msgCnpjDuplicado(conf, docValor){
-  const doc = String(docValor||'').replace(/\D/g,'');
-  const rotulo = doc.length===11 ? 'CPF' : 'CNPJ';
-  const extra = conf.length>1 ? ` (+${conf.length-1} com o mesmo ${rotulo})` : '';
-  return `⚠️ ${rotulo} já cadastrado para ${conf[0].nome}${extra} — cadastro bloqueado. Selecione o cliente existente.`;
-}
+/* CNPJ/CPF duplicado NÃO bloqueia mais (regra do usuário, 26/10/2026): redes de
+   saúde têm várias UNIDADES com o mesmo CNPJ (ex.: HGB, HUT e UPAs de Teresina
+   compartilham 11.273.170/0001-66), então cadastrar/editar cliente com documento
+   repetido é permitido. A antiga trava cnpjClienteDuplicado foi removida dos 3
+   fluxos (editar cliente, novo cadastro e cadastro rápido da Nova OS). */
 async function toggleCadastro(tabela, id, novoAtivo){
   try{
     await apiPATCH(tabela, `id=eq.${id}`, {ativo:novoAtivo});
@@ -3646,8 +3628,6 @@ async function salvarEditorCliente(){
   const dup = (CLIENTES||[]).find(x=>x.id!==ED_CLI_ID && normNome(x.nome)===normNome(nome));
   if(dup){ toast('⚠️ Já existe outro cliente com esse nome.','alerta'); return; }
   const cnpj = document.getElementById('edCliCnpj').value.trim()||null;
-  const confCnpjEd = await cnpjClienteDuplicado(cnpj, ED_CLI_ID);
-  if(confCnpjEd){ toast(msgCnpjDuplicado(confCnpjEd, cnpj),'alerta'); return; }
   const body = {
     nome,
     tipo: document.getElementById('edCliTipo').value,
@@ -3838,8 +3818,6 @@ async function criarCliente(){
   };
   if(!nome){ toast('Informe o nome do cliente.','erro'); return; }
   if(duplicado('clientes', nome, 'Cliente')) return;
-  const confCnpj = await cnpjClienteDuplicado(cnpj, null);
-  if(confCnpj){ toast(msgCnpjDuplicado(confCnpj, cnpj),'alerta'); return; }
   try{
     const emailCli=document.getElementById('cliEmail').value.trim()||null;
     await apiPOST('clientes',{nome,tipo,cnpj,email:emailCli,ativo:true,...fisc});
@@ -6969,8 +6947,6 @@ async function osCadRapClienteSalvar(){
   const cnpj = document.getElementById('ncrCnpj').value.trim()||null;
   if(!nome){ toast('Informe o nome do cliente.','erro'); OS_CAD_RAP_CLI_TRAVA = false; return; }
   if(duplicado('clientes', nome, 'Cliente')){ OS_CAD_RAP_CLI_TRAVA = false; return; }
-  const confCnpjRap = await cnpjClienteDuplicado(cnpj, null);
-  if(confCnpjRap){ toast(msgCnpjDuplicado(confCnpjRap, cnpj),'alerta'); OS_CAD_RAP_CLI_TRAVA = false; return; }
   /* payload IDÊNTICO ao criarCliente() de Cadastros (+ telefone, coluna gravada no editor de cliente) */
   const body = { nome, tipo, cnpj,
     email: document.getElementById('ncrEmail').value.trim()||null,
