@@ -1418,6 +1418,14 @@
               <input id="cliNome" class="inp text-sm" placeholder="Nome do cliente">
               <input id="cliCnpj" class="inp text-sm" placeholder="CNPJ (opcional)" inputmode="numeric">
               <input id="cliEmail" class="inp text-sm" type="email" placeholder="E-mail (para envio da OS)">
+              <div class="grid grid-cols-2 gap-2">
+                <input id="cliTel" class="inp text-sm" placeholder="Telefone 1">
+                <input id="cliTelNome" class="inp text-sm" placeholder="Nome do contato 1">
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="cliTel2" class="inp text-sm" placeholder="Telefone 2">
+                <input id="cliTel2Nome" class="inp text-sm" placeholder="Nome do contato 2">
+              </div>
               <select id="cliTipo" class="inp text-sm">
                 <option value="cliente">cliente</option>
                 <option value="interno">interno (NEW LIFE)</option>
@@ -3596,9 +3604,14 @@ async function abrirEditorCliente(id){
           </select></div>
           <div><label class="lbl">CNPJ/CPF</label><input id="edCliCnpj" class="inp text-sm" value="${esc(c.cnpj||c.cnpj_cpf||'')}"></div>
         </div>
+        <div><label class="lbl">E-mail (envio da OS)</label><input id="edCliEmail" class="inp text-sm" type="email" value="${esc(c.email||'')}"></div>
         <div class="grid grid-cols-2 gap-2">
-          <div><label class="lbl">E-mail (envio da OS)</label><input id="edCliEmail" class="inp text-sm" type="email" value="${esc(c.email||'')}"></div>
-          <div><label class="lbl">Telefone</label><input id="edCliTel" class="inp text-sm" value="${esc(c.telefone||'')}"></div>
+          <div><label class="lbl">Telefone 1</label><input id="edCliTel" class="inp text-sm" value="${esc(c.telefone||'')}"></div>
+          <div><label class="lbl">Nome do contato 1</label><input id="edCliTelNome" class="inp text-sm" value="${esc(c.telefone_nome||'')}" placeholder="Pessoa deste telefone"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="lbl">Telefone 2</label><input id="edCliTel2" class="inp text-sm" value="${esc(c.telefone2||'')}"></div>
+          <div><label class="lbl">Nome do contato 2</label><input id="edCliTel2Nome" class="inp text-sm" value="${esc(c.telefone2_nome||'')}" placeholder="Pessoa deste telefone"></div>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div><label class="lbl">Inscrição Estadual</label><input id="edCliIe" class="inp text-sm" value="${esc(c.inscricao_estadual||'')}"></div>
@@ -3634,6 +3647,9 @@ async function salvarEditorCliente(){
     cnpj, cnpj_cpf: cnpj,
     email: document.getElementById('edCliEmail').value.trim()||null,
     telefone: document.getElementById('edCliTel').value.trim()||null,
+    telefone_nome: document.getElementById('edCliTelNome').value.trim()||null,
+    telefone2: document.getElementById('edCliTel2').value.trim()||null,
+    telefone2_nome: document.getElementById('edCliTel2Nome').value.trim()||null,
     inscricao_estadual: document.getElementById('edCliIe').value.replace(/\D/g,'')||null,
     cep: document.getElementById('edCliCep').value.replace(/\D/g,'')||null,
     endereco: document.getElementById('edCliEnd').value.trim()||null,
@@ -3820,10 +3836,14 @@ async function criarCliente(){
   if(duplicado('clientes', nome, 'Cliente')) return;
   try{
     const emailCli=document.getElementById('cliEmail').value.trim()||null;
-    await apiPOST('clientes',{nome,tipo,cnpj,email:emailCli,ativo:true,...fisc});
+    const telCli={ telefone:document.getElementById('cliTel').value.trim()||null,
+      telefone_nome:document.getElementById('cliTelNome').value.trim()||null,
+      telefone2:document.getElementById('cliTel2').value.trim()||null,
+      telefone2_nome:document.getElementById('cliTel2Nome').value.trim()||null };
+    await apiPOST('clientes',{nome,tipo,cnpj,email:emailCli,ativo:true,...fisc,...telCli});
     toast('Cliente cadastrado. ✓','ok');
     document.getElementById('cliNome').value=''; document.getElementById('cliCnpj').value=''; document.getElementById('cliEmail').value='';
-    ['cliIe','cliCep','cliEndereco','cliNumero','cliBairro','cliCidade'].forEach(id=>document.getElementById(id).value='');
+    ['cliTel','cliTelNome','cliTel2','cliTel2Nome','cliIe','cliCep','cliEndereco','cliNumero','cliBairro','cliCidade'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('cliUf').value='CE';
     await carregarClientesCache();
     carregarCadastros();
@@ -6626,7 +6646,7 @@ async function osRecarregarListaClientes(){
   try{
     await carregarClientesCache(); /* mantém o global CLIENTES fresco p/ Nova OS e filtros */
     /* esta lista usa select detalhado: o cache compartilhado só traz id/nome/tipo/cnpj/ativo */
-    const rows = await apiGET('clientes?select=id,nome,tipo,telefone,email,cidade,uf,ativo,origem&order=nome.asc');
+    const rows = await apiGET('clientes?select=id,nome,tipo,telefone,telefone_nome,telefone2,telefone2_nome,email,cidade,uf,ativo,origem&order=nome.asc');
     OSCLI_LISTA.itens = (rows||[]).filter(c=>c.ativo!==false && c.origem!=='planilha');
   }catch(e){
     OSCLI_LISTA.itens = [];
@@ -6646,7 +6666,7 @@ function osRenderListaClientes(){
   }
   const LIM = 100;
   box.innerHTML = filtrados.slice(0, LIM).map(c=>{
-    const det = [ (c.tipo && c.tipo!=='cliente') ? c.tipo : '', c.cidade ? (c.cidade + (c.uf ? '/'+c.uf : '')) : '', c.telefone || '' ].filter(Boolean).join(' · ');
+    const det = [ (c.tipo && c.tipo!=='cliente') ? c.tipo : '', c.cidade ? (c.cidade + (c.uf ? '/'+c.uf : '')) : '', c.telefone ? (c.telefone + (c.telefone_nome ? ' ('+c.telefone_nome+')' : '')) : '' ].filter(Boolean).join(' · ');
     return `<div class="border rounded-xl p-3 bg-white flex items-center gap-2">
       <div class="flex-1 min-w-0">
         <div class="font-bold text-sm truncate">${esc(fmtCliNome(c.nome, c.tipo))}</div>
@@ -6915,9 +6935,14 @@ function osCadRapClienteAbrir(){
         </select></div>
         <div><label class="lbl">CNPJ/CPF</label><input id="ncrCnpj" class="inp text-sm" inputmode="numeric" placeholder="Documento"></div>
       </div>
+      <div><label class="lbl">E-mail (envio da OS)</label><input id="ncrEmail" class="inp text-sm" type="email" placeholder="E-mail"></div>
       <div class="grid grid-cols-2 gap-2">
-        <div><label class="lbl">E-mail (envio da OS)</label><input id="ncrEmail" class="inp text-sm" type="email" placeholder="E-mail"></div>
-        <div><label class="lbl">Telefone</label><input id="ncrTel" class="inp text-sm" placeholder="Telefone"></div>
+        <div><label class="lbl">Telefone 1</label><input id="ncrTel" class="inp text-sm" placeholder="Telefone 1"></div>
+        <div><label class="lbl">Nome do contato 1</label><input id="ncrTelNome" class="inp text-sm" placeholder="Pessoa deste telefone"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="lbl">Telefone 2</label><input id="ncrTel2" class="inp text-sm" placeholder="Telefone 2"></div>
+        <div><label class="lbl">Nome do contato 2</label><input id="ncrTel2Nome" class="inp text-sm" placeholder="Pessoa deste telefone"></div>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div><label class="lbl">Inscrição Estadual</label><input id="ncrIe" class="inp text-sm" inputmode="numeric"></div>
@@ -6951,6 +6976,9 @@ async function osCadRapClienteSalvar(){
   const body = { nome, tipo, cnpj,
     email: document.getElementById('ncrEmail').value.trim()||null,
     telefone: document.getElementById('ncrTel').value.trim()||null,
+    telefone_nome: document.getElementById('ncrTelNome').value.trim()||null,
+    telefone2: document.getElementById('ncrTel2').value.trim()||null,
+    telefone2_nome: document.getElementById('ncrTel2Nome').value.trim()||null,
     ativo: true, cnpj_cpf: cnpj,
     inscricao_estadual: document.getElementById('ncrIe').value.replace(/\D/g,'')||null,
     endereco: document.getElementById('ncrEnd').value.trim()||null,
@@ -7448,7 +7476,7 @@ function osAbaGeral(d){
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">E-mail</div><b class="text-[13px] break-words">${esc(cli.email||'—')}</b></div>
-      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Telefone</div><b class="text-[13px]">${esc(cli.telefone||'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Telefone</div><b class="text-[13px]">${esc(cli.telefone||'—')}</b>${cli.telefone_nome?` <span class="text-xs text-gray-500">(${esc(cli.telefone_nome)})</span>`:''}${cli.telefone2?`<br><b class="text-[13px]">${esc(cli.telefone2)}</b>${cli.telefone2_nome?` <span class="text-xs text-gray-500">(${esc(cli.telefone2_nome)})</span>`:''}`:''}</div>
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Localização</div><b class="text-[13px]">${esc(o.localizacao||cli.nome||'—')}</b></div>
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Endereço da OS</div><b class="text-[13px]">${esc(endOS||'—')}</b>${mapsUrl?`<br><a class="text-brand font-bold text-xs" target="_blank" href="${mapsUrl}">📍 Ver no mapa</a>`:''}</div>
     </div>
