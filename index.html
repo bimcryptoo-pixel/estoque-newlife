@@ -6571,6 +6571,7 @@ async function carregarOSClientes(){
   try{
     await osRecarregar();
   }catch(e){ toast('Erro ao carregar OS: '+e.message,'erro'); }
+  osVarreduraEmailsPendentes(); // 📧 REGRA 27/10: confere e reenvia e-mails de abertura/conclusão pendentes (1× por sessão)
 }
 
 function renderOSLista(){
@@ -11438,10 +11439,10 @@ async function osEnviarEmailAuto(osId){
     if(os && os.email_enviado_em) return;
     const email = os && os.clientes && (os.clientes.email||'').trim();
     if(!email) return; // sem e-mail cadastrado: silencioso
-    // 📧 2 tentativas (22/10/2026): uma falha transitória da função (ex.: o
+    // 📧 3 tentativas (22/10/2026; padronizado em 27/10/2026): uma falha transitória da função (ex.: o
     // HTTP 546 da OS-2026-0003) não pode custar o e-mail da OS — tenta de novo.
     let r = null, ultimoErro = '';
-    for(let tent = 1; tent <= 2; tent++){
+    for(let tent = 1; tent <= 3; tent++){
       try{
         r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
           method:'POST',
@@ -11451,7 +11452,7 @@ async function osEnviarEmailAuto(osId){
         if(r.ok) break;
         ultimoErro = 'HTTP ' + r.status;
       }catch(_e){ r = null; ultimoErro = 'sem rede'; }
-      if(tent < 2) await new Promise(res => setTimeout(res, 2500));
+      if(tent < 3) await new Promise(res => setTimeout(res, 2500));
     }
     if(r && r.ok){
       await osLog(osId, `enviou a OS por e-mail automaticamente para ${email}`);
@@ -11475,21 +11476,69 @@ async function osEnviarEmailAbertura(osId){
     if(os && os.email_abertura_enviado_em) return 'ja_enviado'; // dedupe: abertura é uma vez só
     const email = ((os && os.clientes && os.clientes.email) || '').trim();
     if(!email) return 'sem_email';
-    const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
-      method:'POST',
-      headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ os_id: osId, tipo: 'abertura' })
-    });
-    if(r.ok){
-      await osLog(osId, `enviou o e-mail de abertura da OS para ${email}`);
-      return 'enviado';
+    // 📧 3 tentativas (REGRA 27/10/2026): igual ao e-mail de conclusão — uma
+    // falha transitória NÃO pode deixar a OS com "abertura não enviada".
+    let ultimoErro = '';
+    for(let tent = 1; tent <= 3; tent++){
+      try{
+        const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
+          method:'POST',
+          headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
+          body: JSON.stringify({ os_id: osId, tipo: 'abertura' })
+        });
+        if(r.ok){
+          await osLog(osId, `enviou o e-mail de abertura da OS para ${email}`);
+          return 'enviado';
+        }
+        ultimoErro = 'HTTP ' + r.status;
+      }catch(_e){ ultimoErro = 'sem rede'; }
+      if(tent < 3) await new Promise(res => setTimeout(res, 2500));
     }
-    try{ await osLog(osId, `⚠️ e-mail de abertura falhou (HTTP ${r.status})`); }catch(_){}
+    try{ await osLog(osId, `⚠️ e-mail de abertura falhou (${ultimoErro})`); }catch(_){}
     return 'falhou';
   }catch(e){
     try{ await osLog(osId, '⚠️ e-mail de abertura falhou'); }catch(_){}
     return 'falhou';
   }
+}
+/* ---------- REGRA (27/10/2026, pedido do Fabio): OS do sistema NUNCA fica sem
+   o e-mail de abertura nem sem o de conclusão. Além das 3 tentativas no ato,
+   toda vez que a lista de OSs carrega, o sistema confere as pendências das
+   últimas 48h (OS do sistema, não cancelada, cliente COM e-mail, sem o
+   carimbo) e dispara o e-mail que falta sozinho. 1× por sessão, no máx. 5 por
+   vez. O carimbo é a trava: quem já recebeu nunca recebe de novo. Pendência
+   mais antiga que 48h NÃO é reenviada em massa — fica nos selos ⚠️ e no
+   filtro 📧 da lista pra decisão manual. */
+let OS_EMAIL_SWEEP_FEITA = false;
+async function osVarreduraEmailsPendentes(){
+  if(OS_EMAIL_SWEEP_FEITA) return;
+  OS_EMAIL_SWEEP_FEITA = true;
+  try{
+    const corte = Date.now() - 48*3600*1000;
+    const recente = o => { const t = o.created_at ? new Date(o.created_at).getTime() : 0; return !!t && t >= corte; };
+    let feitos = 0;
+    const pendAb = await apiGET("os_clientes?origem=eq.sistema&email_abertura_enviado_em=is.null&status=neq.cancelada&select=id,numero,status,created_at,clientes(email)&order=created_at.desc&limit=25").catch(()=>[]);
+    for(const o of (pendAb||[])){
+      if(feitos >= 5) break;
+      if(!recente(o)) continue;
+      const em = ((o.clientes && o.clientes.email) || '').trim();
+      if(!em) continue;
+      const r = await osEnviarEmailAbertura(o.id);
+      if(r === 'enviado') feitos++;
+    }
+    if(feitos < 5){
+      const pendConc = await apiGET("os_clientes?origem=eq.sistema&status=eq.concluida&email_enviado_em=is.null&select=id,numero,created_at,clientes(email)&order=created_at.desc&limit=25").catch(()=>[]);
+      for(const o of (pendConc||[])){
+        if(feitos >= 5) break;
+        if(!recente(o)) continue;
+        const em = ((o.clientes && o.clientes.email) || '').trim();
+        if(!em) continue;
+        await osEnviarEmailAuto(o.id);
+        feitos++;
+      }
+    }
+    if(feitos) toast(`📧 Regra dos e-mails: ${feitos} e-mail(is) pendente(s) de OS reenviado(s) automaticamente.`, 'ok');
+  }catch(e){ /* a varredura nunca pode quebrar a lista de OSs */ }
 }
 async function osEnviarEmail(){
   const d = OS_DETALHE; if(!d) return;
