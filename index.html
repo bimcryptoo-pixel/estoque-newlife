@@ -8515,8 +8515,8 @@ function osAbrirAssinatura(osId, opcoes){
       <input id="osAssNome" class="inp text-base mb-2 uppercase" placeholder="Nome completo de quem está assinando" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <canvas id="osPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
       <div class="flex gap-2 mt-2">
-        <button class="btn-ghost flex-1" onclick="osLimparPad('osPad')">Limpar</button>
-        <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura('cliente')">Salvar do cliente</button>
+        <button class="btn-ghost flex-1" id="osAssLimparCli" onclick="osLimparPad('osPad')">Limpar</button>
+        <button class="btn-brand flex-1 !w-auto" id="osAssBtnCli" onclick="osSalvarAssinatura('cliente')">Salvar do cliente</button>
       </div>
     </div>`}
     ${temTec ? `<div class="border rounded-xl p-3 mb-3">
@@ -8525,8 +8525,8 @@ function osAbrirAssinatura(osId, opcoes){
       <canvas id="osPadTec" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-lg bg-white touch-none cursor-crosshair"></canvas>
       <div class="text-xs text-gray-600 mt-1.5">Nome abaixo da linha: <b>${esc(OS_ASS_TECNOME)}</b> — vem da designação da OS, não precisa digitar.</div>
       <div class="flex gap-2 mt-2">
-        <button class="btn-ghost flex-1" onclick="osLimparPad('osPadTec')">Limpar</button>
-        <button class="btn-brand flex-1 !w-auto" onclick="osSalvarAssinatura('tecnico')">Salvar do técnico</button>
+        <button class="btn-ghost flex-1" id="osAssLimparTec" onclick="osLimparPad('osPadTec')">Limpar</button>
+        <button class="btn-brand flex-1 !w-auto" id="osAssBtnTec" onclick="osSalvarAssinatura('tecnico')">Salvar do técnico</button>
       </div>
     </div>` : ''}
     <button class="btn-ghost w-full" onclick="closeOsModal()">Cancelar</button>`);
@@ -8553,8 +8553,45 @@ async function osAssEstado(osId){
     const ts = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&tipo=eq.tecnico&select=id&limit=1`);
     if(ts && ts.length) tecOk = true;
   }catch(e){}
-  if(stC && cliOk) stC.textContent = foneNome ? ('✅ Nome do cliente registrado (📞 telefone): ' + foneNome + ' — salvar de novo atualiza o nome.') : '✅ Cliente já assinou — coletar de novo adiciona outra assinatura.';
-  if(stT && tecOk) stT.textContent = '✅ Técnico já assinou — assinar de novo adiciona outra.';
+  if(stC && cliOk){
+    if(foneNome && OS_ASS_FONE) stC.textContent = '✅ Nome do cliente registrado (📞 telefone): ' + foneNome + ' — salvar de novo atualiza o nome.';
+    else { stC.textContent = '✅ Assinatura coletada com sucesso'; osAssTravarCampo('cliente'); }
+  }
+  if(stT && tecOk){ stT.textContent = '✅ Assinatura coletada com sucesso'; osAssTravarCampo('tecnico'); }
+}
+/* 🔒 REGRA (27/10/2026, pedido do Fabio): coletou 1 assinatura → o campo
+   TRAVA, com a mensagem "assinatura coletada com sucesso". Era a coleta
+   repetida (cliente assina no passo da assinatura e DE NOVO na conclusão, ou
+   duas pessoas assinam no mesmo campo) que duplicava a assinatura no
+   documento — queixa dos funcionários. Pra corrigir uma assinatura errada,
+   remove-se a coletada na ficha da OS; aí o campo libera de novo. */
+function osAssTravarCampo(tipo){
+  const ehTec = tipo === 'tecnico';
+  const cv = document.getElementById(ehTec ? 'osPadTec' : 'osPad');
+  if(cv){ cv.style.pointerEvents = 'none'; cv.style.opacity = '0.45'; }
+  if(!ehTec){ const nm = document.getElementById('osAssNome'); if(nm) nm.disabled = true; }
+  const btn = document.getElementById(ehTec ? 'osAssBtnTec' : 'osAssBtnCli');
+  if(btn){ btn.disabled = true; btn.textContent = '✅ Coletada'; }
+  const lp = document.getElementById(ehTec ? 'osAssLimparTec' : 'osAssLimparCli');
+  if(lp) lp.disabled = true;
+  const st = document.getElementById(ehTec ? 'osAssStatTec' : 'osAssStatCli');
+  if(st) st.textContent = '✅ Assinatura coletada com sucesso';
+}
+/* A assinatura DESTE tipo já foi coletada pra esta OS? (servidor ou fila
+   offline deste aparelho) — trava anti-duplicação da coleta (27/10/2026). */
+async function osAssJaColetada(osId, tipo){
+  try{
+    if(tipo === 'tecnico'){
+      if(typeof TEC_PEND !== 'undefined' && TEC_PEND && TEC_PEND.assinaturasTecFila && TEC_PEND.assinaturasTecFila.has(osId)) return true;
+      const ts = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&tipo=eq.tecnico&select=id&limit=1`);
+      return !!(ts && ts.length);
+    }
+    if(typeof TEC_PEND !== 'undefined' && TEC_PEND && TEC_PEND.assinaturasFila && TEC_PEND.assinaturasFila.has(osId)) return true;
+    const [os] = await apiGETsafe(`os_clientes?id=eq.${osId}&select=assinatura_url`);
+    if(os && os.assinatura_url) return true;
+    const cs = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&tipo=eq.cliente&select=id&limit=1`);
+    return !!(cs && cs.length);
+  }catch(e){ return false; }
 }
 function osLimparPad(id){
   const cv = document.getElementById(id || 'osPad');
@@ -8574,6 +8611,13 @@ async function osSalvarAssinatura(tipo){
   tipo = (tipo === 'tecnico') ? 'tecnico' : 'cliente';
   const osId = OS_ASS_ID || (OS_DETALHE && OS_DETALHE.os && OS_DETALHE.os.id);
   if(!osId) return;
+  // 🔒 REGRA 27/10/2026: já coletou 1 assinatura deste tipo → NÃO salva outra
+  // (era a duplicação que os funcionários viam no documento). Avisa e sai.
+  if(await osAssJaColetada(osId, tipo)){
+    osAssTravarCampo(tipo);
+    toast('✍️ Assinatura ' + (tipo === 'tecnico' ? 'do técnico' : 'do cliente') + ' já coletada — não é preciso assinar de novo.', 'alerta');
+    return;
+  }
   const cv = document.getElementById(tipo === 'tecnico' ? 'osPadTec' : 'osPad');
   if(!cv) return;
   if(typeof tecPadVazio === 'function' && tecPadVazio(cv)){ toast('⚠️ Desenhe a assinatura no quadro antes de salvar.','erro'); return; }
@@ -8623,7 +8667,7 @@ async function osSalvarAssinatura(tipo){
       await osLog(osId, 'assinou como técnico responsável').catch(()=>{});
     }
     if(__sigImp){ window.__sigSalvasOS = window.__sigSalvasOS || {}; window.__sigSalvasOS[osId + ':' + tipo + ':' + __sigImp] = url; }
-    toast(`Assinatura ${tipo === 'tecnico' ? 'do técnico' : 'do cliente'} salva. ✓`, 'ok');
+    toast('✍️ Assinatura coletada com sucesso', 'ok');
     if(tipo === 'cliente'){
       const stFecha = await osFecharSeTudoConcluido(osId).catch(()=>null);
       if(stFecha === 'concluida') toast('OS concluída por completo. ✓', 'ok');
@@ -10765,14 +10809,15 @@ function tecFluxoRender(){
   }else if(F.passo===3){
     corpo = `<div class="font-extrabold text-base mb-1">✍️ Assinatura do cliente</div>
       <div class="text-xs text-gray-500 mb-3">Entregue o celular ao responsável para assinar no quadro.</div>
+      <div id="tecFluxoAssStat" class="text-xs text-green-700 font-semibold mb-2"></div>
       <canvas id="tecFluxoPad" width="460" height="180" style="background:#ffffff" class="w-full border-2 border-dashed rounded-xl bg-white touch-none cursor-crosshair mb-2"></canvas>
       <input id="tecFluxoNome" class="inp text-base mb-3 uppercase" placeholder="Nome de quem assinou" oninput="this.value=this.value.toUpperCase()">
       <button class="btn-brand w-full !py-3.5 text-base mb-2" id="tecBtnFinalizar" onclick="tecFluxoFinalizar()">🎉 Concluir atendimento</button>
-      <button class="btn-ghost w-full !py-2.5 text-sm" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
+      <button class="btn-ghost w-full !py-2.5 text-sm" id="tecFluxoLimpar" onclick="tecFluxoLimparPad()">Limpar assinatura</button>
       <button class="w-full text-sm text-gray-500 mt-2" onclick="tecFluxoVoltar()">← Voltar</button>`;
   }
   openOsModal(`<div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>${tecFluxoBarra()}${corpo}`);
-  if(F.passo===3) tecFluxoInitPad();
+  if(F.passo===3){ tecFluxoInitPad(); tecFluxoAssEstado(); }
 }
 /* 🚨 REGRA (Fabio, 22/10/2026): o Concluir só finaliza com FOTO + ASSINATURA.
    A foto vale de QUALQUER origem: tirada/escolhida neste fluxo, anexada
@@ -10810,6 +10855,24 @@ function tecFluxoInitPad(){
   ['pointerup','pointerleave','pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>des=false));
 }
 function tecFluxoLimparPad(){ const cv=document.getElementById('tecFluxoPad'); if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+/* 🔒 REGRA (27/10/2026, pedido do Fabio): se a assinatura do cliente JÁ foi
+   coletada (no passo ✍️ Assinatura do cartão), o passo 3 da conclusão mostra
+   "assinatura coletada com sucesso" e TRAVA o quadro — assinar de novo era o
+   que duplicava a assinatura no documento. */
+async function tecFluxoAssEstado(){
+  const F = TEC_FLUXO; if(!F || F.passo !== 3) return;
+  if(navigator.onLine === false) return; /* offline não dá pra consultar — quem decide é o finalizar */
+  let tem = false;
+  try{ tem = await osTemAssinatura(F.osId); }catch(e){}
+  if(!tem || TEC_FLUXO !== F || F.passo !== 3) return;
+  F.sigJaColetada = true;
+  const st = document.getElementById('tecFluxoAssStat');
+  if(st) st.textContent = '✅ Assinatura coletada com sucesso';
+  const cv = document.getElementById('tecFluxoPad');
+  if(cv){ cv.style.pointerEvents = 'none'; cv.style.opacity = '0.45'; }
+  const nm = document.getElementById('tecFluxoNome'); if(nm) nm.disabled = true;
+  const lp = document.getElementById('tecFluxoLimpar'); if(lp) lp.disabled = true;
+}
 async function tecFluxoFotoUp(input){
   const F = TEC_FLUXO;
   // 🔒 fluxo obrigatório: atividade resolvível pelo fluxo e travada → foto não entra
@@ -10917,6 +10980,15 @@ async function tecFluxoFinalizar(){
   const cv = document.getElementById('tecFluxoPad');
   const padDesenhado = !!(cv && !tecPadVazio(cv));
   const offline = (navigator.onLine===false);
+  // 🔒 REGRA 27/10/2026: assinatura do cliente já coletada → o desenho deste
+  // passo NÃO é salvo de novo (coletou 1, não duplica); a conclusão usa a
+  // assinatura que já está salva.
+  let sigJaColetada = F.sigJaColetada === true;
+  if(padDesenhado && !offline && !sigJaColetada){
+    try{ sigJaColetada = !!(await osTemAssinatura(F.osId)); }catch(e){}
+    if(sigJaColetada) F.sigJaColetada = true;
+  }
+  const padVale = padDesenhado && !sigJaColetada;
   // 🚨 Regra 22/10/2026 (defesa em profundidade): sem FOTO também não conclui —
   //    o passo das fotos já barra o avanço; se algo chegar aqui sem foto,
   //    volta pro passo da foto com o alerta.
@@ -10927,7 +10999,7 @@ async function tecFluxoFinalizar(){
   }
   // 🖊️ Regra 20/10/2026: sem assinatura (desenhada agora ou já salva), NÃO conclui nada.
   //    Clicar no aviso volta pra página da assinatura.
-  if(!padDesenhado){
+  if(!padVale){
     if(offline){
       // 📴 MODO OFFLINE: sem rede não dá pra consultar a assinatura já salva no
       //    servidor — exige a assinatura DESENHADA agora p/ guardar a conclusão.
@@ -10941,7 +11013,7 @@ async function tecFluxoFinalizar(){
   }
   // Blob da assinatura capturado UMA vez (vale pro envio online e pra fila offline).
   let sigBlob = null;
-  if(padDesenhado){
+  if(padVale){
     sigBlob = await new Promise(res=>{ try{ cv.toBlob(b=>res(b),'image/png'); }catch(e){ res(null); } });
     if(!sigBlob){ toast('Erro ao ler a assinatura desenhada. Tente assinar de novo.','erro'); return; }
   }
@@ -11030,7 +11102,7 @@ async function tecFluxoFinalizar(){
         <div class="text-left grid gap-2 mb-4">
           <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📝 Descrição registrada</div>
           <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">📷 ${F.fotos.length} foto(s) anexada(s)</div>
-          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ ${sigUrl?('Assinado por <b>'+esc(nome.trim()||'cliente')+'</b>'):'Sem assinatura'}</div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">✍️ ${sigUrl?('Assinado por <b>'+esc(nome.trim()||'cliente')+'</b>'):(sigJaColetada?'Assinatura coletada com sucesso':'Sem assinatura')}</div>
           ${a&&a.inicio&&a.fim?`<div class="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm">⏱️ Duração: ${osDuracaoReal(a)||'—'}</div>`:''}
         </div>
         <button class="btn-brand w-full !py-3.5 text-base" onclick="closeOsModal();carregarPainelTecnico()">Ver próxima OS →</button>
