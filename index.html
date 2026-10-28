@@ -6310,6 +6310,7 @@ const FC_CFG = {
   periodo:{ hidden:'osFiltroPeriodo', label:'osPerLabel', lista:'osPerLista', busca:'osPerBusca', opcoes:'osPerOpcoes', todos:'Todas as datas', vazio:'—' },
   eqform:{ hidden:'eqCliente', label:'eqFormLabel', lista:'eqFormLista', busca:'eqFormBusca', opcoes:'eqFormOpcoes', todos:'— cliente —', vazio:'Nenhum cliente encontrado.' },
   eqtipo:{ hidden:'eqTipo', label:'eqTipoLabel', lista:'eqTipoLista', busca:'eqTipoBusca', opcoes:'eqTipoOpcoes', todos:'Tipo…', vazio:'—' },
+  canc: { hidden:'osCancMotivoH', label:'osCancLabel', lista:'osCancLista', busca:'osCancBusca', opcoes:'osCancOpcoes', todos:'Selecione o motivo…', vazio:'Nenhum motivo encontrado.' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
 let TEC_FC_ITENS = [];  // [{valor, rotulo}] — Minhas OS (das atividades do técnico)
@@ -6332,7 +6333,14 @@ const OS_PER_ITENS = [  // 📅 filtro de Período da OS Clientes (22/10/2026)
   { valor:'mesesp', rotulo:'Mês específico…' },
   { valor:'periodo', rotulo:'Período específico…' },
 ];
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='oper' ? OS_OP_ITENS : OS_FC_ITENS; }
+const OS_CANC_ITENS = [  // ❌ motivos do cancelamento da OS (28/10/2026, pedido do Fabio)
+  { valor:'Aberta por engano', rotulo:'Aberta por engano' },
+  { valor:'Cliente não será atendido', rotulo:'Cliente não será atendido' },
+  { valor:'Cliente desistiu', rotulo:'Cliente desistiu' },
+  { valor:'Atendimento reagendado', rotulo:'Atendimento reagendado' },
+  { valor:'Outro', rotulo:'Outro' },
+];
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='oper' ? OS_OP_ITENS : qual==='canc' ? OS_CANC_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   if(qual==='oper' && !OS_OP_ITENS.length) osCarregarOperadores();
@@ -6371,6 +6379,7 @@ function fcEscolher(qual, valorEnc){
   else if(qual==='eqcli'){ osListarEquipamentos(); }
   else if(qual==='periodo'){ osPeriodoMudou(); }
   else if(qual==='eqform' || qual==='eqtipo'){ /* formulário de equipamentos: só registra a escolha */ }
+  else if(qual==='canc'){ /* modal de cancelamento da OS: só registra a escolha */ }
   else if(qual==='email'){
     // conclusão só existe em OS concluída: força a situação p/ 'todas'
     if(valor==='cc_env' || valor==='cc_nao'){
@@ -6396,7 +6405,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap') && !e.target.closest('#osOpWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap') && !e.target.closest('#osOpWrap') && !e.target.closest('#osCancWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -7400,7 +7409,7 @@ function renderOSDetalhe(){
       <div class="font-black text-xl text-brand">${esc(o.numero)}</div>
       ${osStatusBadge(o.status)}
       ${osPrazoBadge(o)}
-      <div class="text-xs text-gray-500">aberta em ${o.created_at?`${new Date(o.created_at).toLocaleDateString('pt-BR',{timeZone:'America/Fortaleza'})} às ${new Date(o.created_at).toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})}`:fmtData((o.created_at||'').slice(0,10))}${o.email_abertura_enviado_em?` · 📧 abertura enviada em ${new Date(o.email_abertura_enviado_em).toLocaleString('pt-BR')}`:''}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}</div>
+      <div class="text-xs text-gray-500">aberta em ${o.created_at?`${new Date(o.created_at).toLocaleDateString('pt-BR',{timeZone:'America/Fortaleza'})} às ${new Date(o.created_at).toLocaleTimeString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit'})}`:fmtData((o.created_at||'').slice(0,10))}${o.email_abertura_enviado_em?` · 📧 abertura enviada em ${new Date(o.email_abertura_enviado_em).toLocaleString('pt-BR')}`:''}${o.email_enviado_em?` · 📧 enviado em ${new Date(o.email_enviado_em).toLocaleString('pt-BR')}`:''}${o.status==='cancelada'&&o.motivo_cancelamento?` · ❌ motivo do cancelamento: ${esc(o.motivo_cancelamento)}`:''}</div>
     </div>
     ${o.etiquetas&&o.etiquetas.length?`<div class="flex gap-1.5 flex-wrap mb-3">${osEtiquetasChips(o.etiquetas)}</div>`:''}
     <div class="flex gap-1 overflow-x-auto border-b mb-4 pb-1">${tabs}</div>
@@ -8284,18 +8293,72 @@ async function osConcluir(){
   if(pend && !confirm(`Há ${pend} atividade(s) pendente(s).\nConcluir a OS mesmo assim?`)) return;
   await osTrocarStatus('concluida');
 }
-async function osCancelar(){
+/* ---------- CANCELAR OS COM MOTIVO (28/10/2026, pedido do Fabio) ----------
+   O cancelamento é o caminho oficial pra OS que não vai ser atendida (em vez
+   de excluir): pede o MOTIVO (obrigatório), grava em motivo_cancelamento e no
+   histórico, cancela as atividades em aberto (some da fila do técnico),
+   estorna o estoque e — se a abertura já foi e-mailada ao cliente — dispara o
+   e-mail de DESCONSIDERE antes de concluir (mesma trava da exclusão: falhou,
+   ele decide). A OS continua na base como ❌ Cancelada, número aposentado. */
+function osCancelar(){
   const d = OS_DETALHE; if(!d) return;
-  if(!confirm(`Cancelar a OS ${d.os.numero}?\nOs produtos utilizados serão estornados ao estoque.`)) return;
+  const o = d.os;
+  openOsModal(`
+    <div class="font-bold mb-2 text-red-600">❌ Cancelar OS ${esc(o.numero)}</div>
+    <p class="text-sm text-gray-700 mb-3">A OS será cancelada, os produtos utilizados serão estornados ao estoque e as atividades em aberto serão canceladas (o chamado some da fila do técnico).</p>
+    ${o.email_abertura_enviado_em ? '<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">📧 O e-mail de abertura desta OS já foi enviado ao cliente. Ao confirmar, o sistema enviará o <b>e-mail de desconsidere</b> antes de concluir o cancelamento.</p>' : ''}
+    <label class="block text-sm font-bold text-gray-700 mb-1">Motivo do cancelamento *</label>
+    <div class="relative mb-3" id="osCancWrap">
+      <input type="hidden" id="osCancMotivoH" value="">
+      <button type="button" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('canc',event)"><span id="osCancLabel" class="truncate">Selecione o motivo…</span><span>▾</span></button>
+      <div id="osCancLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+          <input id="osCancBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar motivo…" autocomplete="off" oninput="fcRender('canc')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+        </div>
+        <div id="osCancOpcoes" class="overflow-y-auto"></div>
+      </div>
+    </div>
+    <label class="block text-sm font-bold text-gray-700 mb-1">Detalhe (opcional)</label>
+    <input id="osCancDetalhe" class="inp text-sm" placeholder="Ex.: técnico deslocado para outro atendimento" autocomplete="off">
+    <div class="flex gap-2 mt-4">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Voltar</button>
+      <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osCancelarConfirmar()">❌ Confirmar cancelamento</button>
+    </div>`);
+}
+async function osCancelarConfirmar(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  const motivo = ((document.getElementById('osCancMotivoH')||{}).value||'').trim();
+  if(!motivo){ toast('Selecione o motivo do cancelamento.','erro'); return; }
+  const detalhe = ((document.getElementById('osCancDetalhe')||{}).value||'').trim();
+  const motivoFinal = detalhe ? `${motivo} — ${detalhe}` : motivo;
+  /* 📧 DESCONSIDERE antes de cancelar (se a abertura já foi e-mailada ao cliente):
+     mesma trava da exclusão — falhou, NÃO conclui sem a decisão dele. */
+  const resDesc = await osEnviarEmailDesconsidere(o.id);
+  if(resDesc === 'falhou'){
+    if(!confirm(`⚠️ O e-mail de desconsidere NÃO foi enviado ao cliente da OS ${o.numero}.\n\nO cliente ainda acha que o chamado está aberto.\n\nCancelar a OS mesmo assim?`)){
+      toast('Cancelamento interrompido — a OS não foi cancelada.','alerta');
+      return;
+    }
+  }
   try{
-    for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, d.os.numero);
-    await apiDELETE('os_produtos', `os_id=eq.${d.os.id}`);
-    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { status:'cancelada', updated_at:new Date().toISOString() });
-    await osLog(d.os.id, 'cancelou a OS (estoque estornado)');
-    toast('OS cancelada e estoque estornado. ✓','ok');
+    for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, o.numero);
+    await apiDELETE('os_produtos', `os_id=eq.${o.id}`);
+    /* cancela as atividades em aberto — o chamado some da fila do técnico */
+    const atvs = await apiGET(`os_atividades?os_id=eq.${o.id}&select=id,status`);
+    for(const a of (atvs||[])){
+      if(!['concluida','cancelada'].includes(a.status)) await apiPATCH('os_atividades', `id=eq.${a.id}`, { status:'cancelada' });
+    }
+    /* libera o técnico no mapa da equipe (mesmo padrão do fechamento da OS) */
+    try{ await apiPATCH('tecnico_localizacao', `os_id=eq.${o.id}`, { os_id:null, os_numero:null }); }catch(_){}
+    await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'cancelada', motivo_cancelamento: motivoFinal, updated_at:new Date().toISOString() });
+    await osLog(o.id, `cancelou a OS — motivo: ${motivoFinal} (estoque estornado)` + (resDesc==='enviado' ? ' · e-mail de desconsidere enviado ao cliente' : ''));
+    closeOsModal();
+    toast(`OS ${o.numero} cancelada. ✓` + (resDesc==='enviado' ? ' 📧 E-mail de desconsidere enviado ao cliente.' : ''),'ok');
     OS_CACHE = null;
+    await verOS(o.id);
     await carregarOSClientes();
-  }catch(e){ toast('Erro: '+e.message,'erro'); }
+  }catch(e){ toast('Erro ao cancelar OS: '+e.message,'erro'); }
 }
 
 /* ---------- editar / excluir OS ----------
