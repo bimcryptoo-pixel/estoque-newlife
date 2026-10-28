@@ -1466,6 +1466,11 @@
             <input id="uTecnico" class="inp text-sm" placeholder="Nome do técnico p/ vincular às OSs (ex: Claúdio Costa) — vazio = sem vínculo">
             <button class="btn-brand !py-2 text-sm" onclick="criarUsuario()">Criar usuário</button>
           </div>
+          <div class="border-t pt-3 mt-3">
+            <div class="font-bold mb-1">👷 Técnicos — base vinda do Field Control</div>
+            <div class="text-xs text-gray-500 mb-2">Classificação da base de técnicos: quem é da equipe e quem é ex-funcionário. Ninguém é apagado — o ex-funcionário continua aparecendo no histórico das OSs dele.</div>
+            <div id="listaTecnicosBase" class="text-sm">Carregando…</div>
+          </div>
         </div>
         <div class="card p-4 max-w-6xl mt-4">
           <div class="font-bold mb-1">🧾 Dados fiscais da empresa <span class="text-xs font-normal text-gray-400">(emitente da NF-e — só o admin edita)</span></div>
@@ -3296,7 +3301,75 @@ async function carregarAdmin(){
       </div>`).join('') || '<span class="text-gray-400">Nenhum.</span>';
     carregarEmpresaFiscal(); /* dados fiscais da empresa (NF-e) */
     carregarConfigGps(); /* intervalo do rastreamento */
+    carregarTecnicosBase(); /* 👷 base de técnicos: equipe ativa × ex-funcionários */
   }catch(e){ toast('Erro ao carregar admin: '+e.message,'erro'); }
+}
+/* ---------- 👷 base de técnicos (Field): equipe ativa × ex-funcionários ----------
+   Pedido do Fabio (28/10/2026): ninguém é apagado da base — quem saiu fica
+   classificado como ex-funcionário (tecnicos.ativo=false), visível aqui no
+   Admin, e continua no histórico das OSs. Grafias variantes do mesmo nome
+   (importação do Field) são agrupadas e classificadas juntas: mesmo nome
+   normalizado OU um nome sendo o começo do outro ("Kelma" ⊂ "Kelma Cabral"
+   ⊂ "Kelma Cabral Mendes Costa") — sem unir nomes que só dividem o 1º nome
+   ("Fabrício Costa de Melo" ≠ "Fabrício de Oliveira Maranhão"). */
+let TECBASE_GRUPOS = [];
+async function carregarTecnicosBase(){
+  const box = document.getElementById('listaTecnicosBase');
+  if(!box) return;
+  try{
+    const rows = await apiGET('tecnicos?select=id,nome,ativo&order=nome.asc');
+    const itens = (rows||[]).map(r => ({ id: r.id, nome: r.nome, ativo: !!r.ativo, chave: osNormNome(r.nome) }));
+    /* une as grafias da mesma pessoa (union-find por prefixo de palavra) */
+    const pai = itens.map((_, i) => i);
+    const raiz = i => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+    const ehPrefixo = (a, b) => b === a || b.startsWith(a + ' ');
+    for (let i = 0; i < itens.length; i++) for (let j = i + 1; j < itens.length; j++) {
+      if (ehPrefixo(itens[i].chave, itens[j].chave) || ehPrefixo(itens[j].chave, itens[i].chave)) {
+        const ri = raiz(i), rj = raiz(j); if (ri !== rj) pai[ri] = rj;
+      }
+    }
+    const mapa = {};
+    itens.forEach((r, i) => {
+      const k = raiz(i);
+      if (!mapa[k]) mapa[k] = { ids: [], variantes: [], ativo: false };
+      mapa[k].ids.push(r.id);
+      mapa[k].variantes.push(r.nome);
+      if (r.ativo) mapa[k].ativo = true;
+    });
+    TECBASE_GRUPOS = Object.values(mapa).map(g=>({
+      ids: g.ids,
+      nome: g.variantes.slice().sort((a,b)=>String(b).length-String(a).length)[0],
+      variantes: g.variantes,
+      ativo: g.ativo,
+    })).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+    const ats = TECBASE_GRUPOS.map((g,i)=>({...g, i})).filter(g=>g.ativo);
+    const exs = TECBASE_GRUPOS.map((g,i)=>({...g, i})).filter(g=>!g.ativo);
+    const linha = g => `
+      <div class="py-1.5 rowline">
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div class="min-w-0"><b>${esc(g.nome)}</b>
+            ${g.ativo ? '<span class="badge bg-green-100 text-green-800 ml-1">ativo</span>' : '<span class="badge bg-gray-200 text-gray-500 ml-1">ex-funcionário</span>'}
+            ${g.variantes.length > 1 ? `<span class="text-xs text-gray-400 ml-1">${g.variantes.length} grafias no Field</span>` : ''}
+          </div>
+          ${g.ativo
+            ? `<button class="text-xs text-red-600 font-bold underline" onclick="tecBaseAlternar(${g.i}, false)">marcar ex-funcionário</button>`
+            : `<button class="text-xs text-green-700 font-bold underline" onclick="tecBaseAlternar(${g.i}, true)">reativar</button>`}
+        </div>
+      </div>`;
+    box.innerHTML =
+      `<div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipe ativa (${ats.length})</div>` +
+      (ats.map(linha).join('') || '<div class="text-gray-400 mb-2">Ninguém.</div>') +
+      `<div class="text-xs font-bold text-gray-500 uppercase mt-3 mb-1">Ex-funcionários (${exs.length})</div>` +
+      (exs.map(linha).join('') || '<div class="text-gray-400">Ninguém.</div>');
+  }catch(e){ box.innerHTML = '<span class="text-gray-400 text-xs">Não foi possível carregar a base de técnicos.</span>'; }
+}
+async function tecBaseAlternar(idx, ativar){
+  const g = TECBASE_GRUPOS[idx]; if(!g) return;
+  try{
+    for(const id of g.ids) await apiPATCH('tecnicos', `id=eq.${id}`, { ativo: ativar });
+    toast(ativar ? `${g.nome} reativado na base de técnicos. ✓` : `${g.nome} marcado como ex-funcionário. ✓`, 'ok');
+    await carregarTecnicosBase();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 /* ---------- config do GPS (Admin) ---------- */
 async function carregarConfigGps(){
