@@ -8442,6 +8442,7 @@ function osConfirmarExcluir(){
     <div class="font-bold mb-2 text-red-600">🗑️ Excluir OS ${esc(o.numero)}</div>
     <p class="text-sm text-gray-700 mb-2">Tem certeza que quer excluir <b>definitivamente</b> a OS <b>${esc(o.numero)}</b> (${esc(cliNome)})?</p>
     <p class="text-sm text-gray-600 mb-4">Serão apagados também: atividades, anexos, assinaturas, equipamentos vinculados, formulários, produtos, serviços, despesas, orçamentos, comentários e histórico desta OS. Produtos já baixados serão estornados ao estoque. <b>Essa ação não pode ser desfeita.</b></p>
+    ${o.email_abertura_enviado_em ? '<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">📧 O e-mail de abertura desta OS já foi enviado ao cliente. Ao excluir, o sistema enviará <b>antes de apagar</b> um e-mail pedindo para <b>desconsiderar a abertura</b> do chamado.</p>' : ''}
     <div class="flex gap-2">
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
       <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osExcluirDefinitivo()">🗑️ Excluir definitivamente</button>
@@ -8452,6 +8453,17 @@ async function osExcluirDefinitivo(){
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); closeOsModal(); return; }
+  /* 📧 DESCONSIDERE (28/10/2026, pedido do Fabio): se o e-mail de abertura desta OS
+     já foi enviado ao cliente, o desconsidere sai ANTES de apagar — o cliente não
+     pode ficar esperando um atendimento de um chamado que deixou de existir.
+     Se o envio falhar, NÃO apaga no escuro: ele decide se exclui mesmo assim. */
+  const resDesc = await osEnviarEmailDesconsidere(o.id);
+  if(resDesc === 'falhou'){
+    if(!confirm(`⚠️ O e-mail de desconsidere NÃO foi enviado ao cliente da OS ${o.numero}.\n\nO cliente ainda acha que o chamado está aberto.\n\nExcluir a OS mesmo assim?`)){
+      toast('Exclusão cancelada — a OS não foi apagada.','alerta');
+      return;
+    }
+  }
   try{
     /* segurança (mesmo padrão de osCancelar/excluirPedido): estorna as baixas de estoque antes de apagar */
     for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, o.numero);
@@ -8461,7 +8473,7 @@ async function osExcluirDefinitivo(){
     closeOsModal();
     OS_DETALHE = null;
     OS_CACHE = null;
-    toast(`OS ${o.numero} excluída. ✓`,'ok');
+    toast(`OS ${o.numero} excluída. ✓` + (resDesc === 'enviado' ? ' 📧 E-mail de desconsidere enviado ao cliente.' : ''),'ok');
     await carregarOSClientes();
   }catch(e){ toast('Erro ao excluir OS: '+e.message,'erro'); }
 }
@@ -11572,6 +11584,37 @@ async function osEnviarEmailAbertura(osId){
     try{ await osLog(osId, '⚠️ e-mail de abertura falhou'); }catch(_){}
     return 'falhou';
   }
+}
+/* ---------- e-mail de DESCONSIDERE na exclusão da OS (28/10/2026, pedido do Fabio) ----------
+   Correção da abertura: quando uma OS que já teve o e-mail de abertura enviado
+   ao cliente é excluída, o cliente precisa ser avisado de que o chamado deve
+   ser desconsiderado. Chamado por osExcluirDefinitivo ANTES de apagar.
+   Retorna: 'enviado' | 'nao_precisa' (abertura nunca foi e-mailada — nada a
+   corrigir) | 'falhou'. 3 tentativas, mesmo padrão dos demais envios. */
+async function osEnviarEmailDesconsidere(osId){
+  try{
+    const [os] = await apiGET(`os_clientes?id=eq.${osId}&select=id,numero,email_abertura_enviado_em,clientes(email)`);
+    if(!os || !os.email_abertura_enviado_em) return 'nao_precisa';
+    const email = ((os.clientes && os.clientes.email) || '').trim();
+    // abertura saiu mas o e-mail sumiu do cadastro: não há como avisar —
+    // devolve 'falhou' pra exclusão pedir a decisão dele em vez de apagar no escuro
+    if(!email) return 'falhou';
+    toast('📧 Enviando e-mail de desconsidere ao cliente…');
+    let ultimoErro = '';
+    for(let tent = 1; tent <= 3; tent++){
+      try{
+        const r = await fetch(`${SUPA_URL}/functions/v1/enviar-os-email`, {
+          method:'POST',
+          headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY, 'Content-Type':'application/json' },
+          body: JSON.stringify({ os_id: osId, tipo: 'desconsidere' })
+        });
+        if(r.ok) return 'enviado';
+        ultimoErro = 'HTTP ' + r.status;
+      }catch(_e){ ultimoErro = 'sem rede'; }
+      if(tent < 3) await new Promise(res => setTimeout(res, 2500));
+    }
+    return 'falhou';
+  }catch(e){ return 'falhou'; }
 }
 /* ---------- REGRA (27/10/2026, pedido do Fabio): OS do sistema NUNCA fica sem
    o e-mail de abertura nem sem o de conclusão. Além das 3 tentativas no ato,
