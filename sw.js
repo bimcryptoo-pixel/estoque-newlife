@@ -18,7 +18,7 @@
      cache e o app abre.
    - Demais arquivos do pacote: stale-while-revalidate (abre instantâneo
      do cache e atualiza em segundo plano). */
-const NL_CACHE = 'nl-shell-v6';
+const NL_CACHE = 'nl-shell-v7';
 const NL_SHELL = [
   './',
   './index.html',
@@ -92,4 +92,40 @@ self.addEventListener('fetch', (e) => {
       return cached || rede;
     })
   );
+});
+
+/* ---------- 🔔 NOTIFICAÇÕES PUSH (29/10/2026) ----------
+   Quem entrega com o sistema FECHADO é o serviço de notificações da
+   Apple/Google: o servidor (Edge Function enviar-push) manda o aviso
+   cifrado pra eles, eles entregam no aparelho e quem acorda é ESTE
+   service worker — a página nunca precisa abrir. O payload é montado
+   pela função: { titulo, corpo, tag, os_id, url }. */
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; }
+  catch (_) { try { d = { corpo: e.data.text() }; } catch (__) {} }
+  const titulo = d.titulo || '🔔 NEW LIFE';
+  const opcoes = {
+    body: d.corpo || '',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: d.tag || 'nl-push',
+    data: { url: d.url || '/', os_id: d.os_id || '' }
+  };
+  e.waitUntil(self.registration.showNotification(titulo, opcoes));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) {
+      if ('focus' in w) {
+        try { await w.navigate(url); } catch (_) {}
+        return w.focus();
+      }
+    }
+    return self.clients.openWindow(url);
+  })());
 });
