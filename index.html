@@ -12592,6 +12592,36 @@ try{
   }
 }catch(e){}
 
+/* ================= 🔐 VALIDAÇÃO DA SESSÃO AO ABRIR =================
+   Correção 03/11/2026: o banco (pre-request validar_sessao_pre_request) só
+   aceita sessão com ultimo_acesso_em de até 7 dias — e quem renova esse
+   carimbo é a ação 'sessao-validar' da função auth, que o app NUNCA chamava.
+   Resultado: TODA sessão morria 7 dias depois do login, mesmo com uso diário;
+   o app seguia "logado" no aparelho, mas TODAS as leituras voltavam vazias
+   (caso do Fabio no Mac: login de 22/10, Admin sem usuários e sem técnicos
+   em 03/11 — parecia que os dados tinham sumido). Ao abrir (e ao voltar pro
+   app, com respiro de 30 min): valida no servidor — 'ok' renova o carimbo;
+   'erro' explícito (401: sessão inválida/expirada/revogada) limpa a sessão
+   salva e volta pro login limpo com aviso; 'indisponivel' (sem rede, 5xx)
+   NÃO desloga — o uso offline (Minhas OS) continua valendo. */
+let NL_ULT_VALIDACAO = 0;
+async function nlValidarSessaoAoAbrir(){
+  if(!sessao || !sessao.token) return;
+  const agora = Date.now();
+  if(agora - NL_ULT_VALIDACAO < 30*60*1000) return;
+  NL_ULT_VALIDACAO = agora;
+  let r;
+  try{ r = await authChamar('sessao-validar', {}); }
+  catch(e){ return; /* qualquer falha inesperada = segue como está */ }
+  if(r && r.tipo === 'erro'){
+    try{ localStorage.removeItem('nl_estoque_sessao'); }catch(e){}
+    try{ sessionStorage.setItem('nl_sessao_expirada','1'); }catch(e){}
+    sessao = null;
+    location.reload();
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) nlValidarSessaoAoAbrir(); });
+
 /* ================= INIT ================= */
 (function init(){
   try{ aplicarTema(localStorage.getItem('nl_tema')||'claro'); }catch(e){ try{ aplicarTema('claro'); }catch(e2){ /* tema nunca pode travar o boot */ } }
@@ -12599,6 +12629,10 @@ try{
      suporta WebAuthn. Sem suporte, a tela de login fica exatamente como sempre. */
   try{ if(window.PublicKeyCredential) document.getElementById('btnPasskeyLogin')?.classList.remove('hidden'); }catch(e){}
   sessao = lerSessao();
+  /* 🔐 Sessão que MORREU no servidor (validar ao abrir devolveu 401): a
+     validação limpou o storage, marcou a bandeira e recarregou — aqui só
+     mostramos o porquê na tela de login. */
+  try{ if(sessionStorage.getItem('nl_sessao_expirada')){ sessionStorage.removeItem('nl_sessao_expirada'); setTimeout(()=>{ try{ toast('🔐 Sua sessão expirou. Entre de novo, por favor — é rapidinho.','ok'); }catch(e){} }, 600); } }catch(e){}
   /* 🔐 VIRADA DE SEGURANÇA (modalidade 1): com o banco fechado, sessão salva
      sem token (de antes do fechamento) não lê mais nada — abriria o app com as
      listas vazias, parecendo que os dados sumiram. Em vez disso, encerra a
@@ -12608,7 +12642,7 @@ try{
     sessao = null;
     setTimeout(()=>{ try{ toast('🔐 O sistema foi atualizado por segurança. Entre de novo, por favor — é rapidinho.','ok'); }catch(e){} }, 600);
   }
-  if(sessao && sessao.id){ entrarApp(); }
+  if(sessao && sessao.id){ entrarApp(); nlValidarSessaoAoAbrir(); }
   // senão, fica na tela de login
 })();
 </script>
