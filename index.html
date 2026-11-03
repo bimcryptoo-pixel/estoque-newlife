@@ -64,6 +64,27 @@
   [data-theme="escuro"] .border-red-300, [data-theme="escuro"] .border-red-200{ border-color:rgba(248,113,113,.40) !important; }
   [data-theme="escuro"] .hover\:bg-white:hover{ background-color:var(--surface2) !important; }
   [data-theme="escuro"] select.inp option{ background-color:var(--surface); color:var(--text); }
+  /* ===== TEMA CINZA CLARO (pedido do Fabio, 03/11/2026) =====
+     O branco puro "dói na vista": fundo e cartões viram cinza suave, SEM
+     escurecer texto nem marca. Tema claro como o padrão — e os quadros de
+     assinatura seguem BRANCO PURO (regra de 20/10: caneta preta visível). */
+  [data-theme="cinza"]{
+    --brand:#C1272D; --brand-dark:#9c1e23;
+    --bg:#e2e4e8; --surface:#f2f3f5; --surface2:#e8eaed;
+    --text:#20242b; --muted:#5b6472; --faint:#8b94a1;
+    --border:#cfd4db; --border-soft:#dde1e6;
+    --row-alt:rgba(0,0,0,.03); --row-hover:rgba(193,39,45,.07);
+    --input-bg:#fafbfc; --input-border:#bfc6cf;
+  }
+  [data-theme="cinza"] .bg-white{ background-color:var(--surface) !important; }
+  [data-theme="cinza"] .bg-gray-50{ background-color:var(--surface2) !important; }
+  [data-theme="cinza"] .bg-gray-100{ background-color:var(--bg) !important; }
+  [data-theme="cinza"] .bg-gray-200{ background-color:#d8dce1 !important; }
+  [data-theme="cinza"] .hover\:bg-white:hover{ background-color:var(--surface2) !important; }
+  [data-theme="cinza"] select.inp option{ background-color:var(--surface); color:var(--text); }
+  /* ASSINATURA INTOCÁVEL: os pads têm a classe bg-white — a regra por ID
+     (mais forte que a de classe acima) devolve o branco puro aos quadros. */
+  [data-theme="cinza"] #osPad, [data-theme="cinza"] #osPadTec, [data-theme="cinza"] #tecFluxoPad{ background:#ffffff !important; }
   .brand{ color:var(--brand); }
   .bg-brand{ background:var(--brand); }
   .bg-brand-dark{ background:var(--brand-dark); }
@@ -263,6 +284,7 @@
            volta pra mesma linha. (pedido do Fabio, 21/10/2026) -->
       <span id="userNome" class="order-3 w-full text-xs text-gray-600 font-semibold leading-snug md:order-none md:w-auto md:ml-2"></span>
       <div class="flex items-center gap-2 ml-auto">
+        <button id="btnTema" onclick="alternarTema()" class="btn-ghost !py-1.5 !px-3 text-xs" title="Alternar o tema do sistema: claro (branco) ou cinza claro">🎨 Tema: Claro</button>
         <button onclick="segAbrirModal()" class="btn-ghost !py-1.5 !px-3 text-xs">🔐 Segurança</button>
         <button onclick="fazerLogout()" class="btn-ghost !py-1.5 !px-3 text-xs">Sair</button>
       </div>
@@ -1612,14 +1634,17 @@ function fmtQtd(n){ return Number(n).toLocaleString('pt-BR',{maximumFractionDigi
 function corMarca(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#C1272D'; }
 function corMarcaEscura(){ return getComputedStyle(document.documentElement).getPropertyValue('--brand-dark').trim() || '#9c1e23'; }
 function aplicarTema(t){
-  // SÓ TEMA CLARO (decisão do usuário, 20/10/2026): o tema escuro pintava o
-  // quadro de assinatura de preto e a caneta (preta) ficava invisível — o
-  // técnico "não conseguia assinar". Tema escuro REMOVIDO: qualquer valor
-  // salvo ('escuro' em aparelhos antigos) é normalizado para 'claro'.
-  t='claro';
+  // TEMAS CLAROS (decisões do usuário, 20/10/2026 e 03/11/2026): o tema
+  // escuro foi REMOVIDO — pintava o quadro de assinatura de preto e a caneta
+  // (preta) ficava invisível, o técnico "não conseguia assinar". Valem
+  // 'claro' (branco) e 'cinza' (cinza claro, pedido de 03/11/2026: o branco
+  // puro "dói na vista"); qualquer outro valor salvo ('escuro' de aparelhos
+  // antigos) é normalizado para 'claro'.
+  t = (t === 'cinza') ? 'cinza' : 'claro';
   document.documentElement.setAttribute('data-theme', t);
   try{ localStorage.setItem('nl_tema', t); }catch(e){}
   const s=document.getElementById('selTema'); if(s) s.value=t;
+  const bt=document.getElementById('btnTema'); if(bt) bt.textContent = (t === 'cinza') ? '🎨 Tema: Cinza' : '🎨 Tema: Claro';
   if(typeof Chart!=='undefined'){
     const escuro = t==='escuro';
     Chart.defaults.color = escuro ? '#a1a1aa' : '#666';
@@ -1631,6 +1656,12 @@ function aplicarTema(t){
       ch.update();
     }catch(e){} });
   }
+}
+
+/* 🎨 Botão do cabeçalho: alterna Claro × Cinza claro (03/11/2026) */
+function alternarTema(){
+  const atual = document.documentElement.getAttribute('data-theme') === 'cinza' ? 'cinza' : 'claro';
+  aplicarTema(atual === 'cinza' ? 'claro' : 'cinza');
 }
 
 /* Toast clicável (20/10/2026): 3º arg opcional onClick — o aviso aparece NA FRENTE
@@ -7241,6 +7272,66 @@ document.addEventListener('click', e=>{
   }
 });
 
+/* ============ seletor de etiquetas do EDITAR OS (03/11/2026) ============
+   Pedido do Fabio: chamado já aberto não tinha como corrigir as etiquetas —
+   o Editar OS não tinha o campo. Espelho do seletor da Nova OS (mesma lista
+   ampla, escolher FECHA a lista na hora — regra dele de 23/10/2026), com ids
+   próprios (eosEtiq/eosEtiqLista) pra não tocar no fluxo da Nova OS. */
+let EOS_ETIQ_ESCOLHEU_EM = 0;
+function eosEtiqAbrir(){
+  if(Date.now() - EOS_ETIQ_ESCOLHEU_EM < 800) return;
+  eosEtiqRender('');
+}
+function eosEtiqFiltrar(v){
+  const partes = v.split(',');
+  const atual = (partes[partes.length-1]||'').trim().toUpperCase();
+  eosEtiqRender(atual);
+}
+function eosEtiqRender(filtro){
+  const box = document.getElementById('eosEtiqLista');
+  if(!box) return;
+  const lista = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[])
+    .filter(e=>!filtro || e.toUpperCase().includes(filtro));
+  if(!lista.length){ box.classList.add('hidden'); return; }
+  box.innerHTML = `
+    <button type="button" class="w-full text-left px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 border-b border-gray-200" onclick="eosEtiqFechar()">✕ Fechar sem escolher</button>` +
+    lista.map(e=>`
+    <button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0" onclick="eosEtiqEscolher('${esc(e).replace(/'/g,"\\'")}')">🏷️ ${esc(e)}</button>
+  `).join('');
+  box.classList.remove('hidden');
+}
+function eosEtiqFechar(){
+  const box = document.getElementById('eosEtiqLista');
+  if(box) box.classList.add('hidden');
+  EOS_ETIQ_ESCOLHEU_EM = Date.now();
+  const inp = document.getElementById('eosEtiq');
+  if(inp) inp.blur();
+}
+function eosEtiqEscolher(tag){
+  const inp = document.getElementById('eosEtiq');
+  if(!inp) return;
+  const partes = inp.value.split(',').map(s=>s.trim()).filter(s=>s);
+  const tagU = tag.toUpperCase();
+  const sugeridas = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[]).map(e=>e.toUpperCase());
+  const ultima = partes.length? partes[partes.length-1].toUpperCase() : '';
+  if(ultima && !sugeridas.includes(ultima) && ultima!==tagU){
+    partes[partes.length-1] = tag;
+  } else if(!partes.map(p=>p.toUpperCase()).includes(tagU)){
+    partes.push(tag);
+  }
+  inp.value = partes.join(', ') + ', ';
+  const box = document.getElementById('eosEtiqLista');
+  if(box) box.classList.add('hidden');
+  EOS_ETIQ_ESCOLHEU_EM = Date.now();
+  inp.focus();
+}
+document.addEventListener('click', e=>{
+  const box = document.getElementById('eosEtiqLista');
+  if(box && !box.classList.contains('hidden')){
+    if(!e.target.closest('#eosEtiq') && !e.target.closest('#eosEtiqLista')) box.classList.add('hidden');
+  }
+});
+
 /* Parse de valor monetário no padrão BR (adendo piloto):
    "150,50" → 150.5 · "150.50" → 150.5 · "1.234,56" → 1234.56 · "1.234" → 1234.
    Com vírgula, os pontos são milhar; sem vírgula, grupo(s) de 3 dígitos após o
@@ -8491,6 +8582,11 @@ async function osAbrirEditar(){
     <div class="grid grid-cols-2 gap-2">
       <div><label class="lbl">Prazo de resposta</label><input id="eosPrzResp" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_resposta)}"></div>
       <div><label class="lbl">Prazo de solução</label><input id="eosPrzSol" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_solucao)}"></div>
+    </div>
+    <label class="lbl">Etiquetas (separadas por vírgula)</label>
+    <div class="relative mb-2">
+      <input id="eosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" value="${esc((o.etiquetas||[]).join(', '))}" onfocus="eosEtiqAbrir()" oninput="eosEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')eosEtiqFechar()">
+      <div id="eosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-64 overflow-y-auto"></div>
     </div>`:''}
     ${OS_TEM_LOCAL?`
     <label class="lbl">Prazo</label>
@@ -8533,12 +8629,18 @@ async function osSalvarEdicao(){
     const vs = parseValorBR(valEl ? valEl.value : '');
     const body = { descricao_servico: desc, valor_servicos: vs, updated_at: new Date().toISOString() };
     if(trocouCliente) body.cliente_id = novoCliente;
+    let etiquetasNovas = null;
     if(OS_FIELD_PARIDADE){
       const tipoEl = document.getElementById('eosTipo');
       if(tipoEl) body.tipo_os_id = tipoEl.value||null;
       const pr = document.getElementById('eosPrzResp'), ps = document.getElementById('eosPrzSol');
       if(pr) body.prazo_resposta = pr.value ? new Date(pr.value).toISOString() : null;
       if(ps) body.prazo_solucao = ps.value ? new Date(ps.value).toISOString() : null;
+      const etiqEl = document.getElementById('eosEtiq');
+      if(etiqEl){
+        etiquetasNovas = String(etiqEl.value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+        body.etiquetas = etiquetasNovas;
+      }
     }
     if(OS_TEM_LOCAL){
       const przEl = document.getElementById('eosPrazo');
@@ -8546,6 +8648,12 @@ async function osSalvarEdicao(){
     }
     await apiPATCH('os_clientes', `id=eq.${o.id}`, body);
     await osLog(o.id, trocouCliente ? 'editou a OS e trocou o cliente' : 'editou a OS');
+    if(etiquetasNovas){
+      const antigas = (o.etiquetas||[]).map(s=>String(s).toUpperCase());
+      if(JSON.stringify(antigas) !== JSON.stringify(etiquetasNovas)){
+        await osLog(o.id, `etiquetas alteradas: ${antigas.join(', ')||'nenhuma'} → ${etiquetasNovas.join(', ')||'nenhuma'}`);
+      }
+    }
     // designação SÓ depois da edição salva; falha aqui não se esconde (toast específico)
     let designFalhou = '';
     if(tecMudou){
