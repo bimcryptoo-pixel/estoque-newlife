@@ -1484,7 +1484,14 @@
           <div id="supAdminBox" class="hidden mb-4"></div>
           <div id="supConversaTitulo" class="font-bold text-sm mb-2"></div>
           <div id="supMsgs" class="flex flex-col gap-2 mb-3 border border-gray-100 rounded-xl p-3 bg-gray-50" style="max-height:55vh;overflow-y:auto"></div>
+          <div id="supAnexoPrev" class="hidden items-center gap-2 mb-2 bg-red-50 border border-red-100 rounded-xl px-2 py-1.5">
+            <img id="supAnexoImg" class="w-12 h-12 object-cover rounded-lg border" alt="Print anexado">
+            <span class="text-xs text-gray-600 flex-1">📷 Print pronto pra enviar junto com a mensagem</span>
+            <button class="btn-ghost !w-auto !px-2.5 !py-1 text-xs" onclick="supAnexoLimpar()">✕ Remover</button>
+          </div>
           <div class="flex gap-2">
+            <button class="btn-ghost !w-auto !px-3.5" title="Anexar um print ou foto da tela" onclick="document.getElementById('supFile').click()">📎</button>
+            <input type="file" id="supFile" accept="image/*" class="hidden" onchange="supAnexoEscolher(this)">
             <input id="supInput" class="inp flex-1" placeholder="Escreva sua dúvida ou problema..." autocomplete="off" onkeydown="if(event.key==='Enter')supEnviar()">
             <button class="btn-brand !w-auto !px-5" onclick="supEnviar()">Enviar ➤</button>
           </div>
@@ -8901,6 +8908,17 @@ async function supRenderListaAdmin(){
         ${c.ultima_autor === 'usuario' ? '<div class="text-[11px] font-bold text-amber-600">⏳ aguardando resposta</div>' : ''}
       </button>`).join('') : '<div class="text-sm text-gray-400">Nenhuma conversa ainda.</div>');
 }
+function supAnexoHtml(m){
+  if(!m || !m.anexo_url) return '';
+  return `<img src="${esc(m.anexo_url)}" alt="Print enviado" loading="lazy" class="rounded-lg w-full max-w-[260px] mb-1 border border-black/10 cursor-zoom-in" onclick="supAmpliar('${esc(m.anexo_url)}')">`;
+}
+function supAmpliar(url){
+  openOsModal('<div class="font-bold mb-2">📷 Print enviado</div><img src="' + esc(url) + '" class="w-full rounded-xl" alt="Print ampliado">');
+}
+function supTextoHtml(m, classe){
+  if(!(m.texto || '').trim()) return '';
+  return `<div class="${classe}" style="white-space:pre-wrap">${esc(m.texto)}</div>`;
+}
 async function supRenderMsgs(){
   if(!SUP_CONV) return;
   const rs = await apiGET(`suporte_mensagens?conversa_id=eq.${SUP_CONV}&select=*&order=created_at.asc&limit=300`);
@@ -8913,18 +8931,18 @@ async function supRenderMsgs(){
   box.innerHTML = rs.length ? rs.map(m => {
     if(m.autor === 'Muse') return `<div class="self-start max-w-[85%] bg-white border border-red-200 rounded-2xl rounded-bl-md px-3 py-2 shadow-sm">
       <div class="text-[11px] font-bold text-red-700 mb-0.5">🤖 Muse · suporte <span class="text-gray-400 font-normal">${supHora(m.created_at)}</span></div>
-      <div class="text-sm text-gray-800" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+      ${supAnexoHtml(m)}${supTextoHtml(m, 'text-sm text-gray-800')}</div>`;
     if(m.autor === 'fabio') return `<div class="self-end max-w-[85%] bg-gray-800 text-white rounded-2xl rounded-br-md px-3 py-2 shadow-sm">
       <div class="text-[11px] font-bold mb-0.5">Fabio <span class="opacity-60 font-normal">${supHora(m.created_at)}</span></div>
-      <div class="text-sm" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+      ${supAnexoHtml(m)}${supTextoHtml(m, 'text-sm')}</div>`;
     const minha = (SUP_CONV_DONO || '').toLowerCase() === meuLogin;
     return minha
       ? `<div class="self-end max-w-[85%] bg-red-700 text-white rounded-2xl rounded-br-md px-3 py-2 shadow-sm">
           <div class="text-[11px] font-bold mb-0.5">Você <span class="opacity-60 font-normal">${supHora(m.created_at)}</span></div>
-          <div class="text-sm" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`
+          ${supAnexoHtml(m)}${supTextoHtml(m, 'text-sm')}</div>`
       : `<div class="self-start max-w-[85%] bg-white border border-gray-200 rounded-2xl rounded-bl-md px-3 py-2 shadow-sm">
           <div class="text-[11px] font-bold text-gray-600 mb-0.5">${esc(m.nome || SUP_CONV_DONO)} <span class="text-gray-400 font-normal">${supHora(m.created_at)}</span></div>
-          <div class="text-sm text-gray-800" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+          ${supAnexoHtml(m)}${supTextoHtml(m, 'text-sm text-gray-800')}</div>`;
   }).join('') : '<div class="text-sm text-gray-400 text-center py-6">Nenhuma mensagem ainda. Escreva a primeira dúvida 👇</div>';
   box.scrollTop = box.scrollHeight;
 }
@@ -8934,22 +8952,60 @@ async function supAtualizar(){
     if(supEhGestao()) await supRenderListaAdmin();
   }catch(e){}
 }
+/* 📎 Anexo de print no suporte (04/11/2026): o funcionário anexa o print/foto
+   da tela; a imagem sobe pro bucket recibos/suporte/ e a mensagem guarda a
+   URL em anexo_url — o Muse baixa e VÊ o print antes de responder. */
+let supAnexoFile = null;
+function supAnexoEscolher(inp){
+  const f = inp.files && inp.files[0];
+  inp.value = '';
+  if(!f) return;
+  if(!/^image\//i.test(f.type || '')){ toast('Envie uma imagem (print ou foto da tela).', 'alerta'); return; }
+  supAnexoFile = f;
+  supAnexoPrevRender();
+}
+function supAnexoPrevRender(){
+  const prev = document.getElementById('supAnexoPrev'), img = document.getElementById('supAnexoImg');
+  if(!prev || !img) return;
+  if(supAnexoFile){
+    img.src = URL.createObjectURL(supAnexoFile);
+    prev.classList.remove('hidden'); prev.classList.add('flex');
+  } else {
+    prev.classList.add('hidden'); prev.classList.remove('flex');
+    img.removeAttribute('src');
+  }
+}
+function supAnexoLimpar(){ supAnexoFile = null; supAnexoPrevRender(); }
+async function supUploadAnexo(file){
+  const blob = await comprimirImagem(file);
+  const nome = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/recibos/suporte/${nome}`, {
+    method: 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'image/jpeg' },
+    body: blob
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error('Upload do print falhou (' + r.status + '): ' + t.slice(0, 120)); }
+  return `${SUPA_URL}/storage/v1/object/public/recibos/suporte/${nome}`;
+}
 async function supEnviar(){
   const inp = document.getElementById('supInput');
   const texto = ((inp && inp.value) || '').trim();
-  if(!texto) return;
+  if(!texto && !supAnexoFile) return;
   if(!SUP_CONV){ toast('Aguarde a conversa carregar e tente de novo.', 'alerta'); return; }
   inp.value = '';
   const meuLogin = ((sessao && sessao.login) || '');
   const naMinha = (SUP_CONV_DONO || '').toLowerCase() === meuLogin.toLowerCase();
   const autor = (!naMinha && supEhGestao()) ? 'fabio' : 'usuario';
   try{
+    let anexo_url = null;
+    if(supAnexoFile) anexo_url = await supUploadAnexo(supAnexoFile);
     await apiPOST('suporte_mensagens', {
       id: 'msg-' + Date.now() + '-' + Math.floor(Math.random()*1e6),
       conversa_id: SUP_CONV, autor,
       login: meuLogin, nome: autor === 'fabio' ? 'Fabio' : ((sessao && sessao.nome) || meuLogin),
-      texto
+      texto, anexo_url
     });
+    supAnexoLimpar();
     SUP_ULT_CHAVE = '__';
     await supRenderMsgs();
     if(supEhGestao()) await supRenderListaAdmin();
