@@ -1188,10 +1188,10 @@
             </div>
             <div class="relative" id="osTpWrap">
               <input type="hidden" id="osFiltroTipo" value="">
-              <button type="button" id="osTpBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('tipo',event)"><span id="osTpLabel" class="truncate">Todos os tipos</span><span>▾</span></button>
+              <button type="button" id="osTpBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('tipo',event)"><span id="osTpLabel" class="truncate">Todos os Tipos OS / Etiquetas</span><span>▾</span></button>
               <div id="osTpLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
                 <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
-                  <input id="osTpBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar tipo…" autocomplete="off" oninput="fcRender('tipo')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+                  <input id="osTpBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar item…" autocomplete="off" oninput="fcRender('tipo')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
                 </div>
                 <div id="osTpOpcoes" class="overflow-y-auto"></div>
               </div>
@@ -1214,7 +1214,7 @@
               </div>
             </div>
             <div class="flex gap-2">
-              <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">🏷️ Tipos</button>
+              <button class="btn-ghost text-sm flex-1" onclick="osTelaTipos()">🏷️ Tipos / Etiquetas</button>
               <button class="btn-ghost text-sm flex-1" onclick="osTelaEquipamentos()">🔧 Equip.</button>
             </div>
           </div>
@@ -1257,7 +1257,7 @@
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <select id="osPFiltroAno" class="inp text-sm" onchange="osPainelRender()"><option value="">📅 Todos os anos</option></select>
             <select id="osPFiltroCliente" class="inp text-sm" onchange="osPainelRender()"><option value="">🏥 Todos os clientes</option></select>
-            <select id="osPFiltroTipo" class="inp text-sm" onchange="osPainelRender()"><option value="">🔧 Todos os tipos</option></select>
+            <select id="osPFiltroTipo" class="inp text-sm" onchange="osPainelRender()"><option value="">🏷️ Todos os Tipos OS / Etiquetas</option></select>
             <select id="osPFiltroTecnico" class="inp text-sm" onchange="osPainelRender()"><option value="">👤 Todos os técnicos</option></select>
           </div>
           <div id="osPainelKPIs" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4"></div>
@@ -6414,7 +6414,7 @@ function osFiltrosQuery(){
   else if(OS_SITUACAO==='aberto') f += '&status=in.(aberta,em_atendimento)';
   else if(OS_SITUACAO==='concluida') f += '&status=eq.concluida';
   if(fc) f += '&cliente_id=eq.'+fc;
-  if(ft) f += '&tipo_os_id=eq.'+ft;
+  if(ft) f += '&etiquetas=cs.'+encodeURIComponent('{"'+String(ft).replace(/"/g,'')+'"}');
   const fo = (document.getElementById('osFiltroOperador')||{}).value||'';
   if(fo){ const vars = (OS_OP_VARS && OS_OP_VARS[fo]) || [fo]; f += '&tecnico=' + encodeURIComponent('in.(' + vars.map(v=>'"' + String(v).replace(/"/g,'') + '"').join(',') + ')'); }
   const fe = (document.getElementById('osFiltroEmail')||{}).value||'';
@@ -6453,7 +6453,7 @@ function osBuscaDebounce(){ clearTimeout(OS_BUSCA_T); OS_BUSCA_T = setTimeout(os
 const FC_CFG = {
   os:   { hidden:'osFiltroCliente',  label:'osFcLabel',  lista:'osFcLista',  busca:'osFcBusca',  opcoes:'osFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
   tec:  { hidden:'tecFiltroCliente', label:'tecFcLabel', lista:'tecFcLista', busca:'tecFcBusca', opcoes:'tecFcOpcoes', todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
-  tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os tipos',    vazio:'Nenhum tipo encontrado.' },
+  tipo: { hidden:'osFiltroTipo',     label:'osTpLabel',  lista:'osTpLista',  busca:'osTpBusca',  opcoes:'osTpOpcoes',  todos:'Todos os Tipos OS / Etiquetas', vazio:'Nenhum item encontrado.' },
   email:{ hidden:'osFiltroEmail',    label:'osEmLabel',  lista:'osEmLista',  busca:'osEmBusca',  opcoes:'osEmOpcoes',  todos:'📧 Todos os e-mails', vazio:'—' },
   oper: { hidden:'osFiltroOperador', label:'osOpLabel',  lista:'osOpLista',  busca:'osOpBusca',  opcoes:'osOpOpcoes',  todos:'👤 Todos os operadores', vazio:'Nenhum operador encontrado.' },
   eqcli:{ hidden:'eqFiltroCliente',  label:'eqFcLabel',  lista:'eqFcLista',  busca:'eqFcBusca',  opcoes:'eqFcOpcoes',  todos:'Todos os clientes', vazio:'Nenhum cliente encontrado.' },
@@ -6720,7 +6720,7 @@ async function carregarOSClientes(){
       OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
       fcSincronizar('os');
     }
-    OS_TP_ITENS = (TIPOS_OS||[]).map(t=>({ valor: t.id, rotulo: t.descricao })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+    OS_TP_ITENS = osUniItens().map(e=>({ valor: e, rotulo: e })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
     fcSincronizar('tipo');
     osCarregarOperadores();
   }catch(e){}
@@ -6760,7 +6760,7 @@ function renderOSLista(){
         <div class="font-bold flex-1 min-w-0" style="font-size:15px;line-height:1.25">${esc(o.clientes?fmtCliNome(o.clientes.nome,o.clientes.tipo):'—')}</div>
         <div class="font-bold text-brand text-[13px] whitespace-nowrap pt-[2px]">${esc(o.numero)}</div>
       </div>
-      <div class="text-xs text-gray-500">${esc(o.tipos_os?o.tipos_os.descricao:(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento'))} · ${fmtData((o.created_at||'').slice(0,10))}</div>
+      <div class="text-xs text-gray-500">${esc(o.equipamentos?o.equipamentos.nome+(o.equipamentos.numero_serie?' · SN '+o.equipamentos.numero_serie:''):'Sem equipamento')} · ${fmtData((o.created_at||'').slice(0,10))}</div>
       ${ctx.length?`<div class="text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-0.5">${ctx.join('')}</div>`:''}
       ${(o.etiquetas&&o.etiquetas.length)?`<div class="flex gap-1 flex-wrap">${osEtiquetasChips(o.etiquetas)}</div>`:''}
       ${selos?`<div class="flex gap-1 flex-wrap">${selos}</div>`:''}
@@ -6893,20 +6893,7 @@ function novaOS(){
         <div id="nosCliOpcoes" class="overflow-y-auto"></div>
       </div>
     </div>
-    <label class="lbl">Tipo de OS</label>
-    <input type="hidden" id="nosTipo" value="">
-    <div class="relative mb-2">
-      <button type="button" id="nosTipoBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="osTipoAbrir()">
-        <span id="nosTipoLabel" class="truncate text-gray-500">— selecione —</span><span>▾</span>
-      </button>
-      <div id="nosTipoLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-72 flex flex-col">
-        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
-          <input id="nosTipoBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar tipo…" autocomplete="off" oninput="osTipoFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('nosTipoLista').classList.add('hidden')}">
-        </div>
-        <div id="nosTipoOpcoes" class="overflow-y-auto"></div>
-      </div>
-    </div>
-    <label class="lbl">Etiquetas (separadas por vírgula)</label>
+    <label class="lbl">🏷️ Tipos OS / Etiquetas</label>
     <div class="relative mb-2">
       <input id="nosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" onfocus="osEtiqAbrir()" oninput="osEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')osEtiqFechar()">
       <div id="nosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-64 overflow-y-auto"></div>
@@ -6957,7 +6944,7 @@ function novaOS(){
 }
 function osTipoChanged(t){
   if(!t){
-    const id = document.getElementById('nosTipo').value;
+    const elTipoH = document.getElementById('nosTipo'); const id = elTipoH ? elTipoH.value : '';
     t = (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).find(x=>String(x.id)===String(id));
   }
   if(!t) return;
@@ -7280,7 +7267,7 @@ function osEtiqFiltrar(v){
 function osEtiqRender(filtro){
   const box = document.getElementById('nosEtiqLista');
   if(!box) return;
-  const lista = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[])
+  const lista = osUniItens()
     .filter(e=>!filtro || e.toUpperCase().includes(filtro));
   if(!lista.length){ box.classList.add('hidden'); return; }
   box.innerHTML = `
@@ -7307,7 +7294,7 @@ function osEtiqEscolher(tag){
   const inp = document.getElementById('nosEtiq');
   const partes = inp.value.split(',').map(s=>s.trim()).filter(s=>s);
   const tagU = tag.toUpperCase();
-  const sugeridas = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[]).map(e=>e.toUpperCase());
+  const sugeridas = osUniItens().map(e=>e.toUpperCase());
   const ultima = partes.length? partes[partes.length-1].toUpperCase() : '';
   if(ultima && !sugeridas.includes(ultima) && ultima!==tagU){
     partes[partes.length-1] = tag; // substitui o que estava digitando
@@ -7315,6 +7302,7 @@ function osEtiqEscolher(tag){
     partes.push(tag);
   }
   inp.value = partes.join(', ') + ', ';
+  try{ const tUni = osDerivaTipo(partes.map(s=>s.trim().toUpperCase()).filter(Boolean)); if(tUni) osTipoChanged(tUni); }catch(e){}
   const box = document.getElementById('nosEtiqLista');
   if(box) box.classList.add('hidden'); // fecha a lista após escolher
   OS_ETIQ_ESCOLHEU_EM = Date.now(); // evita reabrir pelo focus
@@ -7345,7 +7333,7 @@ function eosEtiqFiltrar(v){
 function eosEtiqRender(filtro){
   const box = document.getElementById('eosEtiqLista');
   if(!box) return;
-  const lista = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[])
+  const lista = osUniItens()
     .filter(e=>!filtro || e.toUpperCase().includes(filtro));
   if(!lista.length){ box.classList.add('hidden'); return; }
   box.innerHTML = `
@@ -7367,7 +7355,7 @@ function eosEtiqEscolher(tag){
   if(!inp) return;
   const partes = inp.value.split(',').map(s=>s.trim()).filter(s=>s);
   const tagU = tag.toUpperCase();
-  const sugeridas = (typeof ETIQUETAS_SUGERIDAS!=='undefined'?ETIQUETAS_SUGERIDAS:[]).map(e=>e.toUpperCase());
+  const sugeridas = osUniItens().map(e=>e.toUpperCase());
   const ultima = partes.length? partes[partes.length-1].toUpperCase() : '';
   if(ultima && !sugeridas.includes(ultima) && ultima!==tagU){
     partes[partes.length-1] = tag;
@@ -7435,8 +7423,9 @@ async function salvarOS(){
     const numero = await proximoNumeroOS();
     const vs = parseValorBR(document.getElementById('nosValor').value);
     const uid = (typeof sessao!=='undefined' && sessao) ? sessao.id : null;
-    const tipo_os_id = document.getElementById('nosTipo').value||null;
     const etiquetas = String(document.getElementById('nosEtiq').value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const tipoDerivOS = osDerivaTipo(etiquetas);
+    const tipo_os_id = tipoDerivOS ? tipoDerivOS.id : null;
     const pr = document.getElementById('nosPrzResp').value||null;
     const ps = document.getElementById('nosPrzSol').value||null;
     const body = {
@@ -7507,7 +7496,17 @@ function openOsModal(html){
 function closeOsModal(){ const m = document.getElementById('modalOS'); if(m) m.style.display='none'; }
 
 /* ================= OS — ABAS (paridade Field Control) ================= */
-const ETIQUETAS_SUGERIDAS = ['TROCA DE CARTUCHO','CHAMADO TÉCNICO','TREINAMENTO OPER.','INSTALAÇÃO','CHAMADO CIENTÍFICO','ERRO OPERACIONAL','MUDANÇA BANCADA','VIA TELEFONE','VISITA SEMANAL / QUINZENAL','VISITA QUINZENAL / MENSAL','TROCA DE BATERIA','M. PREVENTIVA ANUAL','M. PREV SEMESTRAL','TROCA DE LED ACLTOP','OSMOSE','DESINSTALAÇÃO','LEVANTAMENTO EQUIP'];
+const ETIQUETAS_SUGERIDAS = ['TROCA DE CARTUCHO','CHAMADO TÉCNICO','TREINAMENTO OPER.','INSTALAÇÃO','CHAMADO CIENTÍFICO','ERRO OPERACIONAL','MUDANÇA BANCADA','VIA TELEFONE','VISITA SEMANAL / QUINZENAL','VISITA QUINZENAL / MENSAL','TROCA DE BATERIA','M. PREVENTIVA ANUAL','M. PREV SEMESTRAL','M. PREVENTIVA BIANUAL','TROCA DE LED ACLTOP','OSMOSE','DESINSTALAÇÃO','LEVANTAMENTO EQUIP','CONFIGURAÇÃO DE EQUIPAMENTO','AVALIAÇÃO DO LOCAL DE INSTALAÇÃO','LIBERAÇÃO INTERNA DE EQUIPAMENTO','ATUALIZAÇÃO DE SOFTWARE','MANUTENÇÃO CORRETIVA','MANUTENÇÃO DE REDE INTERNA','VISITA TÉCNICA'];
+/* 🏷️ UNIFICAÇÃO Tipos OS / Etiquetas (04/11/2026, pedido do Fabio): um campo só.
+   ETIQ_TIPO_ID: etiqueta → tipo que empresta duração/prazos (o tipo_os_id gravado
+   na OS passa a ser DERIVADO das etiquetas no salvar — a tela não mostra mais tipo).
+   TIPO_ETIQ_ID: tipo → etiqueta unificada (migração do histórico + tela de gestão). */
+const ETIQ_TIPO_ID = {'TROCA DE CARTUCHO':'094a841e-51c3-4a84-9234-10ed5a1fea45','CHAMADO TÉCNICO':'fb607896-07d1-4bd7-bc2f-618dc94cd255','TREINAMENTO OPER.':'10d6db56-2f0d-4cf7-84b5-f4da6abe4311','INSTALAÇÃO':'65b7c462-8870-488a-aadd-131955ef1c64','CHAMADO CIENTÍFICO':'bb97e02d-fb86-4b5c-9a7a-e7ca0317d162','ERRO OPERACIONAL':'c5302930-8467-499c-9ef1-f3efa6887be9','MUDANÇA BANCADA':'c3109c66-42ee-4746-9ffd-a7a96242e053','VIA TELEFONE':'3d3d7968-c688-49ab-becc-f78c72583217','VISITA SEMANAL / QUINZENAL':'dffee12b-b9db-4eb1-ae3c-d36f544cbfb0','TROCA DE BATERIA':'6e859afc-63dd-410e-a674-90334fd554ff','M. PREVENTIVA ANUAL':'ec999f84-b778-440f-9b2c-e81e472419f1','M. PREV SEMESTRAL':'1142690e-4f69-471a-8936-2ff4cb2adf0b','M. PREVENTIVA BIANUAL':'d8ff1cea-737a-4814-a63a-59013edf0aba','TROCA DE LED ACLTOP':'eb25ad7d-34d0-4dc1-a027-a7376497c586','OSMOSE':'08308e75-8c94-48b9-95ef-fcf18cfdccc5','DESINSTALAÇÃO':'7cff0863-a5a8-426a-b96d-89b241896a69','LEVANTAMENTO EQUIP':'4b22c911-9f32-4090-8f4d-49ead0e5a3b8','CONFIGURAÇÃO DE EQUIPAMENTO':'0736c7e8-8124-4f58-afa3-9c5639c4c779','AVALIAÇÃO DO LOCAL DE INSTALAÇÃO':'36ceb8e2-08d3-487c-a99b-26674eea1c72','LIBERAÇÃO INTERNA DE EQUIPAMENTO':'cec4c24c-22bf-4bd2-804e-7e66643dd267','ATUALIZAÇÃO DE SOFTWARE':'6b825a06-478d-4da0-b0f7-20d69e798e1d','MANUTENÇÃO CORRETIVA':'f8aa3deb-2c14-4721-813c-b3590a22c32c','MANUTENÇÃO DE REDE INTERNA':'baa4f56a-956a-4c79-ad35-ee51b81c523c','VISITA TÉCNICA':'68af75a1-898c-48bf-8abb-48e8b3e5ebce'};
+const TIPO_ETIQ_ID = {'fb607896-07d1-4bd7-bc2f-618dc94cd255':'CHAMADO TÉCNICO','094a841e-51c3-4a84-9234-10ed5a1fea45':'TROCA DE CARTUCHO','00087546-30b6-4adb-8345-f473c3e85c6a':'TROCA DE CARTUCHO','dffee12b-b9db-4eb1-ae3c-d36f544cbfb0':'VISITA SEMANAL / QUINZENAL','cd3b2326-dff3-4c3c-84eb-a5a09e31f818':'VISITA SEMANAL / QUINZENAL','bb97e02d-fb86-4b5c-9a7a-e7ca0317d162':'CHAMADO CIENTÍFICO','65b7c462-8870-488a-aadd-131955ef1c64':'INSTALAÇÃO','10d6db56-2f0d-4cf7-84b5-f4da6abe4311':'TREINAMENTO OPER.','ec999f84-b778-440f-9b2c-e81e472419f1':'M. PREVENTIVA ANUAL','7cff0863-a5a8-426a-b96d-89b241896a69':'DESINSTALAÇÃO','1142690e-4f69-471a-8936-2ff4cb2adf0b':'M. PREV SEMESTRAL','c3109c66-42ee-4746-9ffd-a7a96242e053':'MUDANÇA BANCADA','eb25ad7d-34d0-4dc1-a027-a7376497c586':'TROCA DE LED ACLTOP','c5302930-8467-499c-9ef1-f3efa6887be9':'ERRO OPERACIONAL','3d3d7968-c688-49ab-becc-f78c72583217':'VIA TELEFONE','f342bd91-365d-42a6-afaf-e206193604d3':'VIA TELEFONE','c5e3875d-28e3-47bc-8e83-c1db3a4b2989':'TROCA DE BATERIA','6e859afc-63dd-410e-a674-90334fd554ff':'TROCA DE BATERIA','4b22c911-9f32-4090-8f4d-49ead0e5a3b8':'LEVANTAMENTO EQUIP','08308e75-8c94-48b9-95ef-fcf18cfdccc5':'OSMOSE','0736c7e8-8124-4f58-afa3-9c5639c4c779':'CONFIGURAÇÃO DE EQUIPAMENTO','36ceb8e2-08d3-487c-a99b-26674eea1c72':'AVALIAÇÃO DO LOCAL DE INSTALAÇÃO','cec4c24c-22bf-4bd2-804e-7e66643dd267':'LIBERAÇÃO INTERNA DE EQUIPAMENTO','d8ff1cea-737a-4814-a63a-59013edf0aba':'M. PREVENTIVA BIANUAL','6b825a06-478d-4da0-b0f7-20d69e798e1d':'ATUALIZAÇÃO DE SOFTWARE','f8aa3deb-2c14-4721-813c-b3590a22c32c':'MANUTENÇÃO CORRETIVA','baa4f56a-956a-4c79-ad35-ee51b81c523c':'MANUTENÇÃO DE REDE INTERNA','68af75a1-898c-48bf-8abb-48e8b3e5ebce':'VISITA TÉCNICA'};
+function osUniItens(){ const base=[...ETIQUETAS_SUGERIDAS]; (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).forEach(t=>{ const e=TIPO_ETIQ_ID[t.id]||String(t.descricao||'').toUpperCase(); if(e && !base.includes(e)) base.push(e); }); return base; }
+function osTipoDaEtiqueta(etiq){ const id=ETIQ_TIPO_ID[String(etiq||'').toUpperCase()]; if(!id) return null; return (typeof TIPOS_OS!=='undefined'?TIPOS_OS:[]).find(t=>String(t.id)===String(id))||null; }
+function osDerivaTipo(etiquetas){ for(const e of (etiquetas||[])){ const t=osTipoDaEtiqueta(e); if(t) return t; } return null; }
+function osEtiquetaDoTipo(t){ if(!t) return ''; return TIPO_ETIQ_ID[t.id]||String(t.descricao||'').toUpperCase(); }
 const OS_ABAS = [
   ['geral','📋 Geral'],['atividades','🛠️ Atividades'],['equipamentos','🔧 Equipamentos'],
   ['produtos','📦 Produtos'],['servicos','🧰 Serviços'],['despesas','💸 Despesas'],
@@ -7529,7 +7528,7 @@ async function carregarTiposOS(){
   }
   catch(e){ TIPOS_OS = []; OS_FIELD_PARIDADE = false; }
   try{
-    OS_TP_ITENS = (TIPOS_OS||[]).map(t=>({ valor: t.id, rotulo: t.descricao })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+    OS_TP_ITENS = osUniItens().map(e=>({ valor: e, rotulo: e })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
     fcSincronizar('tipo');
     osCarregarOperadores();
   }catch(e){}
@@ -7723,7 +7722,7 @@ function osAbaGeral(d){
     <div class="text-xs font-bold text-brand uppercase tracking-wide mb-2">Dados da OS</div>
     <div class="grid grid-cols-3 gap-2 text-sm mb-2">
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Identificador</div><b>${esc(o.numero)}</b></div>
-      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo de OS</div><b>${esc(o.tipos_os?o.tipos_os.descricao:'—')}</b></div>
+      <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipos OS / Etiquetas</div><b>${esc((o.etiquetas&&o.etiquetas.length)?o.etiquetas.join(', '):'—')}</b></div>
       <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Prazo</div><b>${o.prazo_solucao?fmtData((o.prazo_solucao||'').slice(0,10)):'—'}</b></div>
     </div>
     ${atvTec?`<div class="text-sm mb-2">👷 Técnico: <b>${esc(atvTec.tecnico)}</b></div>`:''}
@@ -8261,14 +8260,14 @@ function osTelaTipos(){
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
-      <div class="font-bold">🏷️ Tipos de OS</div><div></div>
+      <div class="font-bold">🏷️ Tipos OS / Etiquetas</div><div></div>
     </div>
     <div class="border rounded-xl p-3 grid gap-2 md:grid-cols-4 mb-3">
-      <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Novo tipo</div>
+      <div class="md:col-span-4 text-xs font-bold text-gray-500 uppercase">＋ Novo item</div>
       <div class="md:col-span-2"><label class="lbl">Descrição *</label><input id="osTipoDesc" class="inp text-sm" placeholder="Ex: Instalação de Equipamento"></div>
       <div><label class="lbl">Duração (min)</label><input id="osTipoDur" type="number" min="0" class="inp text-sm" placeholder="120"></div>
       <div><label class="lbl">Prazo solução (h)</label><input id="osTipoPrz" type="number" min="0" class="inp text-sm" placeholder="48"></div>
-      <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddTipo()">Adicionar tipo</button></div>
+      <div class="md:col-span-4"><button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osAddTipo()">Adicionar item</button></div>
     </div>
     <div id="osTiposLista" class="grid gap-2 mb-3"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
   osListarTipos();
@@ -8279,7 +8278,7 @@ async function osListarTipos(){
     const rows = await apiGET('tipos_os?select=*&order=descricao.asc');
     box.innerHTML = rows.map(t=>`
       <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2 ${t.ativo?'':'opacity-50'}">
-        <div><b>${esc(t.descricao)}</b>
+        <div><b>${esc(osEtiquetaDoTipo(t))}</b>${osEtiquetaDoTipo(t)!==t.descricao?` <span class="text-xs text-gray-400">(${esc(t.descricao)})</span>`:``}
         <div class="text-xs text-gray-500">${t.duracao_min?t.duracao_min+' min':''}${t.prazo_solucao_h?' · prazo '+t.prazo_solucao_h+'h':''}${t.ativo?'':' · inativo'}</div></div>
         <div class="flex gap-2">
           <button class="text-xs text-brand font-bold" onclick="osToggleTipo('${t.id}',${t.ativo})">${t.ativo?'⏸️ Desativar':'▶️ Ativar'}</button>
@@ -8293,7 +8292,7 @@ async function osAddTipo(){
   if(!descricao){ toast('Informe a descrição.','erro'); return; }
   try{
     await apiPOST('tipos_os', { descricao, duracao_min:Number(document.getElementById('osTipoDur').value)||null, prazo_solucao_h:Number(document.getElementById('osTipoPrz').value)||null });
-    toast('Tipo adicionado. ✓','ok'); osListarTipos(); carregarTiposOS();
+    toast('Item adicionado. ✓','ok'); osListarTipos(); carregarTiposOS();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function osToggleTipo(id, ativo){
@@ -8301,7 +8300,7 @@ async function osToggleTipo(id, ativo){
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function osDelTipo(id){
-  if(!confirm('Excluir este tipo de OS?')) return;
+  if(!confirm('Excluir este item da lista? As OSs já gravadas mantêm a etiqueta.')) return;
   try{ await apiDELETE('tipos_os', `id=eq.${id}`); osListarTipos(); carregarTiposOS(); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
@@ -8623,7 +8622,6 @@ async function osAbrirEditar(){
     if(a0) OS_EDIT_TEC = { atvId: a0.id, tecnico: a0.tecnico||'', status: a0.status };
   }
   await osCarregarTecnicos().catch(()=>{});
-  const tipoOpts = (TIPOS_OS||[]).map(t=>`<option value="${t.id}" ${String(t.id)===String(o.tipo_os_id||'')?'selected':''}>${esc(t.descricao)}</option>`).join('');
   const cliOptsEditar = (CLIENTES||[]).map(c=>`<option value="${c.id}" ${String(c.id)===String(o.cliente_id)?'selected':''}>${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
   openOsModal(`
     <div class="font-bold mb-3">✏️ Editar OS ${esc(o.numero)}</div>
@@ -8634,13 +8632,11 @@ async function osAbrirEditar(){
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="eosDesc" class="inp text-sm mb-2" rows="3">${esc(o.descricao_servico||'')}</textarea>
     ${OS_FIELD_PARIDADE?`
-    <label class="lbl">Tipo de OS</label>
-    <select id="eosTipo" class="inp text-sm mb-2"><option value="">— nenhum —</option>${tipoOpts}</select>
     <div class="grid grid-cols-2 gap-2">
       <div><label class="lbl">Prazo de resposta</label><input id="eosPrzResp" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_resposta)}"></div>
       <div><label class="lbl">Prazo de solução</label><input id="eosPrzSol" type="datetime-local" class="inp text-sm mb-2" value="${osDtLocalInput(o.prazo_solucao)}"></div>
     </div>
-    <label class="lbl">Etiquetas (separadas por vírgula)</label>
+    <label class="lbl">🏷️ Tipos OS / Etiquetas</label>
     <div class="relative mb-2">
       <input id="eosEtiq" class="inp text-sm" placeholder="Ex: CHAMADO TÉCNICO, INSTALAÇÃO" autocomplete="off" value="${esc((o.etiquetas||[]).join(', '))}" onfocus="eosEtiqAbrir()" oninput="eosEtiqFiltrar(this.value)" onkeydown="if(event.key==='Escape')eosEtiqFechar()">
       <div id="eosEtiqLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-64 overflow-y-auto"></div>
@@ -8688,8 +8684,6 @@ async function osSalvarEdicao(){
     if(trocouCliente) body.cliente_id = novoCliente;
     let etiquetasNovas = null;
     if(OS_FIELD_PARIDADE){
-      const tipoEl = document.getElementById('eosTipo');
-      if(tipoEl) body.tipo_os_id = tipoEl.value||null;
       const pr = document.getElementById('eosPrzResp'), ps = document.getElementById('eosPrzSol');
       if(pr) body.prazo_resposta = pr.value ? new Date(pr.value).toISOString() : null;
       if(ps) body.prazo_solucao = ps.value ? new Date(ps.value).toISOString() : null;
@@ -8697,6 +8691,8 @@ async function osSalvarEdicao(){
       if(etiqEl){
         etiquetasNovas = String(etiqEl.value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
         body.etiquetas = etiquetasNovas;
+        const tDerivE = osDerivaTipo(etiquetasNovas);
+        body.tipo_os_id = tDerivE ? tDerivE.id : null;
       }
     }
     if(OS_TEM_LOCAL){
@@ -9391,7 +9387,7 @@ async function carregarPainelOS(){
     if(!OS_PAINEL){
       fonte.textContent = 'Carregando dados…';
       const [oss, atvs] = await Promise.all([
-        apiGETall('os_clientes?select=id,numero,cliente_id,tipo_os_id,status,created_at,clientes(nome),tipos_os(descricao)&order=created_at.asc'),
+        apiGETall('os_clientes?select=id,numero,cliente_id,etiquetas,status,created_at,clientes(nome)&order=created_at.asc'),
         apiGETall('os_atividades?select=os_id,tecnico,data,inicio,fim,status&order=data.asc'),
       ]);
       OS_PAINEL = { oss, atvs };
@@ -9400,8 +9396,8 @@ async function carregarPainelOS(){
       document.getElementById('osPFiltroAno').innerHTML = '<option value="">📅 Todos os anos</option>' + anos.map(a=>`<option>${a}</option>`).join('');
       const clis = [...new Map(oss.filter(o=>o.clientes).map(o=>[o.cliente_id, o.clientes.nome])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
       document.getElementById('osPFiltroCliente').innerHTML = '<option value="">🏥 Todos os clientes</option>' + clis.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join('');
-      const tipos = [...new Set(oss.map(o=>o.tipos_os?o.tipos_os.descricao:'').filter(Boolean))].sort();
-      document.getElementById('osPFiltroTipo').innerHTML = '<option value="">🔧 Todos os tipos</option>' + tipos.map(t=>`<option>${esc(t)}</option>`).join('');
+      const tipos = [...new Set(oss.flatMap(o=>(o.etiquetas||[])))].sort();
+      document.getElementById('osPFiltroTipo').innerHTML = '<option value="">🏷️ Todos os Tipos OS / Etiquetas</option>' + tipos.map(t=>`<option>${esc(t)}</option>`).join('');
       const tecMap = {};
       atvs.forEach(a=>{ const t=(a.tecnico||'').trim(); if(!t) return; const k=osNormNome(t); if(!tecMap[k]) tecMap[k]={}; tecMap[k][t]=(tecMap[k][t]||0)+1; });
       const tecs = Object.entries(tecMap).map(([k,vars])=>({ k, rot: Object.entries(vars).sort((a,b)=>b[1]-a[1])[0][0] })).sort((a,b)=>a.rot.localeCompare(b.rot));
@@ -9420,7 +9416,7 @@ function osPainelRender(){
   const fos = oss.filter(o =>
     (!fAno || (o.created_at||'').slice(0,4)===fAno) &&
     (!fCli || o.cliente_id===fCli) &&
-    (!fTipo || (o.tipos_os&&o.tipos_os.descricao===fTipo)) &&
+    (!fTipo || (o.etiquetas||[]).includes(fTipo)) &&
     (!fTec || atvs.some(a=>a.os_id===o.id && osNormNome(a.tecnico)===fTec)));
   const fids = new Set(fos.map(o=>o.id));
   const fat = atvs.filter(a=>fids.has(a.os_id));
@@ -9432,7 +9428,7 @@ function osPainelRender(){
   // ---- agregados profissionais
   const nCli = new Set(fos.map(o=>o.cliente_id).filter(Boolean)).size;
   const ehPrev = d => /preventiv/i.test(d||'');
-  const nPrev = fos.filter(o=>ehPrev(o.tipos_os&&o.tipos_os.descricao)).length;
+  const nPrev = fos.filter(o=>(o.etiquetas||[]).some(e=>ehPrev(e))).length;
   const pPrev = tot? (nPrev/tot*100):0;
   const nConc = fos.filter(o=>o.status==='concluida').length;
   const pConc = tot? (nConc/tot*100):0;
@@ -9473,7 +9469,7 @@ function osPainelRender(){
   fos.forEach(o=>{ const n=o.clientes?o.clientes.nome:'—'; rc[n]=(rc[n]||0)+1; });
   document.getElementById('osPRankCli').innerHTML = osPainelBarras(Object.entries(rc).sort((a,b)=>b[1]-a[1]).slice(0,10), '#C1272D', tot);
   const rt = {};
-  fos.forEach(o=>{ const n=o.tipos_os?o.tipos_os.descricao:'Sem tipo'; rt[n]=(rt[n]||0)+1; });
+  fos.forEach(o=>{ const es=(o.etiquetas||[]); if(!es.length){ rt['Sem classificação']=(rt['Sem classificação']||0)+1; } else es.forEach(n=>{ rt[n]=(rt[n]||0)+1; }); });
   document.getElementById('osPRankTipo').innerHTML = osPainelBarras(Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,10), '#2563eb', tot);
   const rte = {};
   fatTec.forEach(a=>{ const n=(a.tecnico||'').trim(); const k=osNormNome(n); if(!k) return; if(!rte[k]) rte[k]={n, c:0, vars:{}}; rte[k].c++; rte[k].vars[n]=(rte[k].vars[n]||0)+1; if(rte[k].vars[n] > (rte[k].vars[rte[k].n]||0)) rte[k].n = n; });
@@ -10786,7 +10782,7 @@ async function tecVerOSConc(atvId){
     const sigRows = await apiGETsafe(`os_assinaturas?os_id=eq.${osId}&select=*&order=created_at.asc`);
     const cli = o.clientes||{}, eq = o.equipamentos||{};
     const end = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
-    const tipoNome = o.tipos_os ? o.tipos_os.descricao : '';
+    const tipoNome = (o.etiquetas&&o.etiquetas.length) ? o.etiquetas.join(' · ') : (o.tipos_os ? o.tipos_os.descricao : '');
     /* assinaturas: TODAS as distintas, desduplicadas entre os_clientes.assinatura_url
        e os_assinaturas. Correção 21/10/2026 (urgente, apontada pelo Fabio): OSs do Field
        podem ter 2+ assinaturas (ex.: 12675 — cliente + segundo signatário) e o Ver OS
@@ -12467,7 +12463,7 @@ function osMontarHtmlImpressao(d){
   const endCli = [cli.endereco, cli.numero, cli.bairro, cli.cidade, cli.uf, cli.cep].filter(Boolean).join(', ');
   const endOS = o.endereco_os || endCli;
   const locOS = o.localizacao || cli.nome || '—';
-  const tipoNome = o.tipos_os?o.tipos_os.descricao:(d.os.tipo||'');
+  const tipoNome = (o.etiquetas&&o.etiquetas.length)?o.etiquetas.join(' · '):(o.tipos_os?o.tipos_os.descricao:(d.os.tipo||''));
   const criacao = o.created_at?new Date(o.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
   const ST_PRINT = {pendente:'Agendada',agendada:'Agendada',a_caminho:'A caminho',em_atendimento:'Em atendimento',pausada:'Pausada',concluida:'Concluída',cancelada:'Cancelada'};
   const atvBlocks = d.atividades.map((a,i)=>{
