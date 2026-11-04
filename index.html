@@ -1567,6 +1567,11 @@
   </div>
 </nav>
 
+<!-- 🆘 Botão flutuante do Suporte (04/11/2026): um toque de qualquer tela.
+     Some na tela de login, na própria aba do suporte e com qualquer modal
+     aberto (assinatura inclusa) — sincronizado por supFabSync(). -->
+<button id="supFab" onclick="mostrarAba('suporte')" class="hidden fixed right-4 z-[90] flex items-center gap-1.5 bg-red-700 text-white font-bold text-sm pl-3 pr-4 py-3 rounded-full shadow-xl border border-red-800 active:scale-95 transition" style="bottom:calc(84px + env(safe-area-inset-bottom))">🆘 Suporte</button>
+
 <script type="module">
   /* Biblioteca NF-e compartilhada com a Edge Function e os testes */
   import * as NFeXml from './supabase/functions/_shared/nfe-xml.js';
@@ -8950,6 +8955,26 @@ async function supEnviar(){
     if(supEhGestao()) await supRenderListaAdmin();
   }catch(e){ toast('Erro ao enviar: ' + e.message, 'erro'); if(inp) inp.value = texto; }
 }
+
+/* 🆘 Botão flutuante: visível só com o app aberto (logado), fora da aba do
+   suporte e sem NENHUM modal aberto (todo modal do app é .fixed.inset-0 —
+   inclui o pad de assinatura, que é sagrado). Sync a cada 600ms. */
+function supFabSync(){
+  const fab = document.getElementById('supFab');
+  if(!fab) return;
+  const telaLogin = document.getElementById('telaLogin');
+  const logado = typeof sessao !== 'undefined' && !!sessao && telaLogin && telaLogin.classList.contains('hidden');
+  const secSup = document.getElementById('aba-suporte');
+  const naSuporte = !!secSup && !secSup.classList.contains('hidden');
+  let modalAberto = false;
+  document.querySelectorAll('.fixed.inset-0').forEach(el => {
+    if(modalAberto) return;
+    const cs = getComputedStyle(el);
+    if(cs.display !== 'none' && cs.visibility !== 'hidden' && el.getBoundingClientRect().height > 0) modalAberto = true;
+  });
+  fab.classList.toggle('hidden', !(logado && !naSuporte && !modalAberto));
+}
+setInterval(() => { try{ supFabSync(); }catch(e){} }, 600);
 
 /* ---------- assinatura (pad) ---------- */
 let OS_ASS_TECNOME = ''; /* nome do técnico (da designação) na coleta dupla do Minhas OS */
