@@ -6794,11 +6794,11 @@ async function osAbrirClientes(){
   OSCLI_LISTA.busca = '';
   openOsModal(`
     <div class="font-bold text-lg mb-1">👥 Clientes</div>
-    <div class="text-xs text-gray-500 mb-3">Localize o cliente e toque em ✏️ Editar para completar ou corrigir o cadastro — é o mesmo editor do módulo Cadastros.</div>
+    <div class="text-xs text-gray-500 mb-3">Localize o cliente e toque em ✏️ Editar para completar ou corrigir o cadastro, ou cadastre um novo no botão ＋ Novo cliente — é o mesmo cadastro do módulo Cadastros.</div>
     <input id="osCliListaBusca" class="inp text-sm mb-2" placeholder="🔎 Buscar por nome ou cidade…" oninput="OSCLI_LISTA.busca=this.value;osRenderListaClientes()">
     <div id="osCliListaCont" class="text-xs text-gray-500 mb-2"></div>
     <div id="osCliListaBox" class="grid gap-2 max-h-[55vh] overflow-y-auto pr-1"><div class="text-sm text-gray-400 p-2">Carregando…</div></div>
-    <div class="flex justify-end mt-4"><button class="btn-ghost !w-auto px-4" onclick="osFecharListaClientes()">Fechar</button></div>`);
+    <div class="flex justify-end gap-2 mt-4"><button class="btn-ghost !w-auto px-4" onclick="osFecharListaClientes()">Fechar</button><button class="btn-brand !w-auto px-4" onclick="osCliNovoCliente()">＋ Novo cliente</button></div>`);
   osCliObservarEditor();
   await osRecarregarListaClientes();
 }
@@ -6839,6 +6839,11 @@ function osRenderListaClientes(){
 function osEditarClienteDaLista(id){
   /* reusa o editor existente (Cadastros); o observador atualiza a lista quando ele fechar */
   abrirEditorCliente(id);
+}
+function osCliNovoCliente(){
+  /* reusa o formulário de cadastro rápido da Nova OS (mesmo payload do Cadastros);
+     no modo 'lista', ao salvar a lista recarrega já filtrada pelo cliente novo */
+  osCadRapClienteAbrir('lista');
 }
 function osFecharListaClientes(){
   OSCLI_LISTA.aberta = false;
@@ -7073,6 +7078,7 @@ function osCliClickFora(e){
    Sub-modal próprio (#modalCadRap, z-index acima do modalOS e dos dropdowns): abrir/fechar NÃO toca no
    modal da OS — os campos já digitados permanecem intactos. Ao salvar, o registro novo é selecionado. */
 let OS_CAD_RAP_CLI_TRAVA = false, OS_CAD_RAP_EQ_TRAVA = false;
+let OS_CAD_RAP_CLI_MODO = 'selecionar'; /* 'selecionar' (Nova OS) | 'lista' (lista de clientes do OS Clientes) */
 function osCadRapAbrir(html){
   osCadRapFechar();
   document.body.insertAdjacentHTML('beforeend', `
@@ -7081,7 +7087,8 @@ function osCadRapAbrir(html){
     </div>`);
 }
 function osCadRapFechar(){ const m = document.getElementById('modalCadRap'); if(m) m.remove(); }
-function osCadRapClienteAbrir(){
+function osCadRapClienteAbrir(modo){
+  OS_CAD_RAP_CLI_MODO = (modo==='lista') ? 'lista' : 'selecionar';
   const lista = document.getElementById('nosCliLista'); if(lista) lista.classList.add('hidden');
   osCadRapAbrir(`
     <div class="font-bold mb-3">＋ Novo cliente</div>
@@ -7120,7 +7127,7 @@ function osCadRapClienteAbrir(){
     </div>
     <div class="flex gap-2 mt-4">
       <button class="btn-ghost flex-1" onclick="osCadRapFechar()">Cancelar</button>
-      <button class="btn-brand flex-1 !w-auto" id="ncrBtnSalvar" onclick="osCadRapClienteSalvar()">Salvar e selecionar</button>
+      <button class="btn-brand flex-1 !w-auto" id="ncrBtnSalvar" onclick="osCadRapClienteSalvar()">${OS_CAD_RAP_CLI_MODO==='lista' ? 'Salvar cliente' : 'Salvar e selecionar'}</button>
     </div>`);
   setTimeout(()=>{ const i = document.getElementById('ncrNome'); if(i) i.focus(); }, 50);
 }
@@ -7155,11 +7162,20 @@ async function osCadRapClienteSalvar(){
     if(!(typeof CLIENTES!=='undefined'?CLIENTES:[]).some(c=>String(c.id)===String(novo.id)))
       CLIENTES.push({ id:novo.id, nome:novo.nome, tipo:novo.tipo, cnpj:novo.cnpj, ativo:true });
     osCadRapFechar();
-    osCliEscolher(novo.id);
-    toast('Cliente cadastrado e selecionado. ✓','ok');
+    if(OS_CAD_RAP_CLI_MODO==='lista'){
+      /* aberto da lista de clientes do OS Clientes: recarrega a lista já filtrada pelo cliente novo */
+      OS_CAD_RAP_CLI_MODO = 'selecionar';
+      OSCLI_LISTA.busca = novo.nome;
+      const inpBuscaCli = document.getElementById('osCliListaBusca'); if(inpBuscaCli) inpBuscaCli.value = novo.nome;
+      await osRecarregarListaClientes();
+      toast('Cliente cadastrado. ✓','ok');
+    } else {
+      osCliEscolher(novo.id);
+      toast('Cliente cadastrado e selecionado. ✓','ok');
+    }
   }catch(e){
     toast(/(409|23505|duplicate)/i.test(e.message)?'⚠️ Cliente já cadastrado.':'Erro: '+e.message, /(409|23505|duplicate)/i.test(e.message)?'alerta':'erro');
-    if(btn){ btn.disabled = false; btn.textContent = 'Salvar e selecionar'; }
+    if(btn){ btn.disabled = false; btn.textContent = OS_CAD_RAP_CLI_MODO==='lista' ? 'Salvar cliente' : 'Salvar e selecionar'; }
   }finally{ OS_CAD_RAP_CLI_TRAVA = false; }
 }
 function osCadRapEquipAbrir(){
