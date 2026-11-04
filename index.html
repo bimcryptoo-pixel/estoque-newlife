@@ -1727,6 +1727,14 @@ async function apiPOST(table, body){
   const j = await r.json();
   return Array.isArray(j) ? j[0] : j;
 }
+/* RPC (funções do Postgres via PostgREST) — mesmo padrão de headers do REST */
+async function apiRPC(fn, body){
+  const r = await apiFetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, {
+    method:'POST', headers: headersREST(), body: JSON.stringify(body || {})
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error(`RPC ${fn} → ${r.status}: ${t.slice(0,300)}`); }
+  const t = await r.text(); try{ return JSON.parse(t); }catch(e){ return t; }
+}
 async function apiPATCH(table, params, body){
   const r = await apiFetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers: headersREST({'Prefer':'return=representation'}), body: JSON.stringify(body)
@@ -7556,8 +7564,8 @@ function renderOSDetalhe(){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osReabrir()">↩️ Reabrir</button>`;
   if(o.origem!=='fieldcontrol'){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirEditar()">✏️ Editar</button>`;
-    if(podeExcluirOS())
-      acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm !text-red-600 !border-red-300" onclick="osConfirmarExcluir()">🗑️ Excluir</button>`;
+    /* 🗑️ Excluir: o Fabio exclui direto; os demais pedem o PIN a ele (04/11/2026) */
+    acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm !text-red-600 !border-red-300" onclick="osConfirmarExcluir()">🗑️ Excluir</button>`;
   }
 
   const tabs = OS_ABAS.map(([id,rot])=>{
@@ -8536,11 +8544,13 @@ async function osCancelarConfirmar(){
 
 /* ---------- editar / excluir OS ----------
    Regra: OSs importadas do Field Control (origem='fieldcontrol') são histórico
-   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir é EXCLUSIVO do Fabio
-   (pelo login, não pelo cargo — ver podeExcluirOS). */
+   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir: o Fabio exclui DIRETO
+   (podeExcluirOS, pela pessoa); os demais só com o PIN que ele recebe e
+   aprova caso a caso (fluxo os_exclusao_* — 04/11/2026). */
 function osEhEditavel(o){ return !!o && o.origem!=='fieldcontrol'; }
-/* Trava de pessoa (20/10/2026): excluir OS é exclusivo do Fabio. A trava é no
-   LOGIN dele de propósito: um futuro segundo admin NÃO poderá excluir OS. */
+/* Trava de pessoa (20/10/2026): excluir DIRETO é exclusivo do Fabio. A trava é
+   no LOGIN dele de propósito: um futuro segundo admin NÃO exclui direto —
+   cai no fluxo do PIN, como todos os demais (04/11/2026). */
 function podeExcluirOS(){
   return typeof sessao!=='undefined' && !!sessao && sessao.perfil==='admin'
     && String(sessao.login||'').trim().toLowerCase()==='fabio';
@@ -8688,10 +8698,17 @@ async function osSalvarEdicao(){
   }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
 }
 function osConfirmarExcluir(){
-  if(!podeExcluirOS()){ toast('🔒 Excluir OS é exclusivo do Fabio.','erro'); return; }
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); return; }
+  /* 🔐 PIN (04/11/2026, pedido do Fabio): quem não é o Fabio não exclui direto —
+     solicita um PIN que só ELE recebe (e analisa a OS antes de passar ou não). */
+  if(!podeExcluirOS()){ osExcluirPedirPin(); return; }
+  osConfirmarExcluirFinal();
+}
+function osConfirmarExcluirFinal(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
   const cliNome = (o.clientes && o.clientes.nome) || '—';
   openOsModal(`
     <div class="font-bold mb-2 text-red-600">🗑️ Excluir OS ${esc(o.numero)}</div>
@@ -8703,11 +8720,76 @@ function osConfirmarExcluir(){
       <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osExcluirDefinitivo()">🗑️ Excluir definitivamente</button>
     </div>`);
 }
+/* ---------- 🔐 exclusão com PIN (04/11/2026) ----------
+   Fluxo de quem NÃO é o Fabio: solicita → o servidor gera um PIN de 6 dígitos
+   (uso único, 10 min, máx. 3 tentativas — funções os_exclusao_* no banco; a
+   tabela NÃO é legível pelo app) → o PIN chega SÓ ao Fabio (aviso via Muse no
+   WhatsApp, com os dados da OS pra ele analisar) → ele passa o PIN (ou não) →
+   a pessoa digita → o servidor libera → a exclusão consome a liberação ANTES
+   de apagar. Sem PIN liberado, osExcluirDefinitivo aborta. */
+let OS_EXCL_SOL = null; /* id da solicitação de exclusão em andamento */
+function osExcluirPedirPin(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  const cliNome = (o.clientes && o.clientes.nome) || '—';
+  openOsModal(`
+    <div class="font-bold mb-2 text-red-600">🗑️ Excluir OS ${esc(o.numero)}</div>
+    <p class="text-sm text-gray-700 mb-2">A exclusão de OS precisa da <b>autorização do Fabio</b>.</p>
+    <p class="text-sm text-gray-600 mb-4">Ao solicitar, um <b>PIN de 6 dígitos</b> é enviado ao Fabio com os dados desta OS (<b>${esc(o.numero)}</b> — ${esc(cliNome)}). Ele analisa e, se aprovar, te passa o PIN. <b>Sem o PIN, a exclusão não acontece.</b></p>
+    <div class="flex gap-2">
+      <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+      <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osExcluirSolicitarPin()">📩 Solicitar PIN ao Fabio</button>
+    </div>`);
+}
+async function osExcluirSolicitarPin(){
+  const d = OS_DETALHE; if(!d) return;
+  const o = d.os;
+  try{
+    const r = await apiRPC('os_exclusao_solicitar', { p_os_id: o.id, p_login: (sessao && sessao.login) || '', p_nome: (sessao && sessao.nome) || '' });
+    const sol = Array.isArray(r) ? r[0] : r;
+    if(!sol || !sol.solicitacao_id) throw new Error('resposta inesperada do servidor');
+    OS_EXCL_SOL = sol.solicitacao_id;
+    openOsModal(`
+      <div class="font-bold mb-2 text-red-600">🔐 PIN de exclusão — OS ${esc(o.numero)}</div>
+      <p class="text-sm text-gray-600 mb-3">✅ Solicitação enviada! O PIN foi encaminhado ao Fabio. Peça o PIN a ele e digite abaixo. O PIN vale <b>10 minutos</b> e aceita no máximo <b>3 tentativas</b>.</p>
+      <input id="osExclPin" class="inp text-center text-2xl font-bold mb-2" style="letter-spacing:.4em" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="______">
+      <div id="osExclPinMsg" class="text-sm mb-3"></div>
+      <div class="flex gap-2">
+        <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
+        <button class="flex-1 rounded-xl bg-red-600 text-white font-bold py-2.5 px-4" onclick="osExcluirValidarPin()">Validar PIN</button>
+      </div>`);
+    const inp = document.getElementById('osExclPin'); if(inp) inp.focus();
+  }catch(e){ toast('Erro ao solicitar o PIN: '+e.message,'erro'); }
+}
+async function osExcluirValidarPin(){
+  const d = OS_DETALHE; if(!d) return;
+  const pinEl = document.getElementById('osExclPin');
+  const msg = document.getElementById('osExclPinMsg');
+  const pin = ((pinEl && pinEl.value) || '').replace(/\D/g,'');
+  if(pin.length !== 6){ if(msg) msg.innerHTML = '<span class="text-red-600 font-semibold">Digite os 6 dígitos do PIN.</span>'; return; }
+  try{
+    const r = await apiRPC('os_exclusao_validar', { p_id: OS_EXCL_SOL, p_pin: pin });
+    if(r === 'ok'){ osConfirmarExcluirFinal(); return; }
+    if(!msg) return;
+    if(r === 'pin_incorreto') msg.innerHTML = '<span class="text-red-600 font-semibold">❌ PIN incorreto. Confira com o Fabio e tente de novo.</span>';
+    else if(r === 'bloqueada') msg.innerHTML = '<span class="text-red-600 font-semibold">🔒 PIN bloqueado após 3 tentativas. Feche e solicite um novo PIN ao Fabio.</span>';
+    else if(r === 'expirada') msg.innerHTML = '<span class="text-red-600 font-semibold">⏰ PIN expirado (validade de 10 minutos). Feche e solicite um novo.</span>';
+    else msg.innerHTML = '<span class="text-red-600 font-semibold">Solicitação inválida. Feche e solicite um novo PIN.</span>';
+  }catch(e){ toast('Erro ao validar o PIN: '+e.message,'erro'); }
+}
 async function osExcluirDefinitivo(){
-  if(!podeExcluirOS()){ toast('🔒 Excluir OS é exclusivo do Fabio.','erro'); closeOsModal(); return; }
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); closeOsModal(); return; }
+  if(!podeExcluirOS()){
+    /* 🔐 Fluxo com PIN: consome a liberação ANTES de apagar (uso único).
+       Sem liberação válida, NÃO apaga nada. */
+    if(!OS_EXCL_SOL){ toast('🔒 Exclusão com PIN: solicite o PIN ao Fabio.','erro'); closeOsModal(); return; }
+    let okPin = false;
+    try{ okPin = await apiRPC('os_exclusao_consumir', { p_id: OS_EXCL_SOL }); }catch(e){}
+    OS_EXCL_SOL = null;
+    if(!okPin){ toast('🔒 PIN não liberado ou expirado. Solicite um novo PIN ao Fabio.','erro'); closeOsModal(); return; }
+  }
   /* 📧 DESCONSIDERE (28/10/2026, pedido do Fabio): se o e-mail de abertura desta OS
      já foi enviado ao cliente, o desconsidere sai ANTES de apagar — o cliente não
      pode ficar esperando um atendimento de um chamado que deixou de existir.
