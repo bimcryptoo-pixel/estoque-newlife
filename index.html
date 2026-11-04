@@ -312,6 +312,7 @@
       <button data-aba="mapaequipe" onclick="mostrarAba('mapaequipe')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗺️ Mapa Equipe</button>
       <button data-aba="ostecnico" onclick="mostrarAba('ostecnico')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">📱 Minhas OS</button>
       <button data-aba="cadastros" id="navCadDesk" onclick="mostrarAba('cadastros')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🗂️ Cadastros</button>
+      <button data-aba="suporte" onclick="mostrarAba('suporte')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">🆘 Suporte</button>
       <button data-aba="admin" id="navAdminDesk" onclick="mostrarAba('admin')" class="tabbtn text-left px-4 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-white">⚙️ Admin</button>
     </nav>
 
@@ -1476,6 +1477,19 @@
       </section>
 
       <!-- ===== ADMIN ===== -->
+      <section id="aba-suporte" class="hidden">
+        <div class="card p-4 md:p-6">
+          <div class="font-bold text-lg mb-1">🆘 Suporte do sistema</div>
+          <p class="text-sm text-gray-500 mb-4">Quem responde é o <b>Muse</b>, o assistente que cuida deste sistema junto com o Fabio. Escreva qualquer dúvida ou problema do sistema — a resposta costuma levar de <b>1 a 5 minutos</b> e aparece aqui mesmo; você pode seguir trabalhando enquanto isso. Pra urgência com cliente na sua frente, fale direto com o Fabio.</p>
+          <div id="supAdminBox" class="hidden mb-4"></div>
+          <div id="supConversaTitulo" class="font-bold text-sm mb-2"></div>
+          <div id="supMsgs" class="flex flex-col gap-2 mb-3 border border-gray-100 rounded-xl p-3 bg-gray-50" style="max-height:55vh;overflow-y:auto"></div>
+          <div class="flex gap-2">
+            <input id="supInput" class="inp flex-1" placeholder="Escreva sua dúvida ou problema..." autocomplete="off" onkeydown="if(event.key==='Enter')supEnviar()">
+            <button class="btn-brand !w-auto !px-5" onclick="supEnviar()">Enviar ➤</button>
+          </div>
+        </div>
+      </section>
       <section id="aba-admin" class="hidden">
         <div class="card p-4 max-w-6xl">
           <div id="configGpsBox" class="border rounded-xl p-3 mb-3 bg-gray-50"></div>
@@ -2049,7 +2063,7 @@ function entrarApp(){
 document.getElementById('loginPass')?.addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
 /* ================= NAVEGAÇÃO ================= */
-const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','ospainel','mapaequipe','ostecnico','cadastros','admin'];
+const ABAS = ['inicio','lancar','movs','rastreio','emprestimos','consumo','arquivo','produtos','inventario','kardex','pedidos','contratos','compras','osclientes','ospainel','mapaequipe','ostecnico','cadastros','suporte','admin'];
 /* ================= PERMISSÕES POR MÓDULO ================= */
 const MODULOS = [
   ['inicio','🏠 Início'],['lancar','➕ Lançar'],['movs','📋 Movimentos'],
@@ -2057,7 +2071,7 @@ const MODULOS = [
   ['arquivo','🗂️ Arquivo Consumo'],['produtos','🏷️ Produtos'],['inventario','📋 Inventário'],
   ['kardex','📒 Kardex'],['pedidos','📦 Pedidos'],['contratos','📑 Contratos'],
   ['compras','🛒 Compras'],['osclientes','🔧 OS Clientes'],['ospainel','📊 Painel OS'],['mapaequipe','🗺️ Mapa Equipe'],['ostecnico','📱 Minhas OS'],
-  ['cadastros','🗂️ Cadastros'],['admin','⚙️ Admin'],
+  ['cadastros','🗂️ Cadastros'],['suporte','🆘 Suporte'],['admin','⚙️ Admin'],
 ];
 function modulosPermitidos(){
   if(sessao?.perfil==='admin') return MODULOS.map(m=>m[0]);
@@ -2072,6 +2086,9 @@ function modulosPermitidos(){
   const donoMapa = (sessao?.login || '').toLowerCase() === 'fabricio';
   if(!donoMapa) lista = lista.filter(a=>a!=='mapaequipe');
   else if(!lista.includes('mapaequipe')) lista = [...lista, 'mapaequipe'];
+  /* 🆘 Suporte (04/11/2026): liberado para TODOS os logins, sempre — não depende
+     da lista de permissões (senão quem mais precisa não enxerga o módulo). */
+  if(!lista.includes('suporte')) lista = [...lista, 'suporte'];
   return lista;
 }
 function podeAba(aba){
@@ -2092,6 +2109,7 @@ function mostrarAba(aba){
   // 📍 GPS (pré-piloto): fora das telas de rastreio (Minhas OSs / Mapa), o timer de
   //    coleta para — sem drenar bateria nem inflar o histórico fora do painel.
   if(aba!=='ostecnico' && aba!=='mapaequipe'){ try{ tecGpsParar(); }catch(e){} }
+  if(aba!=='suporte'){ try{ supPararPoll(); }catch(e){} }
   ABAS.forEach(a=>{
     document.getElementById('aba-'+a).classList.toggle('hidden', a!==aba);
   });
@@ -2113,6 +2131,7 @@ function mostrarAba(aba){
   if(aba==='ostecnico') carregarPainelTecnico();
   if(aba==='contratos') carregarContratos();
   if(aba==='cadastros') carregarCadastros();
+  if(aba==='suporte') carregarSuporte();
   if(aba==='admin') carregarAdmin();
   if(aba==='lancar' && prefillDev) aplicarPrefillDev();
   if(aba==='lancar') carregarNfeImportadas();
@@ -3483,11 +3502,11 @@ function togglePermissoes(id){
   const padrao = atual.size===0; /* sem configuração = todos liberados, MENOS o Mapa da Equipe (confidencial — só marcando de propósito) */
   box.innerHTML = `<div class="text-xs font-bold text-gray-500 uppercase mb-2">Módulos liberados para ${esc(u.nome)}</div>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">` +
-    MODULOS.filter(([m])=>m!=='admin'&&m!=='inventario'&&m!=='mapaequipe').map(([m,rot])=>
+    MODULOS.filter(([m])=>m!=='admin'&&m!=='inventario'&&m!=='mapaequipe'&&m!=='suporte').map(([m,rot])=>
       `<label class="flex items-center gap-2 text-sm bg-white border rounded-lg px-2.5 py-1.5 cursor-pointer">
         <input type="checkbox" data-mod="${m}" ${padrao||atual.has(m)?'checked':''} class="accent-red-700"> ${rot}</label>`
     ).join('') +
-    `</div><div class="text-xs text-gray-400 mb-2">⚙️ Admin e 📋 Inventário são sempre só do administrador. 🗺️ Mapa da Equipe tem acesso fixo e não aparece aqui.</div>
+    `</div><div class="text-xs text-gray-400 mb-2">⚙️ Admin e 📋 Inventário são sempre só do administrador. 🗺️ Mapa da Equipe tem acesso fixo e não aparece aqui. 🆘 Suporte é liberado para todos os logins.</div>
     <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="salvarPermissoes('${id}')">Salvar permissões</button>`;
   box.classList.remove('hidden');
 }
@@ -8813,6 +8832,123 @@ async function osExcluirDefinitivo(){
     toast(`OS ${o.numero} excluída. ✓` + (resDesc === 'enviado' ? ' 📧 E-mail de desconsidere enviado ao cliente.' : ''),'ok');
     await carregarOSClientes();
   }catch(e){ toast('Erro ao excluir OS: '+e.message,'erro'); }
+}
+
+/* ---------- 🆘 SUPORTE (04/11/2026, pedido do Fabio) ----------
+   Chat de suporte dentro do sistema: o funcionário escreve e o CLAUDE
+   responde (ele investiga no sistema antes de responder; uma vigília o acorda
+   quando chega mensagem nova — resposta típica em 1 a 5 min). Uma conversa
+   por login. O Fabio/admin vê TODAS as conversas (painel) e pode responder
+   pessoalmente (autor='fabio'). Tabelas: suporte_conversas/suporte_mensagens
+   (migration 015); ultima_autor da conversa é mantido por trigger no banco. */
+let SUP_POLL = null, SUP_CONV = null, SUP_CONV_DONO = '', SUP_ULT_CHAVE = '__';
+function supEhGestao(){ return typeof sessao !== 'undefined' && !!sessao && sessao.perfil === 'admin'; }
+function supHora(iso){
+  if(!iso) return '';
+  const dt = new Date(iso); if(isNaN(dt.getTime())) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${p(dt.getDate())}/${p(dt.getMonth()+1)} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
+function supPararPoll(){ if(SUP_POLL){ clearInterval(SUP_POLL); SUP_POLL = null; } }
+async function carregarSuporte(){
+  supPararPoll();
+  SUP_ULT_CHAVE = '__';
+  try{
+    if(supEhGestao()) await supRenderListaAdmin();
+    await supAbrirMinha();
+  }catch(e){ toast('Erro ao abrir o suporte: ' + e.message, 'erro'); }
+  SUP_POLL = setInterval(supAtualizar, 10000);
+}
+async function supAbrirMinha(){
+  const login = (sessao && sessao.login) || '';
+  const rs = await apiGET(`suporte_conversas?usuario_login=eq.${encodeURIComponent(login)}&select=*`);
+  let conv = rs && rs[0];
+  if(!conv){
+    conv = await apiPOST('suporte_conversas', { id: 'conv-' + Date.now() + '-' + Math.floor(Math.random()*1e6), usuario_login: login, usuario_nome: (sessao && sessao.nome) || login, status: 'aberta' });
+  }
+  SUP_CONV = conv.id; SUP_CONV_DONO = conv.usuario_login;
+  supTituloConversa(conv);
+  await supRenderMsgs();
+}
+async function supAbrirConv(id, dono, nome){
+  SUP_CONV = id; SUP_CONV_DONO = dono || '';
+  SUP_ULT_CHAVE = '__';
+  supTituloConversa({ usuario_login: dono, usuario_nome: nome });
+  await supRenderMsgs();
+  await supRenderListaAdmin();
+}
+function supTituloConversa(conv){
+  const el = document.getElementById('supConversaTitulo');
+  if(!el) return;
+  const minha = (conv.usuario_login || '') === ((sessao && sessao.login) || '');
+  el.textContent = supEhGestao() && !minha ? `💬 Conversa de ${conv.usuario_nome || conv.usuario_login}` : '💬 Sua conversa com o suporte';
+}
+async function supRenderListaAdmin(){
+  const box = document.getElementById('supAdminBox');
+  if(!box) return;
+  const rs = await apiGET('suporte_conversas?select=*&order=ultima_em.desc&limit=50');
+  box.classList.remove('hidden');
+  box.innerHTML = `<div class="font-bold text-sm mb-2">📋 Conversas da equipe (${rs.length})</div>` +
+    (rs.length ? rs.map(c => `
+      <button onclick="supAbrirConv('${c.id}','${esc(c.usuario_login)}','${esc(c.usuario_nome || c.usuario_login)}')" class="w-full text-left border rounded-xl px-3 py-2 mb-1.5 ${SUP_CONV === c.id ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'}">
+        <div class="flex justify-between gap-2"><span class="font-semibold text-sm">${esc(c.usuario_nome || c.usuario_login)}</span><span class="text-[11px] text-gray-400">${supHora(c.ultima_em)}</span></div>
+        <div class="text-xs text-gray-500 truncate">${esc(c.ultima_texto || '—')}</div>
+        ${c.ultima_autor === 'usuario' ? '<div class="text-[11px] font-bold text-amber-600">⏳ aguardando resposta</div>' : ''}
+      </button>`).join('') : '<div class="text-sm text-gray-400">Nenhuma conversa ainda.</div>');
+}
+async function supRenderMsgs(){
+  if(!SUP_CONV) return;
+  const rs = await apiGET(`suporte_mensagens?conversa_id=eq.${SUP_CONV}&select=*&order=created_at.asc&limit=300`);
+  const chave = rs.length ? rs[rs.length-1].id + ':' + rs.length : 'vazia';
+  if(chave === SUP_ULT_CHAVE) return;
+  SUP_ULT_CHAVE = chave;
+  const box = document.getElementById('supMsgs');
+  if(!box) return;
+  const meuLogin = ((sessao && sessao.login) || '').toLowerCase();
+  box.innerHTML = rs.length ? rs.map(m => {
+    if(m.autor === 'Muse') return `<div class="self-start max-w-[85%] bg-white border border-red-200 rounded-2xl rounded-bl-md px-3 py-2 shadow-sm">
+      <div class="text-[11px] font-bold text-red-700 mb-0.5">🤖 Muse · suporte <span class="text-gray-400 font-normal">${supHora(m.created_at)}</span></div>
+      <div class="text-sm text-gray-800" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+    if(m.autor === 'fabio') return `<div class="self-end max-w-[85%] bg-gray-800 text-white rounded-2xl rounded-br-md px-3 py-2 shadow-sm">
+      <div class="text-[11px] font-bold mb-0.5">Fabio <span class="opacity-60 font-normal">${supHora(m.created_at)}</span></div>
+      <div class="text-sm" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+    const minha = (SUP_CONV_DONO || '').toLowerCase() === meuLogin;
+    return minha
+      ? `<div class="self-end max-w-[85%] bg-red-700 text-white rounded-2xl rounded-br-md px-3 py-2 shadow-sm">
+          <div class="text-[11px] font-bold mb-0.5">Você <span class="opacity-60 font-normal">${supHora(m.created_at)}</span></div>
+          <div class="text-sm" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`
+      : `<div class="self-start max-w-[85%] bg-white border border-gray-200 rounded-2xl rounded-bl-md px-3 py-2 shadow-sm">
+          <div class="text-[11px] font-bold text-gray-600 mb-0.5">${esc(m.nome || SUP_CONV_DONO)} <span class="text-gray-400 font-normal">${supHora(m.created_at)}</span></div>
+          <div class="text-sm text-gray-800" style="white-space:pre-wrap">${esc(m.texto)}</div></div>`;
+  }).join('') : '<div class="text-sm text-gray-400 text-center py-6">Nenhuma mensagem ainda. Escreva a primeira dúvida 👇</div>';
+  box.scrollTop = box.scrollHeight;
+}
+async function supAtualizar(){
+  try{
+    await supRenderMsgs();
+    if(supEhGestao()) await supRenderListaAdmin();
+  }catch(e){}
+}
+async function supEnviar(){
+  const inp = document.getElementById('supInput');
+  const texto = ((inp && inp.value) || '').trim();
+  if(!texto) return;
+  if(!SUP_CONV){ toast('Aguarde a conversa carregar e tente de novo.', 'alerta'); return; }
+  inp.value = '';
+  const meuLogin = ((sessao && sessao.login) || '');
+  const naMinha = (SUP_CONV_DONO || '').toLowerCase() === meuLogin.toLowerCase();
+  const autor = (!naMinha && supEhGestao()) ? 'fabio' : 'usuario';
+  try{
+    await apiPOST('suporte_mensagens', {
+      id: 'msg-' + Date.now() + '-' + Math.floor(Math.random()*1e6),
+      conversa_id: SUP_CONV, autor,
+      login: meuLogin, nome: autor === 'fabio' ? 'Fabio' : ((sessao && sessao.nome) || meuLogin),
+      texto
+    });
+    SUP_ULT_CHAVE = '__';
+    await supRenderMsgs();
+    if(supEhGestao()) await supRenderListaAdmin();
+  }catch(e){ toast('Erro ao enviar: ' + e.message, 'erro'); if(inp) inp.value = texto; }
 }
 
 /* ---------- assinatura (pad) ---------- */
