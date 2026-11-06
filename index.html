@@ -7021,6 +7021,82 @@ function osEquipClickFora(e){
   if(e.target.closest('#nosEquipBtn') || e.target.closest('#nosEquipLista')) return;
   box.classList.add('hidden');
 }
+/* ============ seletor de equipamento do EDITAR OS ============
+   REGRA (06/11/2026, pedido do Fabio): ao editar o cliente da OS, os dados
+   vinculados são puxados na hora — a lista de equipamentos é SEMPRE a do
+   cliente selecionado no formulário; trocou o cliente, a seleção anterior
+   cai e a lista recarrega com os equipamentos do novo cliente. */
+let EOS_EQUIPS = [], EOS_EQUIP_OK = false, EOS_EQUIP_CID = null;
+async function eosCarregarEquips(cid, manterId){
+  EOS_EQUIPS = []; EOS_EQUIP_OK = false; EOS_EQUIP_CID = cid || null;
+  const hid = document.getElementById('eosEquip'), lbl = document.getElementById('eosEquipLabel');
+  if(hid) hid.value = '';
+  if(lbl){ lbl.textContent = '— nenhum —'; lbl.classList.add('text-gray-500'); }
+  if(!cid) return;
+  try{
+    EOS_EQUIPS = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`) || [];
+    EOS_EQUIP_OK = true;
+    if(manterId && EOS_EQUIPS.some(e=>String(e.id)===String(manterId))) eosEquipEscolher(manterId, true);
+  }catch(e){ EOS_EQUIPS = []; EOS_EQUIP_OK = false; }
+}
+function eosClienteMudou(){
+  const sel = document.getElementById('eosCliente');
+  eosCarregarEquips(sel ? sel.value : '');
+}
+function eosEquipAbrir(){
+  const box = document.getElementById('eosEquipLista');
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  const busca = document.getElementById('eosEquipBusca');
+  if(busca) busca.value = '';
+  eosEquipRender('');
+  box.classList.remove('hidden');
+  if(busca) setTimeout(()=>busca.focus(), 50);
+}
+function eosEquipFiltrar(v){ eosEquipRender((v||'').toUpperCase()); }
+function eosEquipRender(filtro){
+  const div = document.getElementById('eosEquipOpcoes');
+  if(!div) return;
+  const lista = EOS_EQUIPS.filter(e=>{
+    if(!filtro) return true;
+    const t = `${e.nome||''} ${e.numero_serie||''}`.toUpperCase();
+    return t.includes(filtro);
+  });
+  const selId = document.getElementById('eosEquip') ? document.getElementById('eosEquip').value : '';
+  let html = `<button type="button" class="w-full text-left px-4 py-3 text-base hover:bg-gray-100 border-b border-gray-100 text-gray-500" onclick="eosEquipEscolher('')">— nenhum —</button>`;
+  html += lista.map(e=>{
+    const txt = `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}`;
+    const sel = String(e.id)===String(selId);
+    return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="eosEquipEscolher('${e.id}')">${esc(txt)}${sel?' ✓':''}</button>`;
+  }).join('');
+  if(!lista.length) html += `<div class="px-4 py-3 text-sm text-gray-500">Nenhum equipamento cadastrado para este cliente.</div>`;
+  div.innerHTML = html;
+}
+function eosEquipEscolher(id, manterAberto){
+  const hid = document.getElementById('eosEquip');
+  const lbl = document.getElementById('eosEquipLabel');
+  if(hid) hid.value = id||'';
+  if(lbl){
+    if(id){
+      const e = EOS_EQUIPS.find(x=>String(x.id)===String(id));
+      lbl.textContent = e ? `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}` : '— nenhum —';
+      lbl.classList.toggle('text-gray-500', !e);
+    } else {
+      lbl.textContent = '— nenhum —';
+      lbl.classList.add('text-gray-500');
+    }
+  }
+  if(!manterAberto){
+    const box = document.getElementById('eosEquipLista');
+    if(box) box.classList.add('hidden');
+  }
+}
+function eosEquipClickFora(e){
+  const box = document.getElementById('eosEquipLista');
+  if(!box || box.classList.contains('hidden')) return;
+  if(e.target.closest('#eosEquipBtn') || e.target.closest('#eosEquipLista')) return;
+  box.classList.add('hidden');
+}
 /* ============ seletor de CLIENTE ============ */
 function osCliAbrir(){
   const box = document.getElementById('nosCliLista');
@@ -7489,7 +7565,7 @@ function openOsModal(html){
     m.id = 'modalOS';
     m.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
     m.style.cssText = 'display:none;background:rgba(0,0,0,.5)';
-    m.innerHTML = `<div class="card p-5 w-full max-w-lg xl:max-w-4xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event);osCliClickFora(event);osTipoClickFora(event)"><div id="modalOSBody"></div></div>`;
+    m.innerHTML = `<div class="card p-5 w-full max-w-lg xl:max-w-4xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();osEtiqClickFora(event);osEquipClickFora(event);eosEquipClickFora(event);osCliClickFora(event);osTipoClickFora(event)"><div id="modalOSBody"></div></div>`;
     m.onclick = ()=>closeOsModal();
     document.body.appendChild(m);
   }
@@ -8664,7 +8740,21 @@ async function osAbrirEditar(){
   openOsModal(`
     <div class="font-bold mb-3">✏️ Editar OS ${esc(o.numero)}</div>
     <label class="lbl">Cliente</label>
-    <select id="eosCliente" class="inp text-sm mb-2">${cliOptsEditar}</select>
+    <select id="eosCliente" class="inp text-sm mb-2" onchange="eosClienteMudou()">${cliOptsEditar}</select>
+    <label class="lbl">🔧 Equipamento principal</label>
+    <input type="hidden" id="eosEquip" value="">
+    <div class="relative mb-1">
+      <button type="button" id="eosEquipBtn" class="inp text-sm text-left w-full flex justify-between items-center" onclick="eosEquipAbrir()">
+        <span id="eosEquipLabel" class="truncate text-gray-500">— nenhum —</span><span>▾</span>
+      </button>
+      <div id="eosEquipLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] xl:max-h-[480px] max-h-72 flex flex-col">
+        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+          <input id="eosEquipBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar equipamento…" autocomplete="off" oninput="eosEquipFiltrar(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('eosEquipLista').classList.add('hidden')}">
+        </div>
+        <div id="eosEquipOpcoes" class="overflow-y-auto"></div>
+      </div>
+    </div>
+    <div class="text-xs text-gray-500 mb-2">A lista traz os equipamentos do cliente selecionado — trocou o cliente, a lista troca junto.</div>
     <label class="lbl">👷 Técnico responsável</label>
     ${osSelectTecnicoHTML('eosTecnico', OS_EDIT_TEC ? OS_EDIT_TEC.tecnico : '')}
     <label class="lbl">Descrição do serviço *</label>
@@ -8688,6 +8778,9 @@ async function osAbrirEditar(){
       <button class="btn-ghost flex-1" onclick="closeOsModal()">Cancelar</button>
       <button class="btn-brand flex-1 !w-auto" onclick="osSalvarEdicao()">Salvar alterações</button>
     </div>`);
+  /* a lista de equipamentos nasce com os do cliente atual da OS, com o
+     principal vigente pré-selecionado (só entra se for deste cliente) */
+  eosCarregarEquips(o.cliente_id, o.equipamento_id);
 }
 async function osSalvarEdicao(){
   const d = OS_DETALHE; if(!d) return;
@@ -8712,7 +8805,7 @@ async function osSalvarEdicao(){
   let trocouCliente = false;
   if(novoCliente && String(novoCliente)!==String(o.cliente_id)){
     const nc = (CLIENTES||[]).find(c=>String(c.id)===String(novoCliente));
-    if(!confirm(`Trocar o cliente desta OS para "${nc?nc.nome:'o selecionado'}"?\n\nO e-mail de conclusão passa a ser o do novo cliente. Os equipamentos vinculados (principal e adicionais) são do cliente atual e serão DESVINCULADOS — depois você vincula os equipamentos do novo cliente na aba Equipamentos.`)) return;
+    if(!confirm(`Trocar o cliente desta OS para "${nc?nc.nome:'o selecionado'}"?\n\nO e-mail de conclusão passa a ser o do novo cliente. A lista de equipamentos já passa a mostrar os do NOVO cliente — o principal você escolhe aqui mesmo; os vínculos adicionais do cliente anterior serão DESVINCULADOS.`)) return;
     trocouCliente = true;
   }
   try{
@@ -8720,6 +8813,15 @@ async function osSalvarEdicao(){
     const vs = parseValorBR(valEl ? valEl.value : '');
     const body = { descricao_servico: desc, valor_servicos: vs, updated_at: new Date().toISOString() };
     if(trocouCliente) body.cliente_id = novoCliente;
+    /* equipamento principal escolhido na edição: a lista é a do cliente do
+       formulário (atual ou novo) — só grava se a lista carregou de verdade;
+       se a leitura falhou, o principal vigente fica intocado */
+    const eosEquipEl = document.getElementById('eosEquip');
+    const pickerValeu = !!eosEquipEl && typeof EOS_EQUIP_OK!=='undefined' && EOS_EQUIP_OK
+      && String(EOS_EQUIP_CID)===String(trocouCliente ? novoCliente : o.cliente_id);
+    if(pickerValeu){
+      body.equipamento_id = eosEquipEl.value ? eosEquipEl.value : null;
+    }
     let etiquetasNovas = null;
     if(OS_FIELD_PARIDADE){
       const pr = document.getElementById('eosPrzResp'), ps = document.getElementById('eosPrzSol');
@@ -8743,10 +8845,22 @@ async function osSalvarEdicao(){
     // passam a ser os do cliente ATUAL. Principal e adicionais do cliente anterior são
     // desvinculados aqui; os do novo cliente ele vincula na aba Equipamentos da ficha.
     let vincFalhou = '';
+    /* se o principal escolhido já era vínculo adicional desta OS, ele sai dos
+       adicionais (não duplica: principal é principal) */
+    if(body.equipamento_id){
+      try{
+        const dup = await apiGET(`os_equipamentos?os_id=eq.${o.id}&equipamento_id=eq.${body.equipamento_id}&select=id`);
+        for(const v of (dup||[])) await apiDELETE('os_equipamentos', `id=eq.${v.id}`);
+      }catch(e){}
+    }
     if(trocouCliente){
       try{
         let removidos = 0;
-        if(o.equipamento_id){
+        /* principal: se o seletor da edição carregou a lista do cliente
+           vigente no formulário, o body já gravou o principal certo (o
+           escolhido ou nenhum) — a limpeza manual só entra como reserva
+           quando a lista não carregou ou não era a do cliente do formulário */
+        if(!pickerValeu && o.equipamento_id){
           await apiPATCH('os_clientes', `id=eq.${o.id}`, { equipamento_id: null });
           removidos++;
         }
