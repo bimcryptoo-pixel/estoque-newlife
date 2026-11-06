@@ -2058,6 +2058,7 @@ function entrarApp(){
   document.getElementById('userNome').textContent = `${sessao.nome} (${sessao.perfil})`;
   aplicarPermissoesNav();
   try{ nlAposLogin(); }catch(e){} /* 📴 fila offline: selo + sync pós-login */
+  try{ eqCarregarTipos(); }catch(e){} /* 🏷️ tipos de equipamento (tabela equip_tipos): aquece o cache p/ Nova OS/Editar */
   // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
   document.getElementById('fData').value = hojeISO();
   carregarProdutosCache().then(()=>{
@@ -6916,7 +6917,7 @@ function novaOS(){
       <input id="nosEqNome" class="inp text-sm" placeholder="Nome do equipamento (ex: ACL TOP 350)">
       <div class="grid grid-cols-2 gap-2">
         <input id="nosEqSerie" class="inp text-sm" placeholder="Nº de série">
-        <select id="nosEqTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select>
+        <select id="nosEqTipo" class="inp text-sm"><option value="">Tipo…</option>${eqTiposOpcoesHTML()}</select>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-2">
@@ -6941,6 +6942,7 @@ function novaOS(){
       <button class="btn-brand flex-1 !w-auto" id="btnSalvarOS" onclick="salvarOS()">Criar OS</button>
     </div>`);
   osRefreshSelectTecnico('nosTecnico');
+  eqCarregarTipos().then(()=>eqAtualizarSelectsTipo()).catch(()=>{});
 }
 function osTipoChanged(t){
   if(!t){
@@ -7177,13 +7179,14 @@ function osCadRapEquipAbrir(){
       <div><label class="lbl">Nome *</label><input id="nerNome" class="inp text-sm" placeholder="Ex: ACL TOP 350"></div>
       <div class="grid grid-cols-2 gap-2">
         <div><label class="lbl">Nº de série</label><input id="nerSerie" class="inp text-sm" placeholder="Nº de série"></div>
-        <div><label class="lbl">Tipo</label><select id="nerTipo" class="inp text-sm"><option value="">Tipo…</option>${LINHAS.map(l=>`<option>${l}</option>`).join('')}</select></div>
+        <div><label class="lbl">Tipo</label><select id="nerTipo" class="inp text-sm"><option value="">Tipo…</option>${eqTiposOpcoesHTML()}</select></div>
       </div>
     </div>
     <div class="flex gap-2 mt-4">
       <button class="btn-ghost flex-1" onclick="osCadRapFechar()">Cancelar</button>
       <button class="btn-brand flex-1 !w-auto" id="nerBtnSalvar" onclick="osCadRapEquipSalvar()">Salvar e selecionar</button>
     </div>`);
+  eqCarregarTipos().then(()=>eqAtualizarSelectsTipo()).catch(()=>{});
   setTimeout(()=>{ const i = document.getElementById('nerNome'); if(i) i.focus(); }, 50);
 }
 async function osCadRapEquipSalvar(){
@@ -7643,7 +7646,7 @@ function renderOSDetalhe(){
     <div id="osAbaBox">${renderOSAba()}</div>
   </div>`;
   window.scrollTo({top:0});
-  if((OS_DETALHE.aba||'geral')==='equipamentos') osCarregarVincEquips();
+  if((OS_DETALHE.aba||'geral')==='equipamentos'){ osCarregarVincEquips(); osCarregarPrincipalEquips(); }
 }
 
 function renderOSAba(){
@@ -7856,6 +7859,12 @@ function osAbaEquipamentos(d){
     <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
     ${eqP?`<div class="font-bold text-sm">${esc(eqP.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eqP.numero_serie||'—')} · ${esc(eqP.tipo||'—')}</div>`
       :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
+    ${editavel?`
+    <div class="flex gap-2 mt-2">
+      <select id="osPrincEqSel" class="inp text-sm flex-1"><option value="">— nenhum —</option></select>
+      <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="osSalvarEquipPrincipal()">Salvar principal</button>
+    </div>
+    <div class="text-[11px] text-gray-400 mt-1">A lista traz os equipamentos do cliente atual da OS — trocou o cliente, a lista troca junto.</div>`:''}
   </div>
   <div class="font-bold text-sm mb-2">Vínculos adicionais</div>
   <div class="grid gap-2 mb-3">
@@ -8218,6 +8227,35 @@ async function osDesvincularEquip(id){
   if(!confirm('Desvincular este equipamento?')) return;
   try{ await apiDELETE('os_equipamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'desvinculou um equipamento da OS'); await verOS(OS_DETALHE.os.id); }
   catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+/* ---------- equipamento PRINCIPAL da OS (editável na ficha — 06/11/2026) ----------
+   A lista é SEMPRE a do cliente atual da OS (d.os.cliente_id): trocou o cliente na
+   edição, a ficha recarrega e a lista passa a ser a do novo cliente. */
+async function osCarregarPrincipalEquips(){
+  const d = OS_DETALHE; if(!d) return;
+  const sel = document.getElementById('osPrincEqSel'); if(!sel) return;
+  try{
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie&order=nome.asc`);
+    sel.innerHTML = '<option value="">— nenhum —</option>' +
+      eqs.map(e=>`<option value="${e.id}" ${String(e.id)===String(d.os.equipamento_id||'')?'selected':''}>${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
+  }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
+}
+async function osSalvarEquipPrincipal(){
+  const d = OS_DETALHE; if(!d) return;
+  const sel = document.getElementById('osPrincEqSel'); if(!sel) return;
+  const eid = sel.value || null;
+  if(String(eid||'')===String(d.os.equipamento_id||'')){ toast('O equipamento principal não mudou.','alerta'); return; }
+  try{
+    await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { equipamento_id: eid });
+    /* se o escolhido também era vínculo adicional, ele vira principal e sai dos adicionais */
+    if(eid){
+      const dup = (d.equips||[]).find(e=>String(e.equipamento_id)===String(eid));
+      if(dup) await apiDELETE('os_equipamentos', `id=eq.${dup.id}`);
+    }
+    await osLog(d.os.id, eid ? 'definiu/trocou o equipamento principal da OS' : 'removeu o equipamento principal da OS');
+    toast('Equipamento principal atualizado. ✓','ok');
+    await verOS(d.os.id);
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
 /* ---------- prazos ---------- */
@@ -8674,7 +8712,7 @@ async function osSalvarEdicao(){
   let trocouCliente = false;
   if(novoCliente && String(novoCliente)!==String(o.cliente_id)){
     const nc = (CLIENTES||[]).find(c=>String(c.id)===String(novoCliente));
-    if(!confirm(`Trocar o cliente desta OS para "${nc?nc.nome:'o selecionado'}"?\n\nO e-mail de conclusão e os equipamentos passam a ser os do novo cliente.`)) return;
+    if(!confirm(`Trocar o cliente desta OS para "${nc?nc.nome:'o selecionado'}"?\n\nO e-mail de conclusão passa a ser o do novo cliente. Os equipamentos vinculados (principal e adicionais) são do cliente atual e serão DESVINCULADOS — depois você vincula os equipamentos do novo cliente na aba Equipamentos.`)) return;
     trocouCliente = true;
   }
   try{
@@ -8701,6 +8739,27 @@ async function osSalvarEdicao(){
     }
     await apiPATCH('os_clientes', `id=eq.${o.id}`, body);
     await osLog(o.id, trocouCliente ? 'editou a OS e trocou o cliente' : 'editou a OS');
+    // REGRA (06/11/2026, pedido do Fabio): trocou o cliente → os vínculos de equipamento
+    // passam a ser os do cliente ATUAL. Principal e adicionais do cliente anterior são
+    // desvinculados aqui; os do novo cliente ele vincula na aba Equipamentos da ficha.
+    let vincFalhou = '';
+    if(trocouCliente){
+      try{
+        let removidos = 0;
+        if(o.equipamento_id){
+          await apiPATCH('os_clientes', `id=eq.${o.id}`, { equipamento_id: null });
+          removidos++;
+        }
+        const vincAtuais = await apiGET(`os_equipamentos?os_id=eq.${o.id}&select=id,equipamentos(cliente_id)`);
+        for(const v of (vincAtuais||[])){
+          if(!v.equipamentos || String(v.equipamentos.cliente_id)!==String(novoCliente)){
+            await apiDELETE('os_equipamentos', `id=eq.${v.id}`);
+            removidos++;
+          }
+        }
+        if(removidos) await osLog(o.id, `troca de cliente: ${removidos} vínculo(s) de equipamento do cliente anterior removido(s)`);
+      }catch(e){ vincFalhou = e.message; }
+    }
     if(etiquetasNovas){
       const antigas = (o.etiquetas||[]).map(s=>String(s).toUpperCase());
       if(JSON.stringify(antigas) !== JSON.stringify(etiquetasNovas)){
@@ -8736,6 +8795,7 @@ async function osSalvarEdicao(){
     closeOsModal();
     OS_CACHE = null;
     if(designFalhou) toast(`OS ${o.numero} atualizada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
+    else if(vincFalhou) toast(`OS ${o.numero} atualizada, mas a limpeza dos vínculos de equipamento falhou: ${vincFalhou}`,'erro');
     else toast(`OS ${o.numero} atualizada. ✓`,'ok');
     await verOS(o.id);
   }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
@@ -12132,12 +12192,14 @@ async function osTelaEquipamentos(){
   box.classList.remove('hidden');
   const cliOpts = (CLIENTES||[]).filter(c=>c.ativo!==false)
     .map(c=>`<option value="${c.id}">${esc(fmtCliNome(c.nome,c.tipo))}</option>`).join('');
-  EQ_TP_ITENS = LINHAS.map(l=>({ valor: l, rotulo: l }));
+  await eqCarregarTipos();
+  EQ_TP_ITENS = eqTiposItensFC();
   if(!(OS_FC_ITENS||[]).length && (CLIENTES||[]).length) OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
   box.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
-      <div class="font-bold text-lg">🔧 Equipamentos</div><div></div>
+      <div class="font-bold text-lg">🔧 Equipamentos</div>
+      <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="eqAbrirTipos()">🏷️ Tipos</button>
     </div>
     <div class="grid gap-2 md:grid-cols-3 mb-3">
       <div class="relative" id="eqFormWrap">
@@ -12182,6 +12244,159 @@ async function osTelaEquipamentos(){
     <div id="eqLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
   await osListarEquipamentos();
 }
+/* ---------- 🏷️ TIPOS DE EQUIPAMENTO — tabela própria equip_tipos (06/11/2026, pedido do Fabio) ----------
+   INDEPENDENTES das linhas do estoque (constante LINHAS, dos produtos): a lista vive na
+   tabela equip_tipos e é gerenciada na janela "🏷️ Tipos" da tela de Equipamentos.
+   equipamentos.tipo guarda o NOME (texto); renomear na janela reflete nos equipamentos.
+   Se a leitura falhar/vier vazia, o formulário cai na lista padrão (LINHAS) sem travar —
+   e o cache SÓ é gravado com dados de verdade (lição do carregador de operadores). */
+let EQ_TIPOS_CACHE = null;
+let EQ_TP_USOS = {};
+async function eqCarregarTipos(forcar){
+  if(EQ_TIPOS_CACHE && !forcar) return EQ_TIPOS_CACHE;
+  try{
+    const rows = await apiGET('equip_tipos?select=*&order=ordem.asc,nome.asc');
+    if(Array.isArray(rows) && rows.length){ EQ_TIPOS_CACHE = rows; return rows; }
+  }catch(e){ /* formulário nunca quebra: cai na lista padrão */ }
+  return LINHAS.map((l,i)=>({ id:null, nome:l, ativo:true, ordem:i+1 }));
+}
+function eqTiposNomes(){ return (EQ_TIPOS_CACHE||[]).filter(t=>t.ativo!==false).map(t=>t.nome); }
+function eqTiposOpcoesHTML(){ const ns = EQ_TIPOS_CACHE ? eqTiposNomes() : LINHAS; return ns.map(l=>`<option>${esc(l)}</option>`).join(''); }
+function eqTiposItensFC(){ const ns = EQ_TIPOS_CACHE ? eqTiposNomes() : LINHAS; return ns.map(l=>({ valor:l, rotulo:l })); }
+function eqAtualizarSelectsTipo(){
+  ['nosEqTipo','nerTipo'].forEach(id=>{ const s = document.getElementById(id); if(s){ const v = s.value; s.innerHTML = '<option value="">Tipo…</option>' + eqTiposOpcoesHTML(); if(v) s.value = v; } });
+}
+function eqSincronizarUsoTipos(){
+  EQ_TP_ITENS = eqTiposItensFC();
+  if(typeof fcRender==='function'){ const l = document.getElementById('eqTipoLista'); if(l && !l.classList.contains('hidden')) fcRender('eqtipo'); }
+  eqAtualizarSelectsTipo();
+}
+let EQ_TP_EDIT_ID = null;
+async function eqAbrirTipos(){
+  eqFecharTipos();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" id="modalEqTipos" style="z-index:10060" onclick="if(event.target===this)eqFecharTipos()">
+      <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl my-8">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-bold">🏷️ Tipos de equipamento</div>
+          <button class="btn-ghost !w-auto !py-1 !px-3 text-sm" onclick="eqFecharTipos()">✕ Fechar</button>
+        </div>
+        <div class="text-xs text-gray-500 mb-3">Lista própria do módulo de OS — não mexe nas linhas do estoque. Renomear um tipo atualiza também os equipamentos já cadastrados com ele.</div>
+        <div class="grid gap-2 mb-3">
+          <label class="lbl" id="eqTpFormTitulo">＋ Novo tipo</label>
+          <div class="flex gap-2">
+            <input id="eqTpNome" class="inp text-sm flex-1" placeholder="Ex: Ultrassom" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();eqSalvarTipo();}">
+            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="eqTpBtnSalvar" onclick="eqSalvarTipo()">＋ Adicionar</button>
+            <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqTpBtnCancelar" onclick="eqCancelarEdicaoTipo()">Cancelar</button>
+          </div>
+        </div>
+        <div id="eqTpLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>
+      </div>
+    </div>`);
+  await eqCarregarTipos(true);
+  try{
+    const eqs = await apiGET('equipamentos?select=tipo&limit=2000');
+    EQ_TP_USOS = {};
+    (eqs||[]).forEach(e=>{ if(e.tipo) EQ_TP_USOS[e.tipo] = (EQ_TP_USOS[e.tipo]||0)+1; });
+  }catch(e){ EQ_TP_USOS = {}; }
+  eqRenderTipos();
+  setTimeout(()=>{ const i = document.getElementById('eqTpNome'); if(i) i.focus(); }, 50);
+}
+function eqFecharTipos(){ const m = document.getElementById('modalEqTipos'); if(m) m.remove(); EQ_TP_EDIT_ID = null; }
+function eqRenderTipos(){
+  const box = document.getElementById('eqTpLista'); if(!box) return;
+  const lista = EQ_TIPOS_CACHE || [];
+  box.innerHTML = lista.length ? lista.map(t=>{
+    const usos = EQ_TP_USOS[t.nome]||0;
+    const editando = String(EQ_TP_EDIT_ID||'')===String(t.id||'');
+    return `
+    <div class="border rounded-lg p-2.5 text-sm flex items-center gap-2 flex-wrap ${t.ativo===false?'opacity-60':''}">
+      <div class="flex-1 min-w-[140px]">
+        <b>${esc(t.nome)}</b>
+        ${t.ativo===false?'<span class="text-[11px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">inativo</span>':''}
+        <div class="text-xs text-gray-500">${usos} equipamento${usos===1?'':'s'} com este tipo</div>
+      </div>
+      ${editando?'<span class="text-xs font-bold text-brand">editando acima ↑</span>':`<button class="text-xs text-blue-700 font-bold" onclick="eqEditarTipo('${t.id}')">✏️ editar</button>`}
+      <button class="text-xs ${t.ativo===false?'text-green-700':'text-amber-700'} font-bold" onclick="eqAlternarTipo('${t.id}')">${t.ativo===false?'Reativar':'Inativar'}</button>
+      <button class="text-xs text-red-700 font-bold" onclick="eqExcluirTipo('${t.id}')">🗑️</button>
+    </div>`;
+  }).join('') : '<span class="text-gray-400 text-sm">Nenhum tipo cadastrado.</span>';
+}
+function eqEditarTipo(id){
+  const t = (EQ_TIPOS_CACHE||[]).find(x=>String(x.id)===String(id)); if(!t) return;
+  EQ_TP_EDIT_ID = t.id;
+  document.getElementById('eqTpNome').value = t.nome;
+  document.getElementById('eqTpFormTitulo').textContent = '✏️ Editar tipo';
+  document.getElementById('eqTpBtnSalvar').textContent = '💾 Salvar';
+  document.getElementById('eqTpBtnCancelar').classList.remove('hidden');
+  eqRenderTipos();
+  document.getElementById('eqTpNome').focus();
+}
+function eqCancelarEdicaoTipo(){
+  EQ_TP_EDIT_ID = null;
+  const i = document.getElementById('eqTpNome'); if(i) i.value = '';
+  const tt = document.getElementById('eqTpFormTitulo'); if(tt) tt.textContent = '＋ Novo tipo';
+  const b = document.getElementById('eqTpBtnSalvar'); if(b) b.textContent = '＋ Adicionar';
+  const bc = document.getElementById('eqTpBtnCancelar'); if(bc) bc.classList.add('hidden');
+  eqRenderTipos();
+}
+async function eqSalvarTipo(){
+  const inp = document.getElementById('eqTpNome'); if(!inp) return;
+  const nome = inp.value.trim();
+  if(!nome){ toast('Informe o nome do tipo.','erro'); return; }
+  const lista = EQ_TIPOS_CACHE || [];
+  const editando = EQ_TP_EDIT_ID ? lista.find(x=>String(x.id)===String(EQ_TP_EDIT_ID)) : null;
+  if(lista.some(x=>x.nome.toLowerCase()===nome.toLowerCase() && (!editando || String(x.id)!==String(editando.id)))){
+    toast('Já existe um tipo com esse nome.','erro'); return;
+  }
+  try{
+    if(editando){
+      const antigo = editando.nome;
+      await apiPATCH('equip_tipos', `id=eq.${editando.id}`, { nome });
+      if(antigo !== nome){
+        await apiPATCH('equipamentos', `tipo=eq.${encodeURIComponent(antigo)}`, { tipo: nome });
+        if(EQ_TP_USOS[antigo]){ EQ_TP_USOS[nome] = (EQ_TP_USOS[nome]||0) + EQ_TP_USOS[antigo]; delete EQ_TP_USOS[antigo]; }
+      }
+      toast('Tipo atualizado. ✓','ok');
+      eqCancelarEdicaoTipo();
+    }else{
+      const ordem = lista.reduce((m,x)=>Math.max(m, Number(x.ordem)||0), 0) + 1;
+      await apiPOST('equip_tipos', { nome, ordem });
+      toast('Tipo cadastrado. ✓','ok');
+      inp.value = '';
+    }
+    await eqCarregarTipos(true);
+    eqSincronizarUsoTipos();
+    eqRenderTipos();
+  }catch(e){
+    toast(/23505|duplicate/i.test(e.message) ? 'Já existe um tipo com esse nome.' : 'Erro: '+e.message, 'erro');
+  }
+}
+async function eqAlternarTipo(id){
+  const t = (EQ_TIPOS_CACHE||[]).find(x=>String(x.id)===String(id)); if(!t) return;
+  try{
+    await apiPATCH('equip_tipos', `id=eq.${t.id}`, { ativo: t.ativo===false });
+    toast(t.ativo===false ? 'Tipo reativado. ✓' : 'Tipo inativado — some das listas, sem apagar os equipamentos. ✓','ok');
+    await eqCarregarTipos(true);
+    eqSincronizarUsoTipos();
+    eqRenderTipos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function eqExcluirTipo(id){
+  const t = (EQ_TIPOS_CACHE||[]).find(x=>String(x.id)===String(id)); if(!t) return;
+  const usos = EQ_TP_USOS[t.nome]||0;
+  if(usos>0){ toast(`"${t.nome}" está em ${usos} equipamento(s) — não dá para excluir. Use Inativar.`,'erro'); return; }
+  if(!confirm(`Excluir o tipo "${t.nome}"?`)) return;
+  try{
+    await apiDELETE('equip_tipos', `id=eq.${t.id}`);
+    toast('Tipo excluído. ✓','ok');
+    if(String(EQ_TP_EDIT_ID||'')===String(t.id)) eqCancelarEdicaoTipo();
+    await eqCarregarTipos(true);
+    eqSincronizarUsoTipos();
+    eqRenderTipos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
 let EQ_LISTA = [];
 let EQ_TP_ITENS = [];   // itens do combobox Tipo (formulário de equipamentos)
 let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
