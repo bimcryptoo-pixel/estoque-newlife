@@ -8756,7 +8756,7 @@ async function osAbrirEditar(){
     </div>
     <div class="text-xs text-gray-500 mb-2">A lista traz os equipamentos do cliente selecionado — trocou o cliente, a lista troca junto.</div>
     <label class="lbl">👷 Técnico responsável</label>
-    ${osSelectTecnicoHTML('eosTecnico', OS_EDIT_TEC ? OS_EDIT_TEC.tecnico : '')}
+    ${osSelectTecnicoHTML('eosTecnico', OS_EDIT_TEC ? OS_EDIT_TEC.tecnico : (o.tecnico || ''))}
     <label class="lbl">Descrição do serviço *</label>
     <textarea id="eosDesc" class="inp text-sm mb-2" rows="3">${esc(o.descricao_servico||'')}</textarea>
     ${OS_FIELD_PARIDADE?`
@@ -8789,9 +8789,15 @@ async function osSalvarEdicao(){
   const descEl = document.getElementById('eosDesc');
   const desc = descEl ? descEl.value.trim() : '';
   if(!desc){ toast('Descreva o serviço.','erro'); return; }
-  // designação de técnico: compara a seleção com a atividade aberta atual (OS_EDIT_TEC)
+  // designação de técnico: compara a seleção com o técnico de registro da OS —
+  // a atividade aberta (OS_EDIT_TEC) manda; sem atividade aberta, vale o
+  // os_clientes.tecnico (espelho da última atividade). NUNCA comparar com ''
+  // só porque a OS está concluída: foi o bug de 09/11/2026 (OS-2026-0028) —
+  // a edição comparava 'Márcia Fernandes' com '' e disparava designação nova,
+  // com atividade e push fantasmas numa OS já concluída.
   const tecEl = document.getElementById('eosTecnico');
-  const tecAtual = OS_EDIT_TEC ? (OS_EDIT_TEC.tecnico||'') : '';
+  const tecAtual = OS_EDIT_TEC ? (OS_EDIT_TEC.tecnico||'') : (o.tecnico||'');
+  const osFechada = ['concluida','cancelada'].includes(o.status);
   const tecNovo = tecEl ? tecEl.value : tecAtual;
   const tecMudou = tecEl ? (tecNovo !== tecAtual) : false;
   // remover o técnico de atividade JÁ INICIADA aborta o salvamento inteiro (nada é gravado)
@@ -8882,7 +8888,15 @@ async function osSalvarEdicao(){
     }
     // designação SÓ depois da edição salva; falha aqui não se esconde (toast específico)
     let designFalhou = '';
-    if(tecMudou){
+    let tecIgnoradoFechada = false;
+    if(tecMudou && osFechada){
+      /* OS concluída/cancelada NÃO recebe designação pela edição: trocar o
+         técnico ali criaria atividade e push fantasmas (caso OS-2026-0028,
+         09/11/2026). O resto da edição salva normal; o técnico fica o de
+         registro e o usuário é avisado no toast final. */
+      tecIgnoradoFechada = true;
+    }
+    if(tecMudou && !osFechada){
       try{
         if(tecNovo){
           if(OS_EDIT_TEC){
@@ -8893,7 +8907,7 @@ async function osSalvarEdicao(){
             if(o.status==='aberta') await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'em_atendimento' });
             await osLog(o.id, `OS designada para ${tecNovo}`);
           }
-        } else {
+        } else if(OS_EDIT_TEC) {
           // remoção: a trava acima garante atividade 'pendente' (não iniciada)
           await apiDELETE('os_atividades', `id=eq.${OS_EDIT_TEC.atvId}`);
           const restantes = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id`);
@@ -8910,6 +8924,7 @@ async function osSalvarEdicao(){
     OS_CACHE = null;
     if(designFalhou) toast(`OS ${o.numero} atualizada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
     else if(vincFalhou) toast(`OS ${o.numero} atualizada, mas a limpeza dos vínculos de equipamento falhou: ${vincFalhou}`,'erro');
+    else if(tecIgnoradoFechada) toast(`OS ${o.numero} atualizada. O técnico não foi alterado: OS concluída não recebe nova designação pela edição.`,'alerta');
     else toast(`OS ${o.numero} atualizada. ✓`,'ok');
     await verOS(o.id);
   }catch(e){ toast('Erro ao editar OS: '+e.message,'erro'); }
