@@ -7689,7 +7689,7 @@ function renderOSDetalhe(){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osReabrir()">↩️ Reabrir</button>`;
   if(o.origem!=='fieldcontrol'){
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirEditar()">✏️ Editar</button>`;
-    /* 🗑️ Excluir: o Fabio exclui direto; os demais pedem o PIN a ele (04/11/2026) */
+    /* 🗑️ Excluir: Fabio, Fabrício e Suzana excluem direto; os demais pedem o PIN a ele (04/11/2026; ampliado 10/11/2026) */
     acoes += `<button class="btn-ghost !w-auto !py-2 !px-4 text-sm !text-red-600 !border-red-300" onclick="osConfirmarExcluir()">🗑️ Excluir</button>`;
   }
 
@@ -8024,7 +8024,11 @@ async function osAddServico(){
 }
 async function osDelServico(id){
   if(!confirm('Excluir este serviço?')) return;
-  try{ await apiDELETE('os_servicos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um serviço avulso'); await verOS(OS_DETALHE.os.id); }
+  const reg = (OS_DETALHE.servicos||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Serviços', 'os_servicos', id, reg || { id });
+    await apiDELETE('os_servicos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um serviço avulso'); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -8061,7 +8065,11 @@ async function osAddDespesa(){
 }
 async function osDelDespesa(id){
   if(!confirm('Excluir esta despesa?')) return;
-  try{ await apiDELETE('os_despesas', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu uma despesa'); await verOS(OS_DETALHE.os.id); }
+  const reg = (OS_DETALHE.despesas||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Despesas', 'os_despesas', id, reg || { id });
+    await apiDELETE('os_despesas', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu uma despesa'); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -8115,7 +8123,11 @@ async function osOrcStatus(id, st){
 }
 async function osDelOrcamento(id){
   if(!confirm('Excluir este orçamento?')) return;
-  try{ await apiDELETE('os_orcamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um orçamento'); await verOS(OS_DETALHE.os.id); }
+  const reg = (OS_DETALHE.orcamentos||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Orçamentos', 'os_orcamentos', id, reg || { id });
+    await apiDELETE('os_orcamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'excluiu um orçamento'); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -8138,10 +8150,16 @@ function osAbaFormularios(d){
   }).join('') + `</div>`;
 }
 
+/* Remover assinatura: admin OU quem exclui direto no módulo (Fabio, Fabrício
+   e Suzana — 10/11/2026, pedido do Fabio). */
+function podeRemoverAssinatura(){
+  if(typeof sessao==='undefined' || !sessao) return false;
+  return sessao.perfil==='admin' || loginExclusaoDireta();
+}
 function osAbaAssinaturas(d){
   const o = d.os;
   const sigs = d.assinaturas||[];
-  const ehAdmin = (typeof sessao!=='undefined' && sessao && sessao.perfil==='admin');
+  const ehAdmin = podeRemoverAssinatura();
   const urlsListadas = new Set(sigs.map(s=>s.url).filter(Boolean));
   const cards = [];
   // assinatura gravada direto na OS (coleta do escritório) que não está em os_assinaturas
@@ -8170,10 +8188,17 @@ function osAbaAssinaturas(d){
   return `<div class="grid gap-3">` + cards.join('') + `</div>`;
 }
 async function osRemoverAssinatura(sigId, url){
-  if(!(typeof sessao!=='undefined' && sessao && sessao.perfil==='admin')){ toast('Remover assinatura é restrito ao administrador.','erro'); return; }
+  if(!podeRemoverAssinatura()){ toast('Remover assinatura é restrito ao Fabio, ao Fabrício e à Suzana.','erro'); return; }
   const d = OS_DETALHE; if(!d) return;
   if(!confirm('Remover esta assinatura da OS? Sem assinatura, a OS não pode ser finalizada.')) return;
   try{
+    /* 🗑️ backup ANTES de remover: as linhas de os_assinaturas atingidas + a
+       assinatura gravada direto na OS (assinatura_url), quando for o caso */
+    const atingidas = (d.assinaturas||[]).filter(s => (sigId && String(s.id)===String(sigId)) || (url && s.url===url));
+    await osBackupExclusao('OS Clientes › ficha da OS › Assinaturas', 'os_assinaturas', sigId || '', {
+      os_id: d.os.id, numero: d.os.numero, assinaturas: atingidas,
+      assinatura_url_os: (url && d.os.assinatura_url===url) ? url : null
+    });
     if(sigId) await apiDELETE('os_assinaturas', `id=eq.${sigId}`);
     if(url){
       // a mesma URL pode existir em outra linha de os_assinaturas — limpa todas
@@ -8181,7 +8206,7 @@ async function osRemoverAssinatura(sigId, url){
       for(const s of outras) await apiDELETE('os_assinaturas', `id=eq.${s.id}`);
       if(d.os.assinatura_url===url) await apiPATCH('os_clientes', `id=eq.${d.os.id}`, { assinatura_url:null, assinatura_em:null });
     }
-    await osLog(d.os.id, 'removeu uma assinatura da OS (admin)');
+    await osLog(d.os.id, 'removeu uma assinatura da OS');
     toast('Assinatura removida. ✓','ok');
     await verOS(d.os.id);
   }catch(e){ toast('Erro: '+e.message,'erro'); }
@@ -8264,7 +8289,11 @@ async function osAddComentario(){
 }
 async function osDelComentario(id){
   if(!confirm('Excluir este comentário?')) return;
-  try{ await apiDELETE('os_comentarios', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  const reg = (OS_DETALHE.comentarios||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Comentários', 'os_comentarios', id, reg || { id });
+    await apiDELETE('os_comentarios', `id=eq.${id}`); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -8301,7 +8330,11 @@ async function osVincularEquip(){
 }
 async function osDesvincularEquip(id){
   if(!confirm('Desvincular este equipamento?')) return;
-  try{ await apiDELETE('os_equipamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'desvinculou um equipamento da OS'); await verOS(OS_DETALHE.os.id); }
+  const reg = (OS_DETALHE.equips||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Equipamentos', 'os_equipamentos', id, reg || { id });
+    await apiDELETE('os_equipamentos', `id=eq.${id}`); await osLog(OS_DETALHE.os.id, 'desvinculou um equipamento da OS'); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 /* ---------- equipamento PRINCIPAL da OS (editável na ficha — 06/11/2026) ----------
@@ -8415,7 +8448,11 @@ async function osToggleTipo(id, ativo){
 }
 async function osDelTipo(id){
   if(!confirm('Excluir este item da lista? As OSs já gravadas mantêm a etiqueta.')) return;
-  try{ await apiDELETE('tipos_os', `id=eq.${id}`); osListarTipos(); carregarTiposOS(); }
+  try{
+    const [reg] = await apiGET(`tipos_os?id=eq.${id}&select=*`);
+    await osBackupExclusao('OS Clientes › Tipos OS / Etiquetas', 'tipos_os', id, reg || { id });
+    await apiDELETE('tipos_os', `id=eq.${id}`); osListarTipos(); carregarTiposOS();
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
@@ -8511,7 +8548,11 @@ async function osToggleAtividade(id){
 }
 async function osExcluirAtividade(id){
   if(!confirm('Excluir esta atividade?')) return;
-  try{ await apiDELETE('os_atividades', `id=eq.${id}`); await verOS(OS_DETALHE.os.id); }
+  const reg = ((OS_DETALHE && OS_DETALHE.atividades) || []).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Atividades', 'os_atividades', id, reg || { id });
+    await apiDELETE('os_atividades', `id=eq.${id}`); await verOS(OS_DETALHE.os.id);
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 /* ❌ Cancelar atividade pelo ESCRITÓRIO (OS Clientes) — regra do Fabio
@@ -8592,6 +8633,7 @@ async function osRemoverProduto(id){
   const it = (d.produtos||[]).find(p=>p.id===id); if(!it) return;
   if(!confirm(`Remover "${it.produtos?it.produtos.nome:''}" da OS?\nA baixa de estoque será estornada.`)) return;
   try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Produtos', 'os_produtos', id, it);
     await osEstornarProdutoOS(it, d.os.numero);
     await apiDELETE('os_produtos', `id=eq.${id}`);
     await osLog(d.os.id, `removeu produto da OS (estoque estornado)`);
@@ -8683,6 +8725,10 @@ async function osCancelarConfirmar(){
     }
   }
   try{
+    /* 🗑️ backup dos produtos que o cancelamento apaga (10/11/2026): ANTES do
+       estorno e do delete — backup falhou, o cancelamento não prossegue. */
+    if((d.produtos||[]).length)
+      await osBackupExclusao('OS Clientes › cancelar OS', 'os_produtos', o.id, { os_id: o.id, numero: o.numero, produtos: d.produtos }, 'produtos removidos no cancelamento da OS');
     for(const it of (d.produtos||[])) await osEstornarProdutoOS(it, o.numero);
     await apiDELETE('os_produtos', `os_id=eq.${o.id}`);
     /* cancela as atividades em aberto — o chamado some da fila do técnico */
@@ -8704,16 +8750,39 @@ async function osCancelarConfirmar(){
 
 /* ---------- editar / excluir OS ----------
    Regra: OSs importadas do Field Control (origem='fieldcontrol') são histórico
-   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir: o Fabio exclui DIRETO
-   (podeExcluirOS, pela pessoa); os demais só com o PIN que ele recebe e
-   aprova caso a caso (fluxo os_exclusao_* — 04/11/2026). */
+   IMUTÁVEL — nunca editáveis nem excluíveis. Excluir: Fabio, Fabrício e Suzana
+   excluem DIRETO (loginExclusaoDireta — 10/11/2026, pedido do Fabio); os demais
+   só com o PIN que ele recebe e aprova caso a caso (fluxo os_exclusao_* —
+   04/11/2026). TODA exclusão do módulo grava ANTES um backup completo do
+   registro em exclusoes_backup (osBackupExclusao) — se o backup falhar, a
+   exclusão NÃO prossegue (falha segura). */
 function osEhEditavel(o){ return !!o && o.origem!=='fieldcontrol'; }
-/* Trava de pessoa (20/10/2026): excluir DIRETO é exclusivo do Fabio. A trava é
-   no LOGIN dele de propósito: um futuro segundo admin NÃO exclui direto —
-   cai no fluxo do PIN, como todos os demais (04/11/2026). */
+/* 🗑️ Quem exclui DIRETO (sem PIN) no módulo OS Clientes — regra do Fabio
+   (10/11/2026): ele próprio (perfil admin + login 'fabio' — trava de pessoa de
+   20/10/2026: um futuro segundo admin NÃO entra aqui) e os logins 'fabricio'
+   e 'suzana'. Os demais usuários seguem como estavam: PIN na exclusão da OS
+   e as travas atuais de cada tela. */
+function loginExclusaoDireta(){
+  if(typeof sessao==='undefined' || !sessao) return false;
+  const lg = String(sessao.login||'').trim().toLowerCase();
+  if(lg==='fabricio' || lg==='suzana') return true;
+  return sessao.perfil==='admin' && lg==='fabio';
+}
 function podeExcluirOS(){
-  return typeof sessao!=='undefined' && !!sessao && sessao.perfil==='admin'
-    && String(sessao.login||'').trim().toLowerCase()==='fabio';
+  return loginExclusaoDireta();
+}
+/* 🗑️ BACKUP de exclusão (10/11/2026, pedido do Fabio): ANTES de apagar
+   qualquer registro do módulo OS Clientes, grava o conteúdo completo em
+   exclusoes_backup — tela, tabela de origem, id do registro, o registro
+   inteiro (e os filhos relevantes), quem excluiu e o motivo quando houver.
+   Se a gravação falhar, lança erro: quem chama ABORTA a exclusão (sem
+   backup, não apaga). */
+async function osBackupExclusao(tela, tabela, registroId, conteudo, motivo){
+  const login = (typeof sessao!=='undefined' && sessao && sessao.login) ? String(sessao.login) : '';
+  await apiPOST('exclusoes_backup', {
+    tela: tela || '', tabela_origem: tabela, registro_id: registroId==null ? '' : String(registroId),
+    conteudo: conteudo || {}, excluido_por: login, motivo: motivo || null
+  });
 }
 function osDtLocalInput(iso){
   if(!iso) return '';
@@ -8933,8 +9002,9 @@ function osConfirmarExcluir(){
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); return; }
-  /* 🔐 PIN (04/11/2026, pedido do Fabio): quem não é o Fabio não exclui direto —
-     solicita um PIN que só ELE recebe (e analisa a OS antes de passar ou não). */
+  /* 🔐 PIN (04/11/2026, pedido do Fabio): quem não é Fabio, Fabrício ou Suzana
+     não exclui direto — solicita um PIN que só ELE recebe (e analisa a OS
+     antes de passar ou não). */
   if(!podeExcluirOS()){ osExcluirPedirPin(); return; }
   osConfirmarExcluirFinal();
 }
@@ -9021,6 +9091,21 @@ async function osExcluirDefinitivo(){
     try{ okPin = await apiRPC('os_exclusao_consumir', { p_id: OS_EXCL_SOL }); }catch(e){}
     OS_EXCL_SOL = null;
     if(!okPin){ toast('🔒 PIN não liberado ou expirado. Solicite um novo PIN ao Fabio.','erro'); closeOsModal(); return; }
+  }
+  /* 🗑️ BACKUP COMPLETO DA OS (10/11/2026, pedido do Fabio): ANTES do
+     desconsidere, do estorno e dos deletes, grava a OS inteira + todos os
+     filhos em exclusoes_backup. Se qualquer parte falhar, a exclusão NÃO
+     prossegue (falha segura: sem backup, não apaga). */
+  try{
+    const [osFull] = await apiGET(`os_clientes?id=eq.${o.id}&select=*`);
+    const filhosBk = ['os_atividades','os_anexos','os_assinaturas','os_equipamentos','os_formularios','os_produtos','os_servicos','os_despesas','os_orcamentos','os_comentarios','os_historico'];
+    const conteudoBk = { os: osFull || o };
+    for(const tBk of filhosBk) conteudoBk[tBk] = await apiGET(`${tBk}?os_id=eq.${o.id}&select=*`);
+    await osBackupExclusao('OS Clientes › ficha da OS', 'os_clientes', o.id, conteudoBk, null);
+  }catch(e){
+    toast('🛑 O backup da exclusão falhou — a OS NÃO foi excluída. Tente de novo. ('+e.message+')','erro');
+    closeOsModal();
+    return;
   }
   /* 📧 DESCONSIDERE (28/10/2026, pedido do Fabio): se o e-mail de abertura desta OS
      já foi enviado ao cliente, o desconsidere sai ANTES de apagar — o cliente não
@@ -9538,6 +9623,7 @@ async function osExcluirAnexo(id){
   const d = OS_DETALHE; if(!d) return;
   const an = (d.anexos||[]).find(a=>a.id===id);
   try{
+    await osBackupExclusao('OS Clientes › ficha da OS › Anexos', 'os_anexos', id, an || { id });
     await apiDELETE('os_anexos', `id=eq.${id}`);
     // apaga também o arquivo no storage (política recibos_delete — mesmo padrão de tecFluxoFotoDel)
     const chave = an && an.url ? String(an.url).split('/object/public/recibos/')[1] : null;
@@ -11190,6 +11276,7 @@ async function tecFotoApagar(anexoId, osId){
   const lista = (TEC_FOTOS_LISTA && TEC_FOTOS_LISTA[osId]) || [];
   const an = lista.find(x=>String(x.id) === String(anexoId));
   try{
+    await osBackupExclusao('Minhas OS › Fotos do atendimento', 'os_anexos', anexoId, an || { id: anexoId, os_id: osId });
     await apiDELETE('os_anexos', `id=eq.${anexoId}`);
     const chave = an && an.url ? String(an.url).split('/object/public/recibos/')[1] : null;
     if(chave) await fetch(`${SUPA_URL}/storage/v1/object/recibos/${chave}`, { method:'DELETE', headers:{ 'apikey':SUPA_KEY, 'Authorization':'Bearer ' + SUPA_KEY } }).catch(()=>{});
@@ -11899,9 +11986,12 @@ async function tecFluxoFotoDel(i){
   const url = entrada;
   if(!confirm('Apagar esta foto?')) return;
   try{
-    const rows = await apiGET(`os_anexos?os_id=eq.${F.osId}&select=id,url`);
+    const rows = await apiGET(`os_anexos?os_id=eq.${F.osId}&select=*`);
     const r = (rows||[]).find(x=>x.url===url);
-    if(r) await apiDELETE('os_anexos', `id=eq.${r.id}`);
+    if(r){
+      await osBackupExclusao('Minhas OS › fluxo de conclusão › Fotos', 'os_anexos', r.id, r);
+      await apiDELETE('os_anexos', `id=eq.${r.id}`);
+    }
     const chave = url.split('/object/public/recibos/')[1];
     if(chave){
       await fetch(`${SUPA_URL}/storage/v1/object/recibos/${chave}`, {
@@ -12517,6 +12607,7 @@ async function eqExcluirTipo(id){
   if(usos>0){ toast(`"${t.nome}" está em ${usos} equipamento(s) — não dá para excluir. Use Inativar.`,'erro'); return; }
   if(!confirm(`Excluir o tipo "${t.nome}"?`)) return;
   try{
+    await osBackupExclusao('OS Clientes › Equipamentos › Tipos', 'equip_tipos', t.id, t);
     await apiDELETE('equip_tipos', `id=eq.${t.id}`);
     toast('Tipo excluído. ✓','ok');
     if(String(EQ_TP_EDIT_ID||'')===String(t.id)) eqCancelarEdicaoTipo();
@@ -12595,7 +12686,11 @@ async function osSalvarEquipamento(){
 }
 async function osExcluirEquipamento(id){
   if(!confirm('Excluir este equipamento?')) return;
-  try{ await apiDELETE('equipamentos', `id=eq.${id}`); await osListarEquipamentos(); }
+  const reg = (EQ_LISTA||[]).find(x=>String(x.id)===String(id));
+  try{
+    await osBackupExclusao('OS Clientes › Equipamentos', 'equipamentos', id, reg || { id });
+    await apiDELETE('equipamentos', `id=eq.${id}`); await osListarEquipamentos();
+  }
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
