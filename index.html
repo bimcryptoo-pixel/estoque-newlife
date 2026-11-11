@@ -6461,6 +6461,8 @@ const FC_CFG = {
   periodo:{ hidden:'osFiltroPeriodo', label:'osPerLabel', lista:'osPerLista', busca:'osPerBusca', opcoes:'osPerOpcoes', todos:'Todas as datas', vazio:'—' },
   eqform:{ hidden:'eqCliente', label:'eqFormLabel', lista:'eqFormLista', busca:'eqFormBusca', opcoes:'eqFormOpcoes', todos:'— cliente —', vazio:'Nenhum cliente encontrado.' },
   eqtipo:{ hidden:'eqTipo', label:'eqTipoLabel', lista:'eqTipoLista', busca:'eqTipoBusca', opcoes:'eqTipoOpcoes', todos:'Tipo…', vazio:'—' },
+  eqsetor:{ hidden:'eqSetor', label:'eqSetorLabel', lista:'eqSetorLista', busca:'eqSetorBusca', opcoes:'eqSetorOpcoes', todos:'Sem setor', vazio:'Nenhum setor cadastrado neste cliente.' },
+  eqsetorcli:{ hidden:'eqSetorCliente', label:'eqSetorCliLabel', lista:'eqSetorCliLista', busca:'eqSetorCliBusca', opcoes:'eqSetorCliOpcoes', todos:'— escolha o cliente —', vazio:'Nenhum cliente encontrado.' },
   canc: { hidden:'osCancMotivoH', label:'osCancLabel', lista:'osCancLista', busca:'osCancBusca', opcoes:'osCancOpcoes', todos:'Selecione o motivo…', vazio:'Nenhum motivo encontrado.' },
 };
 let OS_FC_ITENS = [];   // [{valor, rotulo}] — OS Clientes (de CLIENTES)
@@ -6491,7 +6493,12 @@ const OS_CANC_ITENS = [  // ❌ motivos do cancelamento da OS (28/10/2026, pedid
   { valor:'Atendimento reagendado', rotulo:'Atendimento reagendado' },
   { valor:'Outro', rotulo:'Outro' },
 ];
-function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='oper' ? OS_OP_ITENS : qual==='canc' ? OS_CANC_ITENS : OS_FC_ITENS; }
+/* 🏢 itens de cliente com a sentinela "na empresa" no topo (só nos comboboxes de
+   EQUIPAMENTOS — filtro e formulário; os demais comboboxes de cliente do sistema
+   seguem com OS_FC_ITENS puro). '__semcliente' = filtro da lista; '__empresa' =
+   valor do formulário (grava cliente_id NULL). */
+function eqItensComSentinela(sentinela){ return [{ valor: sentinela, rotulo: '🏢 Na empresa (sem cliente)' }].concat(OS_FC_ITENS||[]); }
+function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_TP_ITENS : qual==='email' ? OS_EM_ITENS : qual==='periodo' ? OS_PER_ITENS : qual==='eqtipo' ? EQ_TP_ITENS : qual==='eqsetor' ? EQ_SETOR_ITENS : qual==='eqcli' ? eqItensComSentinela('__semcliente') : qual==='eqform' ? eqItensComSentinela('__empresa') : qual==='oper' ? OS_OP_ITENS : qual==='canc' ? OS_CANC_ITENS : OS_FC_ITENS; }
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   if(qual==='oper' && !OS_OP_ITENS.length) osCarregarOperadores();
@@ -6529,7 +6536,9 @@ function fcEscolher(qual, valorEnc){
   else if(qual==='tipo'){ osRecarregar(); }
   else if(qual==='eqcli'){ osListarEquipamentos(); }
   else if(qual==='periodo'){ osPeriodoMudou(); }
-  else if(qual==='eqform' || qual==='eqtipo'){ /* formulário de equipamentos: só registra a escolha */ }
+  else if(qual==='eqform'){ eqFormClienteMudou(); }
+  else if(qual==='eqtipo' || qual==='eqsetor'){ /* formulário de equipamentos: só registra a escolha */ }
+  else if(qual==='eqsetorcli'){ eqSetorCliMudou(); }
   else if(qual==='canc'){ /* modal de cancelamento da OS: só registra a escolha */ }
   else if(qual==='email'){
     // conclusão só existe em OS concluída: força a situação p/ 'todas'
@@ -6556,7 +6565,7 @@ function fcSincronizar(qual){
   if(lb) lb.textContent = v && it ? it.rotulo : cfg.todos;
 }
 document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap') && !e.target.closest('#osOpWrap') && !e.target.closest('#osCancWrap')) fcFecharTodas();
+  if(!e.target.closest('#osFcWrap') && !e.target.closest('#tecFcWrap') && !e.target.closest('#osTpWrap') && !e.target.closest('#osEmWrap') && !e.target.closest('#eqFcWrap') && !e.target.closest('#osPerWrap') && !e.target.closest('#eqFormWrap') && !e.target.closest('#eqTipoWrap') && !e.target.closest('#eqSetorFormWrap') && !e.target.closest('#eqSetorCliWrap') && !e.target.closest('#osOpWrap') && !e.target.closest('#osCancWrap')) fcFecharTodas();
 });
 function osFiltroClienteMudou(){
   const fc = (document.getElementById('osFiltroCliente')||{}).value||'';
@@ -7851,13 +7860,19 @@ async function osVerFichaEquipamento(id){
   try{
     const [e] = await apiGET(`equipamentos?id=eq.${id}&select=*,clientes(nome)`);
     if(!e) throw new Error('Equipamento não encontrado.');
+    /* 🏢 Setor: prioriza o nome do setor_id (tabela cliente_setores); a coluna
+       legada `setor` (texto) é só fallback */
+    let setorNome = e.setor || '';
+    if(e.setor_id){
+      try{ const [s] = await apiGET(`cliente_setores?id=eq.${e.setor_id}&select=nome`); if(s && s.nome) setorNome = s.nome; }catch(_){}
+    }
     const oss = await apiGET(`os_equipamentos?equipamento_id=eq.${id}&select=os_clientes(id,numero,descricao_servico,status,created_at)&order=created_at.desc&limit=20`)||[];
     openOsModal(`
       <div class="font-black text-lg mb-1">${esc(e.nome)}</div>
       <div class="text-xs text-gray-500 mb-3 font-mono">nº de série ${esc(e.numero_serie||'—')}</div>
       <div class="grid grid-cols-2 gap-2 text-sm mb-3">
-        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Cliente</div><b class="text-[13px]">${esc(e.clientes?e.clientes.nome:'—')}</b></div>
-        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Setor</div><b class="text-[13px]">${esc(e.setor||'—')}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Cliente</div><b class="text-[13px]">${esc(e.clientes?e.clientes.nome:(e.cliente_id?'—':'🏢 Na empresa (sem cliente)'))}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Setor</div><b class="text-[13px]">${esc(setorNome||'—')}</b></div>
         <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo</div><b class="text-[13px]">${esc(e.tipo||'—')}</b></div>
         <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Status</div><b class="text-[13px]">${esc(e.status||'ativo')}</b></div>
       </div>
@@ -12418,7 +12433,10 @@ async function osTelaEquipamentos(){
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="carregarOSClientes()">← Voltar</button>
       <div class="font-bold text-lg">🔧 Equipamentos</div>
-      <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="eqAbrirTipos()">🏷️ Tipos</button>
+      <div class="flex gap-2">
+        <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="eqAbrirSetores()">🏢 Setores</button>
+        <button class="btn-ghost !w-auto !py-1.5 !px-3 text-sm" onclick="eqAbrirTipos()">🏷️ Tipos</button>
+      </div>
     </div>
     <div class="grid gap-2 md:grid-cols-3 mb-3">
       <div class="relative" id="eqFormWrap">
@@ -12440,7 +12458,14 @@ async function osTelaEquipamentos(){
           <div id="eqTipoOpcoes" class="overflow-y-auto"></div>
         </div>
       </div>
-      <input id="eqObs" class="inp text-sm" placeholder="Setor / observação">
+      <div class="relative" id="eqSetorFormWrap">
+        <input type="hidden" id="eqSetor" value="">
+        <button type="button" id="eqSetorBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('eqsetor',event)"><span id="eqSetorLabel" class="truncate">Sem setor</span><span>▾</span></button>
+        <div id="eqSetorLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+          <div id="eqSetorOpcoes" class="overflow-y-auto"></div>
+        </div>
+      </div>
+      <input id="eqObs" class="inp text-sm" placeholder="Observação">
       <div class="flex gap-2">
         <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="eqBtnSalvar" onclick="osSalvarEquipamento()">＋ Adicionar</button>
         <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqBtnCancelarEd" onclick="osCancelarEdicaoEquipamento()">Cancelar edição</button>
@@ -12617,37 +12642,282 @@ async function eqExcluirTipo(id){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 
+/* ---------- 🏢 SETORES DE EQUIPAMENTO — tabela cliente_setores (11/11/2026, pedido do Fabio) ----------
+   No Field Control a aba Vínculos agrupa os equipamentos do cliente por SETOR
+   (CENTRO CIRÚRGICO, LABORATÓRIO…); a importação de out/2026 trouxe só o ID
+   (locationSector), gravado em equipamentos.fieldcontrol_setor_id (staging).
+   Aqui o setor é registro próprio POR CLIENTE (tabela cliente_setores) e o
+   equipamento aponta pra ele em equipamentos.setor_id. Gestão na janela
+   "🏢 Setores" da tela de Equipamentos, no mesmo padrão da 🏷️ Tipos:
+   cadastrar/renomear/inativar; excluir BLOQUEADO com equipamento dentro e
+   sempre com backup em exclusoes_backup antes. A coluna legada
+   equipamentos.setor (texto) é só fallback de exibição. */
+let EQ_SETORES_CACHE = {};   // cliente_id -> [setores]
+let EQ_SETORES_MAPA = {};     // setor_id -> linha de cliente_setores
+let EQ_SETOR_ITENS = [];      // itens do combobox Setor (formulário de equipamentos)
+let EQ_SETOR_USOS = {};       // setor_id -> nº de equipamentos (janela de gestão)
+let EQ_SETOR_EDIT_ID = null;  // setor em edição na janela de gestão
+async function eqCarregarSetores(clienteId, forcar){
+  if(!clienteId) return [];
+  if(EQ_SETORES_CACHE[clienteId] && !forcar) return EQ_SETORES_CACHE[clienteId];
+  try{
+    const rows = await apiGET(`cliente_setores?cliente_id=eq.${clienteId}&select=*&order=ordem.asc,nome.asc`);
+    if(Array.isArray(rows)){ EQ_SETORES_CACHE[clienteId] = rows; rows.forEach(s=>{ EQ_SETORES_MAPA[s.id] = s; }); return rows; }
+  }catch(e){ /* formulário nunca quebra: devolve o que houver em cache */ }
+  return EQ_SETORES_CACHE[clienteId] || [];
+}
+async function eqCarregarMapaSetores(){
+  try{
+    const rows = await apiGET('cliente_setores?select=id,cliente_id,nome,ativo,ordem&limit=1000');
+    (rows||[]).forEach(s=>{ EQ_SETORES_MAPA[s.id] = s; });
+  }catch(e){ /* lista/ficha seguem com o fallback do texto legado */ }
+  return EQ_SETORES_MAPA;
+}
+function eqSetorNome(e){
+  if(e && e.setor_id && EQ_SETORES_MAPA[e.setor_id]) return EQ_SETORES_MAPA[e.setor_id].nome || '';
+  return (e && e.setor) || '';
+}
+async function eqAtualizarItensSetorForm(){
+  const cli = (document.getElementById('eqCliente')||{}).value || '';
+  EQ_SETOR_ITENS = [];
+  if(cli && cli!=='__empresa'){
+    const rows = await eqCarregarSetores(cli);
+    EQ_SETOR_ITENS = rows.filter(s=>s.ativo!==false).map(s=>({ valor: s.id, rotulo: s.nome }));
+  }
+  const l = document.getElementById('eqSetorLista');
+  if(l && !l.classList.contains('hidden')) fcRender('eqsetor');
+}
+/* trocar o cliente no formulário LIMPA o setor (o setor é do cliente anterior) */
+function eqFormClienteMudou(){
+  const h = document.getElementById('eqSetor'); if(h) h.value = '';
+  fcSincronizar('eqsetor');
+  eqAtualizarItensSetorForm();
+}
+async function eqAbrirSetores(){
+  eqFecharSetores();
+  const doForm = (document.getElementById('eqCliente')||{}).value || '';
+  const doFiltro = (document.getElementById('eqFiltroCliente')||{}).value || '';
+  const pre = (doForm && doForm!=='__empresa') ? doForm : ((doFiltro && doFiltro!=='__semcliente') ? doFiltro : '');
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" id="modalEqSetores" style="z-index:10060" onclick="if(event.target===this)eqFecharSetores()">
+      <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl my-8">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-bold">🏢 Setores do cliente</div>
+          <button class="btn-ghost !w-auto !py-1 !px-3 text-sm" onclick="eqFecharSetores()">✕ Fechar</button>
+        </div>
+        <div class="text-xs text-gray-500 mb-3">O setor organiza os equipamentos DENTRO do cliente (como os Vínculos do Field: Centro Cirúrgico, Laboratório…). Cada cliente tem os seus setores.</div>
+        <label class="lbl">Cliente</label>
+        <div class="relative mb-3" id="eqSetorCliWrap">
+          <input type="hidden" id="eqSetorCliente" value="">
+          <button type="button" id="eqSetorCliBtn" class="inp text-sm w-full flex justify-between items-center" onclick="fcAbrir('eqsetorcli',event)"><span id="eqSetorCliLabel" class="truncate">— escolha o cliente —</span><span>▾</span></button>
+          <div id="eqSetorCliLista" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-[9999] max-h-96 flex flex-col">
+            <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-xl">
+              <input id="eqSetorCliBusca" class="inp text-sm !mb-0" placeholder="🔎 Buscar cliente…" autocomplete="off" oninput="fcRender('eqsetorcli')" onkeydown="if(event.key==='Escape')fcFecharTodas()">
+            </div>
+            <div id="eqSetorCliOpcoes" class="overflow-y-auto"></div>
+          </div>
+        </div>
+        <div class="grid gap-2 mb-3">
+          <label class="lbl" id="eqSetorFormTitulo">＋ Novo setor</label>
+          <div class="flex gap-2">
+            <input id="eqSetorNome" class="inp text-sm flex-1" placeholder="Ex: Centro Cirúrgico" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();eqSalvarSetor();}">
+            <button class="btn-brand !w-auto !py-2 !px-4 text-sm" id="eqSetorBtnSalvar" onclick="eqSalvarSetor()">＋ Adicionar</button>
+            <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqSetorBtnCancelar" onclick="eqCancelarEdicaoSetor()">Cancelar</button>
+          </div>
+        </div>
+        <div id="eqSetoresGestaoLista" class="grid gap-2"><span class="text-gray-400 text-sm">Escolha o cliente para ver os setores.</span></div>
+      </div>
+    </div>`);
+  if(pre){ const h = document.getElementById('eqSetorCliente'); if(h) h.value = pre; fcSincronizar('eqsetorcli'); }
+  await eqSetoresRecarregar();
+}
+function eqFecharSetores(){
+  const m = document.getElementById('modalEqSetores'); if(m) m.remove();
+  EQ_SETOR_EDIT_ID = null;
+  if(document.getElementById('eqLista')) osListarEquipamentos();
+}
+function eqSetorCliMudou(){ EQ_SETOR_EDIT_ID = null; eqSetoresRecarregar(); }
+async function eqSetoresRecarregar(){
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const box = document.getElementById('eqSetoresGestaoLista'); if(!box) return;
+  if(!cli){ box.innerHTML = '<span class="text-gray-400 text-sm">Escolha o cliente para ver os setores.</span>'; return; }
+  await eqCarregarSetores(cli, true);
+  try{
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${cli}&select=setor_id&limit=2000`);
+    EQ_SETOR_USOS = {};
+    (eqs||[]).forEach(e=>{ if(e.setor_id) EQ_SETOR_USOS[e.setor_id] = (EQ_SETOR_USOS[e.setor_id]||0)+1; });
+  }catch(e){ EQ_SETOR_USOS = {}; }
+  eqRenderSetores();
+}
+function eqRenderSetores(){
+  const box = document.getElementById('eqSetoresGestaoLista'); if(!box) return;
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const lista = EQ_SETORES_CACHE[cli] || [];
+  box.innerHTML = lista.length ? lista.map(s=>{
+    const usos = EQ_SETOR_USOS[s.id]||0;
+    const editando = String(EQ_SETOR_EDIT_ID||'')===String(s.id||'');
+    return `
+    <div class="border rounded-lg p-2.5 text-sm flex items-center gap-2 flex-wrap ${s.ativo===false?'opacity-60':''}">
+      <div class="flex-1 min-w-[140px]">
+        <b>🏢 ${esc(s.nome)}</b>
+        ${s.ativo===false?'<span class="text-[11px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 ml-1">inativo</span>':''}
+        <div class="text-xs text-gray-500">${usos} equipamento${usos===1?'':'s'} neste setor</div>
+      </div>
+      ${editando?'<span class="text-xs font-bold text-brand">editando acima ↑</span>':`<button class="text-xs text-blue-700 font-bold" onclick="eqEditarSetor('${s.id}')">✏️ editar</button>`}
+      <button class="text-xs ${s.ativo===false?'text-green-700':'text-amber-700'} font-bold" onclick="eqAlternarSetor('${s.id}')">${s.ativo===false?'Reativar':'Inativar'}</button>
+      <button class="text-xs text-red-700 font-bold" onclick="eqExcluirSetor('${s.id}')">🗑️</button>
+    </div>`;
+  }).join('') : '<span class="text-gray-400 text-sm">Nenhum setor cadastrado neste cliente.</span>';
+}
+function eqEditarSetor(id){
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const s = (EQ_SETORES_CACHE[cli]||[]).find(x=>String(x.id)===String(id)); if(!s) return;
+  EQ_SETOR_EDIT_ID = s.id;
+  document.getElementById('eqSetorNome').value = s.nome;
+  document.getElementById('eqSetorFormTitulo').textContent = '✏️ Editar setor';
+  document.getElementById('eqSetorBtnSalvar').textContent = '💾 Salvar';
+  document.getElementById('eqSetorBtnCancelar').classList.remove('hidden');
+  eqRenderSetores();
+  document.getElementById('eqSetorNome').focus();
+}
+function eqCancelarEdicaoSetor(){
+  EQ_SETOR_EDIT_ID = null;
+  const i = document.getElementById('eqSetorNome'); if(i) i.value = '';
+  const tt = document.getElementById('eqSetorFormTitulo'); if(tt) tt.textContent = '＋ Novo setor';
+  const b = document.getElementById('eqSetorBtnSalvar'); if(b) b.textContent = '＋ Adicionar';
+  const bc = document.getElementById('eqSetorBtnCancelar'); if(bc) bc.classList.add('hidden');
+  eqRenderSetores();
+}
+async function eqSalvarSetor(){
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const inp = document.getElementById('eqSetorNome'); if(!inp) return;
+  const nome = inp.value.trim();
+  if(!cli){ toast('Escolha o cliente do setor.','erro'); return; }
+  if(!nome){ toast('Informe o nome do setor.','erro'); return; }
+  const lista = await eqCarregarSetores(cli, true);
+  const editando = EQ_SETOR_EDIT_ID ? lista.find(x=>String(x.id)===String(EQ_SETOR_EDIT_ID)) : null;
+  if(lista.some(x=>osNormNome(x.nome)===osNormNome(nome) && (!editando || String(x.id)!==String(editando.id)))){
+    toast('Já existe um setor com esse nome neste cliente.','erro'); return;
+  }
+  try{
+    if(editando){
+      await apiPATCH('cliente_setores', `id=eq.${editando.id}`, { nome });
+      toast('Setor atualizado. ✓','ok');
+      eqCancelarEdicaoSetor();
+    }else{
+      const ordem = lista.reduce((m,x)=>Math.max(m, Number(x.ordem)||0), 0) + 1;
+      await apiPOST('cliente_setores', { cliente_id: cli, nome, ordem });
+      toast('Setor cadastrado. ✓','ok');
+      inp.value = '';
+    }
+    await eqCarregarSetores(cli, true);
+    eqAtualizarItensSetorForm();
+    eqRenderSetores();
+  }catch(e){
+    toast(/23505|duplicate/i.test(e.message) ? 'Já existe um setor com esse nome neste cliente.' : 'Erro: '+e.message, 'erro');
+  }
+}
+async function eqAlternarSetor(id){
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const s = (EQ_SETORES_CACHE[cli]||[]).find(x=>String(x.id)===String(id)); if(!s) return;
+  try{
+    await apiPATCH('cliente_setores', `id=eq.${s.id}`, { ativo: s.ativo===false });
+    toast(s.ativo===false ? 'Setor reativado. ✓' : 'Setor inativado — some do formulário, sem apagar os equipamentos. ✓','ok');
+    await eqCarregarSetores(cli, true);
+    eqAtualizarItensSetorForm();
+    eqRenderSetores();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function eqExcluirSetor(id){
+  const cli = (document.getElementById('eqSetorCliente')||{}).value || '';
+  const s = (EQ_SETORES_CACHE[cli]||[]).find(x=>String(x.id)===String(id)); if(!s) return;
+  const usos = EQ_SETOR_USOS[s.id]||0;
+  if(usos>0){ toast(`O setor "${s.nome}" tem ${usos} equipamento(s) — não dá para excluir. Mova os equipamentos ou use Inativar.`,'erro'); return; }
+  if(!confirm(`Excluir o setor "${s.nome}"?`)) return;
+  try{
+    await osBackupExclusao('OS Clientes › Equipamentos › Setores', 'cliente_setores', s.id, s);
+    await apiDELETE('cliente_setores', `id=eq.${s.id}`);
+    toast('Setor excluído. ✓','ok');
+    if(String(EQ_SETOR_EDIT_ID||'')===String(s.id)) eqCancelarEdicaoSetor();
+    const h = document.getElementById('eqSetor');
+    if(h && String(h.value||'')===String(s.id)){ h.value = ''; fcSincronizar('eqsetor'); }
+    delete EQ_SETORES_MAPA[s.id];
+    await eqCarregarSetores(cli, true);
+    eqAtualizarItensSetorForm();
+    eqRenderSetores();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+
 let EQ_LISTA = [];
 let EQ_TP_ITENS = [];   // itens do combobox Tipo (formulário de equipamentos)
 let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
-async function osListarEquipamentos(){
-  const fc = (document.getElementById('eqFiltroCliente')||{}).value || '';
-  try{
-    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${fc?`&cliente_id=eq.${fc}`:''}&order=created_at.desc&limit=1000`);
-    EQ_LISTA = eqs;
-    const ct = document.getElementById('eqContador');
-    if(ct){ const tot = await apiCount(fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos'); ct.textContent = 'Exibindo ' + eqs.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (eqs.length===1?'':'s') + (fc ? ' deste cliente' : ''); }
-    document.getElementById('eqLista').innerHTML = eqs.length ? eqs.map(e=>`
+function eqLinhaHtml(e){
+  const setor = eqSetorNome(e);
+  return `
       <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap">
         <div class="flex-1 min-w-[180px]">
-          <b>${esc(e.nome)}</b> <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}</span>
-          <div class="text-xs text-gray-500">${esc(e.clientes?fmtCliNome(e.clientes.nome,e.clientes.tipo):'—')}</div>
+          <b>${esc(e.nome)}</b> <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}${setor?` · 🏢 ${esc(setor)}`:''}</span>
+          <div class="text-xs text-gray-500">${esc(e.clientes?fmtCliNome(e.clientes.nome,e.clientes.tipo):(e.cliente_id?'—':'🏢 Na empresa (sem cliente)'))}</div>
         </div>
         <button class="text-xs text-blue-700 font-bold" onclick="osEditarEquipamento('${e.id}')">✏️ editar</button>
         <button class="text-xs text-red-700 font-bold" onclick="osExcluirEquipamento('${e.id}')">🗑️</button>
-      </div>`).join('') : '<span class="text-gray-400 text-sm">Nenhum equipamento.</span>';
+      </div>`;
+}
+async function osListarEquipamentos(){
+  const fc = (document.getElementById('eqFiltroCliente')||{}).value || '';
+  try{
+    await eqCarregarMapaSetores();
+    const filtro = fc==='__semcliente' ? '&cliente_id=is.null' : (fc ? `&cliente_id=eq.${fc}` : '');
+    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${filtro}&order=created_at.desc&limit=1000`);
+    EQ_LISTA = eqs;
+    const ct = document.getElementById('eqContador');
+    if(ct){ const tot = await apiCount(fc==='__semcliente' ? 'equipamentos?cliente_id=is.null' : (fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos')); ct.textContent = 'Exibindo ' + eqs.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (eqs.length===1?'':'s') + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
+    const box = document.getElementById('eqLista');
+    if(!eqs.length){ box.innerHTML = '<span class="text-gray-400 text-sm">Nenhum equipamento.</span>'; return; }
+    const umCliente = !!fc && fc!=='__semcliente';
+    if(!umCliente){ box.innerHTML = eqs.map(eqLinhaHtml).join(''); return; }
+    /* 🏢 filtrado por UM cliente: agrupa por setor (espelha os Vínculos do Field),
+       grupos na ordem dos setores do cliente e "Sem setor" por último */
+    const setoresCli = await eqCarregarSetores(fc);
+    const ordemSetor = {}; setoresCli.forEach((s,i)=>{ ordemSetor[String(s.id)] = i; });
+    const grupos = new Map();
+    eqs.forEach(e=>{
+      const chave = e.setor_id && ordemSetor[String(e.setor_id)]!==undefined ? 'id:'+e.setor_id : (eqSetorNome(e) ? 'txt:'+eqSetorNome(e) : '');
+      if(!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(e);
+    });
+    const chaves = [...grupos.keys()].sort((a,b)=>{
+      if(a==='') return 1; if(b==='') return -1;
+      const oa = a.startsWith('id:') ? ordemSetor[a.slice(3)] : 9000;
+      const ob = b.startsWith('id:') ? ordemSetor[b.slice(3)] : 9000;
+      if(oa!==ob) return oa-ob;
+      return a.localeCompare(b);
+    });
+    box.innerHTML = chaves.map(ch=>{
+      const itens = grupos.get(ch);
+      const titulo = ch==='' ? 'Sem setor' : (ch.startsWith('id:') ? (EQ_SETORES_MAPA[ch.slice(3)]||{}).nome || 'Setor' : ch.slice(4));
+      return `<div class="md:col-span-full font-black text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 mt-1">🏢 ${esc(String(titulo).toUpperCase())} <span class="text-xs font-semibold text-gray-500">(${itens.length})</span></div>` + itens.map(eqLinhaHtml).join('');
+    }).join('');
   }catch(e){ document.getElementById('eqLista').innerHTML = '<span class="text-red-600 text-sm">Erro: '+esc(e.message)+'</span>'; }
 }
-function osEditarEquipamento(id){
+async function osEditarEquipamento(id){
   const e = (EQ_LISTA||[]).find(x=>x.id===id); if(!e) return;
   EQ_EDIT_ID = id;
-  document.getElementById('eqCliente').value = e.cliente_id||'';
+  document.getElementById('eqCliente').value = e.cliente_id || '__empresa';
   fcSincronizar('eqform');
   document.getElementById('eqNome').value = e.nome||'';
   document.getElementById('eqSerie').value = e.numero_serie||'';
   if(e.tipo && !EQ_TP_ITENS.some(x=>x.valor===e.tipo)) EQ_TP_ITENS.push({ valor: e.tipo, rotulo: e.tipo });
   document.getElementById('eqTipo').value = e.tipo||'';
   fcSincronizar('eqtipo');
+  await eqAtualizarItensSetorForm();
+  if(e.setor_id && !EQ_SETOR_ITENS.some(x=>String(x.valor)===String(e.setor_id))){
+    /* setor inativo do próprio equipamento continua visível no formulário dele */
+    const s = (EQ_SETORES_CACHE[e.cliente_id]||[]).find(x=>String(x.id)===String(e.setor_id)) || EQ_SETORES_MAPA[e.setor_id];
+    EQ_SETOR_ITENS.push({ valor: e.setor_id, rotulo: (s && s.nome) || 'Setor' });
+  }
+  document.getElementById('eqSetor').value = e.setor_id||'';
+  fcSincronizar('eqsetor');
   document.getElementById('eqObs').value = e.observacao||'';
   document.getElementById('eqBtnSalvar').textContent = '💾 Salvar alterações';
   document.getElementById('eqBtnCancelarEd').classList.remove('hidden');
@@ -12658,18 +12928,23 @@ function osCancelarEdicaoEquipamento(){
   ['eqNome','eqSerie','eqObs'].forEach(i=>{ const el = document.getElementById(i); if(el) el.value=''; });
   const c = document.getElementById('eqCliente'); if(c) c.value='';
   const t = document.getElementById('eqTipo'); if(t) t.value='';
-  fcSincronizar('eqform'); fcSincronizar('eqtipo');
+  const s = document.getElementById('eqSetor'); if(s) s.value='';
+  EQ_SETOR_ITENS = [];
+  fcSincronizar('eqform'); fcSincronizar('eqtipo'); fcSincronizar('eqsetor');
   const b = document.getElementById('eqBtnSalvar'); if(b) b.textContent = '＋ Adicionar';
   const bc = document.getElementById('eqBtnCancelarEd'); if(bc) bc.classList.add('hidden');
 }
 async function osSalvarEquipamento(){
-  const cliente_id = document.getElementById('eqCliente').value;
+  const cliSel = document.getElementById('eqCliente').value;
   const nome = document.getElementById('eqNome').value.trim();
-  if(!cliente_id){ toast('Escolha o cliente.','erro'); return; }
+  if(!cliSel){ toast('Escolha o cliente (ou "🏢 Na empresa (sem cliente)").','erro'); return; }
   if(!nome){ toast('Informe o nome do equipamento.','erro'); return; }
-  const body = { cliente_id, nome,
+  /* 🏢 "Na empresa": equipamento SEM cliente (estoque da empresa) — cliente_id e setor NULL */
+  const naEmpresa = cliSel==='__empresa';
+  const body = { cliente_id: naEmpresa ? null : cliSel, nome,
     numero_serie: document.getElementById('eqSerie').value.trim()||null,
     tipo: document.getElementById('eqTipo').value||null,
+    setor_id: naEmpresa ? null : (document.getElementById('eqSetor').value||null),
     observacao: document.getElementById('eqObs').value.trim()||null };
   try{
     if(EQ_EDIT_ID){
@@ -12680,6 +12955,7 @@ async function osSalvarEquipamento(){
       await apiPOST('equipamentos', body);
       toast('Equipamento cadastrado. ✓','ok');
       document.getElementById('eqNome').value=''; document.getElementById('eqSerie').value=''; document.getElementById('eqObs').value='';
+      const s = document.getElementById('eqSetor'); if(s) s.value=''; fcSincronizar('eqsetor');
     }
     await osListarEquipamentos();
   }catch(e){ toast('Erro: '+e.message,'erro'); }
