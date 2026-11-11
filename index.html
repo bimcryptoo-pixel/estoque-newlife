@@ -6993,7 +6993,8 @@ async function osCarregarEquips(){
   document.getElementById('nosEquipLabel').classList.add('text-gray-500');
   if(!cid) return;
   try{
-    OS_EQUIPS = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`);
+    /* 📦 seletor da Nova OS = só equipamentos ATIVOS do cliente (arquivado não entra em seleção nova) */
+    OS_EQUIPS = (await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie,status&order=nome.asc`) || []).filter(e=>!eqArquivado(e));
   }catch(e){ OS_EQUIPS = []; }
 }
 /* ============ seletor de equipamento (mesmo layout das etiquetas) ============ */
@@ -7060,7 +7061,15 @@ async function eosCarregarEquips(cid, manterId){
   if(lbl){ lbl.textContent = '— nenhum —'; lbl.classList.add('text-gray-500'); }
   if(!cid) return;
   try{
-    EOS_EQUIPS = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie&order=nome.asc`) || [];
+    const todosEq = await apiGET(`equipamentos?cliente_id=eq.${cid}&select=id,nome,numero_serie,status&order=nome.asc`) || [];
+    /* 📦 seletor da edição = só ATIVOS; o principal já vinculado, se estiver
+       arquivado, continua na lista DESTA OS (leitura histórica — não é seleção
+       nova; nas outras OSs ele não aparece) */
+    EOS_EQUIPS = todosEq.filter(e=>!eqArquivado(e));
+    if(manterId && !EOS_EQUIPS.some(e=>String(e.id)===String(manterId))){
+      const atual = todosEq.find(e=>String(e.id)===String(manterId));
+      if(atual) EOS_EQUIPS.push(atual);
+    }
     EOS_EQUIP_OK = true;
     if(manterId && EOS_EQUIPS.some(e=>String(e.id)===String(manterId))) eosEquipEscolher(manterId, true);
   }catch(e){ EOS_EQUIPS = []; EOS_EQUIP_OK = false; }
@@ -7091,7 +7100,7 @@ function eosEquipRender(filtro){
   const selId = document.getElementById('eosEquip') ? document.getElementById('eosEquip').value : '';
   let html = `<button type="button" class="w-full text-left px-4 py-3 text-base hover:bg-gray-100 border-b border-gray-100 text-gray-500" onclick="eosEquipEscolher('')">— nenhum —</button>`;
   html += lista.map(e=>{
-    const txt = `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}`;
+    const txt = `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}${eqArquivado(e)?' · 📦 arquivado':''}`;
     const sel = String(e.id)===String(selId);
     return `<button type="button" class="w-full text-left px-4 py-3 text-base font-semibold hover:bg-red-50 border-b border-gray-100 last:border-0 ${sel?'bg-red-50':''}" onclick="eosEquipEscolher('${e.id}')">${esc(txt)}${sel?' ✓':''}</button>`;
   }).join('');
@@ -7105,7 +7114,7 @@ function eosEquipEscolher(id, manterAberto){
   if(lbl){
     if(id){
       const e = EOS_EQUIPS.find(x=>String(x.id)===String(id));
-      lbl.textContent = e ? `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}` : '— nenhum —';
+      lbl.textContent = e ? `${e.nome||''}${e.numero_serie?' · SN '+e.numero_serie:''}${eqArquivado(e)?' · 📦 arquivado':''}` : '— nenhum —';
       lbl.classList.toggle('text-gray-500', !e);
     } else {
       lbl.textContent = '— nenhum —';
@@ -7668,8 +7677,8 @@ function osEtiquetasChips(etqs){
 async function verOS(id){
   try{
     await carregarTecnicos();
-    const selMin = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
-    const selBase = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,telefone,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao)';
+    const selMin = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao,status)';
+    const selBase = '*,clientes(id,nome,tipo,cnpj,cnpj_cpf,inscricao_estadual,email,telefone,endereco,numero,bairro,cidade,uf,cep),equipamentos(id,nome,numero_serie,tipo,observacao,status)';
     const selFull = selBase + ',tipos_os(id,descricao,duracao_min)';
     const selLocal = ',localizacao,endereco_os,prazo';
     let os = null;
@@ -7683,7 +7692,7 @@ async function verOS(id){
       apiGET(`os_atividades?os_id=eq.${id}&select=*&order=data.asc,created_at.asc`),
       apiGET(`os_produtos?os_id=eq.${id}&select=*,produtos(id,nome,unidade),lotes(id,numero_lote,validade)&order=created_at.asc`),
       apiGET(`os_anexos?os_id=eq.${id}&select=*&order=created_at.asc`),
-      apiGETsafe(`os_equipamentos?os_id=eq.${id}&select=*,equipamentos(id,nome,numero_serie,tipo)&order=created_at.asc`),
+      apiGETsafe(`os_equipamentos?os_id=eq.${id}&select=*,equipamentos(id,nome,numero_serie,tipo,status)&order=created_at.asc`),
       apiGETsafe(`os_servicos?os_id=eq.${id}&select=*&order=created_at.asc`),
       apiGETsafe(`os_despesas?os_id=eq.${id}&select=*&order=created_at.asc`),
       apiGETsafe(`os_orcamentos?os_id=eq.${id}&select=*&order=created_at.asc`),
@@ -7802,7 +7811,7 @@ function osAbaGeral(d){
   const vincEq = (d.equips||[]).map(e=>e.equipamentos).filter(Boolean);
   const eqHtml = vincEq.length ? vincEq.map(e=>`
     <div class="flex items-center justify-between gap-2 py-2 border-b last:border-0 text-sm">
-      <div><b>${esc(e.nome)}</b><div class="text-xs text-gray-500 font-mono">nº de série ${esc(e.numero_serie||'—')}</div></div>
+      <div><b>${esc(e.nome)}</b>${eqArquivado(e)?' <span class="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1 py-0.5">📦 arquivado</span>':''}<div class="text-xs text-gray-500 font-mono">nº de série ${esc(e.numero_serie||'—')}</div></div>
       <button class="text-xs text-brand font-bold whitespace-nowrap" onclick="osVerFichaEquipamento('${e.id}')">Abrir ficha ↗</button>
     </div>`).join('') : '<span class="text-gray-400 text-xs">Nenhum equipamento vinculado.</span>';
   return `
@@ -7874,16 +7883,28 @@ function osVerFichaCliente(id){
   }, 300);
 }
 async function osVerFichaEquipamento(id){
+  EQ_FICHA_ID = id;
   try{
     const [e] = await apiGET(`equipamentos?id=eq.${id}&select=*,clientes(nome)`);
     if(!e) throw new Error('Equipamento não encontrado.');
+    const arq = eqArquivado(e);
     /* 🏢 Setor: prioriza o nome do setor_id (tabela cliente_setores); a coluna
        legada `setor` (texto) é só fallback */
     let setorNome = e.setor || '';
     if(e.setor_id){
       try{ const [s] = await apiGET(`cliente_setores?id=eq.${e.setor_id}&select=nome`); if(s && s.nome) setorNome = s.nome; }catch(_){}
     }
-    const oss = await apiGET(`os_equipamentos?equipamento_id=eq.${id}&select=os_clientes(id,numero,descricao_servico,status,created_at)&order=created_at.desc&limit=20`)||[];
+    /* 📦 OSs vinculadas = vínculos adicionais (os_equipamentos) + as OSs em que
+       o aparelho é o PRINCIPAL (os_clientes.equipamento_id), sem duplicar —
+       vale também pro equipamento arquivado: o histórico continua visível. */
+    const [vincs, princs] = await Promise.all([
+      apiGET(`os_equipamentos?equipamento_id=eq.${id}&select=os_clientes(id,numero,descricao_servico,status,created_at)&order=created_at.desc&limit=20`).catch(()=>[]),
+      apiGET(`os_clientes?equipamento_id=eq.${id}&select=id,numero,descricao_servico,status,created_at&order=created_at.desc&limit=20`).catch(()=>[]),
+    ]);
+    const mapaOS = new Map();
+    (vincs||[]).forEach(x=>{ const oo = x.os_clientes; if(oo && oo.id && !mapaOS.has(oo.id)) mapaOS.set(oo.id, { ...oo, principal:false }); });
+    (princs||[]).forEach(oo=>{ if(oo && oo.id){ const ex = mapaOS.get(oo.id); if(ex) ex.principal = true; else mapaOS.set(oo.id, { ...oo, principal:true }); } });
+    const oss = [...mapaOS.values()].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,20);
     openOsModal(`
       <div class="font-black text-lg mb-1">${esc(e.nome)}</div>
       <div class="text-xs text-gray-500 mb-3 font-mono">nº de série ${esc(e.numero_serie||'—')}</div>
@@ -7891,13 +7912,14 @@ async function osVerFichaEquipamento(id){
         <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Cliente</div><b class="text-[13px]">${esc(e.clientes?e.clientes.nome:(e.cliente_id?'—':'🏢 Na empresa (sem cliente)'))}</b></div>
         <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Setor</div><b class="text-[13px]">${esc(setorNome||'—')}</b></div>
         <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Tipo</div><b class="text-[13px]">${esc(e.tipo||'—')}</b></div>
-        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Status</div><b class="text-[13px]">${esc(e.status||'ativo')}</b></div>
+        <div class="bg-gray-50 rounded-lg p-2"><div class="text-[10px] text-gray-500 uppercase">Status</div><b class="text-[13px]">${arq?'📦 Arquivado':'Ativo'}</b></div>
       </div>
       ${e.observacao?`<div class="text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">📝 ${esc(e.observacao)}</div>`:''}
-      <div class="font-bold text-sm mb-2">Histórico de OSs (${oss.length})</div>
+      <button class="btn-ghost w-full mb-3 !py-2 text-sm ${arq?'!text-green-700 !border-green-300':'!text-amber-700 !border-amber-300'}" onclick="osArquivarEquipamento('${e.id}', ${arq?'false':'true'})">${arq?'↩️ Desarquivar equipamento':'📦 Arquivar equipamento'}</button>
+      <div class="font-bold text-sm mb-2">OSs vinculadas (${oss.length})</div>
       <div class="max-h-48 overflow-y-auto grid gap-1.5">
-        ${oss.length?oss.map(x=>{const oo=x.os_clientes||{};return `<button class="text-left border rounded-lg p-2 text-xs hover:bg-gray-50" onclick="closeOsModal();verOS('${oo.id||''}')">
-          <b class="text-brand">${esc(oo.numero||'')}</b> · ${esc((oo.descricao_servico||'').slice(0,60))} <span class="text-gray-400">${oo.created_at?fmtData(oo.created_at.slice(0,10)):''}</span></button>`;}).join('')
+        ${oss.length?oss.map(oo=>`<button class="text-left border rounded-lg p-2 text-xs hover:bg-gray-50" onclick="closeOsModal();verOS('${oo.id||''}')">
+          <b class="text-brand">${esc(oo.numero||'')}</b>${oo.principal?' <span class="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1 py-0.5">principal</span>':''} · ${esc((oo.descricao_servico||'').slice(0,60))} <span class="text-gray-400">${oo.created_at?fmtData(oo.created_at.slice(0,10)):''}</span></button>`).join('')
         :'<span class="text-gray-400 text-xs">Nenhuma OS vinculada.</span>'}
       </div>
       <button class="btn-ghost w-full mt-3" onclick="closeOsModal()">Fechar</button>`);
@@ -7965,7 +7987,7 @@ function osAbaEquipamentos(d){
   return `
   <div class="border rounded-xl p-3 mb-3">
     <div class="text-xs font-bold text-gray-500 uppercase mb-1">Equipamento principal</div>
-    ${eqP?`<div class="font-bold text-sm">${esc(eqP.nome)}</div><div class="text-xs text-gray-500">SN: ${esc(eqP.numero_serie||'—')} · ${esc(eqP.tipo||'—')}</div>`
+    ${eqP?`<div class="font-bold text-sm">${esc(eqP.nome)}${eqArquivado(eqP)?' <span class="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1 py-0.5">📦 arquivado</span>':''}</div><div class="text-xs text-gray-500">SN: ${esc(eqP.numero_serie||'—')} · ${esc(eqP.tipo||'—')}</div>`
       :'<span class="text-gray-400 text-sm">Não vinculado</span>'}
     ${editavel?`
     <div class="flex gap-2 mt-2">
@@ -7978,7 +8000,7 @@ function osAbaEquipamentos(d){
   <div class="grid gap-2 mb-3">
     ${vinc.length?vinc.map(e=>`
       <div class="border rounded-lg p-2.5 text-sm flex items-center justify-between gap-2">
-        <div><b>${esc(e.equipamentos?e.equipamentos.nome:'—')}</b>
+        <div><b>${esc(e.equipamentos?e.equipamentos.nome:'—')}</b>${e.equipamentos&&eqArquivado(e.equipamentos)?' <span class="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1 py-0.5">📦 arquivado</span>':''}
         <div class="text-xs text-gray-500">SN: ${esc(e.equipamentos?e.equipamentos.numero_serie||'—':'—')} · ${esc(e.equipamentos?e.equipamentos.tipo||'—':'—')}</div></div>
         ${editavel?`<button class="text-xs text-red-700 font-bold" onclick="osDesvincularEquip('${e.id}')">🗑️</button>`:''}
       </div>`).join(''):'<span class="text-gray-400 text-xs">Sem vínculos adicionais.</span>'}
@@ -8343,11 +8365,13 @@ async function osCarregarVincEquips(){
   const d = OS_DETALHE; if(!d) return;
   const sel = document.getElementById('osVincEqSel'); if(!sel) return;
   try{
-    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie&order=nome.asc`);
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie,status&order=nome.asc`);
     const ja = new Set((d.equips||[]).map(e=>e.equipamento_id));
     if(d.os.equipamento_id) ja.add(d.os.equipamento_id);
+    /* 📦 vínculo NOVO = só equipamentos ATIVOS (os já vinculados, mesmo
+       arquivados, continuam exibidos na lista de vínculos acima) */
     sel.innerHTML = '<option value="">— selecione —</option>' +
-      eqs.filter(e=>!ja.has(e.id)).map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
+      eqs.filter(e=>!ja.has(e.id) && !eqArquivado(e)).map(e=>`<option value="${e.id}">${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
   }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
 }
 async function osVincularEquip(){
@@ -8376,9 +8400,16 @@ async function osCarregarPrincipalEquips(){
   const d = OS_DETALHE; if(!d) return;
   const sel = document.getElementById('osPrincEqSel'); if(!sel) return;
   try{
-    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie&order=nome.asc`);
+    const eqs = await apiGET(`equipamentos?cliente_id=eq.${d.os.cliente_id}&select=id,nome,numero_serie,status&order=nome.asc`);
+    /* 📦 só ATIVOS viram opção nova; o principal vigente, se arquivado, continua
+       na lista desta OS (exibido e selecionado), sem virar opção nas outras */
+    const lista = (eqs||[]).filter(e=>!eqArquivado(e));
+    if(d.os.equipamento_id && !lista.some(e=>String(e.id)===String(d.os.equipamento_id))){
+      const atual = (eqs||[]).find(e=>String(e.id)===String(d.os.equipamento_id));
+      if(atual) lista.push(atual);
+    }
     sel.innerHTML = '<option value="">— nenhum —</option>' +
-      eqs.map(e=>`<option value="${e.id}" ${String(e.id)===String(d.os.equipamento_id||'')?'selected':''}>${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}</option>`).join('');
+      lista.map(e=>`<option value="${e.id}" ${String(e.id)===String(d.os.equipamento_id||'')?'selected':''}>${esc(e.nome)}${e.numero_serie?' · SN '+esc(e.numero_serie):''}${eqArquivado(e)?' · 📦 arquivado':''}</option>`).join('');
   }catch(e){ sel.innerHTML = '<option value="">— erro —</option>'; }
 }
 async function osSalvarEquipPrincipal(){
@@ -12519,6 +12550,11 @@ async function osTelaEquipamentos(){
           <div id="eqFcOpcoes" class="overflow-y-auto"></div>
         </div>
       </div>
+      <div class="flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-lg p-0.5" title="Visão da lista: equipamentos ativos, arquivados ou todos">
+        <button type="button" id="eqVisaoAtivos" class="${eqVisaoBtnCls('ativos')}" onclick="eqSetVisao('ativos')">Ativos</button>
+        <button type="button" id="eqVisaoArquivados" class="${eqVisaoBtnCls('arquivados')}" onclick="eqSetVisao('arquivados')">📦 Arquivados</button>
+        <button type="button" id="eqVisaoTodos" class="${eqVisaoBtnCls('todos')}" onclick="eqSetVisao('todos')">Todos</button>
+      </div>
       <span id="eqContador" class="text-xs text-gray-500 font-semibold"></span>
     </div>
     <div id="eqLista" class="grid gap-2"><span class="text-gray-400 text-sm">Carregando…</span></div>`;
@@ -12885,16 +12921,37 @@ async function eqExcluirSetor(id){
 }
 
 let EQ_LISTA = [];
+/* ---------- 📦 ARQUIVAR EQUIPAMENTO (11/11/2026, pedido do Fabio) ----------
+   Equipamento que não está mais fisicamente no cliente NÃO se exclui (ele tem
+   histórico de OSs): ARQUIVA. A coluna equipamentos.status já existia no banco
+   ('ativo'/'arquivado' — os 144 arquivados vieram do Field Control), mas o app
+   não lia a coluna em lugar nenhum. Arquivar muda SÓ o status: o aparelho some
+   da lista atual do cliente (e dos grupos de setor/contagens) e dos seletores
+   de vínculo das OSs; os vínculos (os_clientes.equipamento_id e
+   os_equipamentos) ficam intactos e as OSs dele abrem normalmente — leitura
+   histórica preservada. Desarquivar devolve tudo. EQ_VISAO controla a lista:
+   'ativos' (padrão) | 'arquivados' | 'todos'. */
+let EQ_VISAO = 'ativos';
+let EQ_FICHA_ID = null; // equipamento cuja ficha (modal) está aberta
+function eqArquivado(e){ return !!e && e.status==='arquivado'; }
+function eqVisaoBtnCls(v){ return `!w-auto !py-1 !px-2.5 text-xs font-bold rounded-md ${((EQ_VISAO||'ativos')===v)?'bg-white shadow text-brand border border-gray-200':'text-gray-500'}`; }
+function eqSetVisao(v){
+  EQ_VISAO = v;
+  [['ativos','eqVisaoAtivos'],['arquivados','eqVisaoArquivados'],['todos','eqVisaoTodos']].forEach(([x,id])=>{ const b = document.getElementById(id); if(b) b.className = eqVisaoBtnCls(x); });
+  osListarEquipamentos();
+}
 let EQ_TP_ITENS = [];   // itens do combobox Tipo (formulário de equipamentos)
 let EQ_EDIT_ID = null; // equipamento em edição (pré-piloto)
 function eqLinhaHtml(e){
   const setor = eqSetorNome(e);
+  const arq = eqArquivado(e);
   return `
-      <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap">
+      <div class="border rounded-lg p-2.5 text-sm flex items-center gap-3 flex-wrap ${arq?'bg-gray-50':''}">
         <div class="flex-1 min-w-[180px]">
-          <b>${esc(e.nome)}</b> <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}${setor?` · 🏢 ${esc(setor)}`:''}</span>
+          <b>${esc(e.nome)}</b>${arq?' <span class="text-[11px] font-bold text-gray-600 bg-gray-200 rounded px-1.5 py-0.5">📦 Arquivado</span>':''} <span class="text-xs text-gray-500">SN: ${esc(e.numero_serie||'—')} · ${esc(e.tipo||'—')}${setor?` · 🏢 ${esc(setor)}`:''}</span>
           <div class="text-xs text-gray-500">${esc(e.clientes?fmtCliNome(e.clientes.nome,e.clientes.tipo):(e.cliente_id?'—':'🏢 Na empresa (sem cliente)'))}</div>
         </div>
+        <button class="text-xs ${arq?'text-green-700':'text-amber-700'} font-bold" onclick="osArquivarEquipamento('${e.id}', ${arq?'false':'true'})">${arq?'↩️ desarquivar':'📦 arquivar'}</button>
         <button class="text-xs text-blue-700 font-bold" onclick="osEditarEquipamento('${e.id}')">✏️ editar</button>
         <button class="text-xs text-red-700 font-bold" onclick="osExcluirEquipamento('${e.id}')">🗑️</button>
       </div>`;
@@ -12905,19 +12962,23 @@ async function osListarEquipamentos(){
     await eqCarregarMapaSetores();
     const filtro = fc==='__semcliente' ? '&cliente_id=is.null' : (fc ? `&cliente_id=eq.${fc}` : '');
     const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${filtro}&order=created_at.desc&limit=1000`);
-    EQ_LISTA = eqs;
+    /* 📦 visão da lista: padrão só ATIVOS — arquivado fora da lista, dos grupos
+       de setor e das contagens exibidas; 'arquivados'/'todos' só por escolha */
+    const vis = EQ_VISAO || 'ativos';
+    const exib = (eqs||[]).filter(e => vis==='todos' ? true : (vis==='arquivados' ? eqArquivado(e) : !eqArquivado(e)));
+    EQ_LISTA = exib;
     const ct = document.getElementById('eqContador');
-    if(ct){ const tot = await apiCount(fc==='__semcliente' ? 'equipamentos?cliente_id=is.null' : (fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos')); ct.textContent = 'Exibindo ' + eqs.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (eqs.length===1?'':'s') + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
+    if(ct){ const tot = await apiCount(fc==='__semcliente' ? 'equipamentos?cliente_id=is.null' : (fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos')); ct.textContent = 'Exibindo ' + exib.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (exib.length===1?'':'s') + (vis==='arquivados' ? ' arquivados' : (vis==='todos' ? ' (ativos + arquivados)' : '')) + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
     const box = document.getElementById('eqLista');
-    if(!eqs.length){ box.innerHTML = '<span class="text-gray-400 text-sm">Nenhum equipamento.</span>'; return; }
+    if(!exib.length){ box.innerHTML = `<span class="text-gray-400 text-sm">${vis==='arquivados' ? 'Nenhum equipamento arquivado.' : (vis==='todos' ? 'Nenhum equipamento.' : ((eqs||[]).length ? 'Nenhum equipamento ativo neste filtro — os demais estão arquivados (visão 📦 Arquivados).' : 'Nenhum equipamento.'))}</span>`; return; }
     const umCliente = !!fc && fc!=='__semcliente';
-    if(!umCliente){ box.innerHTML = eqs.map(eqLinhaHtml).join(''); return; }
+    if(!umCliente){ box.innerHTML = exib.map(eqLinhaHtml).join(''); return; }
     /* 🏢 filtrado por UM cliente: agrupa por setor (espelha os Vínculos do Field),
        grupos na ordem dos setores do cliente e "Sem setor" por último */
     const setoresCli = await eqCarregarSetores(fc);
     const ordemSetor = {}; setoresCli.forEach((s,i)=>{ ordemSetor[String(s.id)] = i; });
     const grupos = new Map();
-    eqs.forEach(e=>{
+    exib.forEach(e=>{
       const chave = e.setor_id && ordemSetor[String(e.setor_id)]!==undefined ? 'id:'+e.setor_id : (eqSetorNome(e) ? 'txt:'+eqSetorNome(e) : '');
       if(!grupos.has(chave)) grupos.set(chave, []);
       grupos.get(chave).push(e);
@@ -12994,6 +13055,23 @@ async function osSalvarEquipamento(){
       const s = document.getElementById('eqSetor'); if(s) s.value=''; fcSincronizar('eqsetor');
     }
     await osListarEquipamentos();
+  }catch(e){ toast('Erro: '+e.message,'erro'); }
+}
+async function osArquivarEquipamento(id, arquivar){
+  const reg = (EQ_LISTA||[]).find(x=>String(x.id)===String(id));
+  const nome = reg ? `"${reg.nome}"` : 'este equipamento';
+  if(!confirm(arquivar
+    ? `Arquivar ${nome}?\n\nEle sai da lista atual do cliente e dos seletores de OS — as OSs dele continuam no histórico, intactas. Você pode desarquivar quando quiser, na visão 📦 Arquivados da tela de Equipamentos.`
+    : `Desarquivar ${nome}?\n\nEle volta para a lista atual do cliente e para os seletores de OS.`)) return;
+  try{
+    await apiPATCH('equipamentos', `id=eq.${id}`, { status: arquivar ? 'arquivado' : 'ativo' });
+    toast(arquivar ? 'Equipamento arquivado. 📦' : 'Equipamento desarquivado. ✓', 'ok');
+    if(document.getElementById('eqLista')) await osListarEquipamentos();
+    /* ficha do equipamento aberta (modal) → recarrega pra refletir o novo status */
+    if(EQ_FICHA_ID && String(EQ_FICHA_ID)===String(id)){
+      const m = document.getElementById('modalOS');
+      if(m && m.style.display!=='none') osVerFichaEquipamento(id);
+    }
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function osExcluirEquipamento(id){
