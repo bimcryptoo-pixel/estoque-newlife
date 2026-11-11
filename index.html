@@ -4499,7 +4499,15 @@ function pedidosBuscaDeb(){ clearTimeout(pedBuscaT); pedBuscaT=setTimeout(carreg
 
 async function apiDELETE(table, params){
   const r = await apiFetch(`${SUPA_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers: headersREST() });
-  if(!r.ok){ const t = await r.text(); throw new Error(`DELETE ${table} → ${r.status}: ${t.slice(0,300)}`); }
+  if(!r.ok){ const t = await r.text(); throw new Error(msgErroDELETE(table, r.status, t)); }
+}
+/* 🧯 REDE DE SEGURANÇA (11/11/2026, bug do print do Fabio): DELETE barrado por
+   chave estrangeira (Postgres 23503) NUNCA vira JSON cru na tela — vira a
+   mensagem amigável de vínculo. Vale pra TODOS os fluxos que usam apiDELETE.
+   Os demais erros seguem no formato técnico (DELETE tabela → status: corpo). */
+function msgErroDELETE(table, status, corpo){
+  if(/23503|foreign key/i.test(corpo || '')) return 'este registro está vinculado a outros dados e não pode ser excluído — o histórico depende dele.';
+  return `DELETE ${table} → ${status}: ${(corpo || '').slice(0,300)}`;
 }
 
 async function carregarPedidos(){
@@ -6326,6 +6334,15 @@ async function apiCount(path){
     const m = (r.headers.get('Content-Range')||'').match(/\/(\d+)\s*$/);
     return m ? parseInt(m[1],10) : null;
   }catch(e){ return null; }
+}
+/* 🔢 Contagem por linhas retornadas (11/11/2026): conta os registros de um GET
+   select=id SEM depender do cabeçalho Content-Range (o PostgREST real manda,
+   mas ambientes sem ele — ex.: o harness de testes — fariam apiCount devolver
+   null e a contagem viraria 0). Usada nas PRÉ-CHECAGENS de exclusão: erro de
+   rede devolve 0 = segue o fluxo, e a rede de segurança do apiDELETE segura um
+   23503 residual traduzido. */
+async function contarRegistros(path){
+  try{ const rows = await apiGET(path); return Array.isArray(rows) ? rows.length : 0; }catch(e){ return 0; }
 }
 /* 📧 selos de e-mail da linha (21/10/2026, pedido do Fabio): registro visual
    dos envios — 📩 abertura / 📨 conclusão com data e hora; ⚠️ quando a OS do
@@ -8462,6 +8479,18 @@ async function osToggleTipo(id, ativo){
   catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function osDelTipo(id){
+  /* 🔒 PRÉ-CHECAGEM (11/11/2026, mesma classe do bug do equipamento): tipo com
+     OSs apontando pra ele (os_clientes.tipo_os_id / preventivas.tipo_os_id, FK
+     NO ACTION) NÃO pode ser excluído — sem a checagem, o DELETE despejava o
+     409/23503 cru na tela. A etiqueta (texto) das OSs não bloqueia; o tipo_os_id
+     derivado, sim. Com uso, a saída é ⏸️ Desativar. Conta ANTES de qualquer
+     escrita (inclusive do backup em exclusoes_backup). */
+  const nTipoOS = await contarRegistros(`os_clientes?tipo_os_id=eq.${id}&select=id`);
+  const nTipoPrev = await contarRegistros(`preventivas?tipo_os_id=eq.${id}&select=id`);
+  if(nTipoOS + nTipoPrev > 0){
+    toast(`⚠️ Este item está em ${nTipoOS} ordens de serviço e não pode ser excluído — o histórico das OSs depende dele. Use ⏸️ Desativar.`,'erro');
+    return;
+  }
   if(!confirm('Excluir este item da lista? As OSs já gravadas mantêm a etiqueta.')) return;
   try{
     const [reg] = await apiGET(`tipos_os?id=eq.${id}&select=*`);
@@ -9098,6 +9127,13 @@ async function osExcluirDefinitivo(){
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser excluída.','erro'); closeOsModal(); return; }
+  /* 🔒 PRÉ-CHECAGEM (11/11/2026, mesma classe do bug do equipamento):
+     preventivas.ultima_os_id aponta pra esta OS com FK NO ACTION — é o único
+     vínculo que o DELETE final não resolve em cascata. Sem a checagem, ele
+     despejaria o 409/23503 cru na tela. Aborta ANTES de consumir o PIN e de
+     qualquer escrita. (Hoje nenhuma preventiva aponta pra OS alguma.) */
+  const nPrevUltima = await contarRegistros(`preventivas?ultima_os_id=eq.${o.id}&select=id`);
+  if(nPrevUltima > 0){ toast('⚠️ Esta OS é a última OS registrada de uma preventiva e não pode ser excluída — o histórico das preventivas depende dela.','erro'); closeOsModal(); return; }
   if(!podeExcluirOS()){
     /* 🔐 Fluxo com PIN: consome a liberação ANTES de apagar (uso único).
        Sem liberação válida, NÃO apaga nada. */
@@ -12961,6 +12997,20 @@ async function osSalvarEquipamento(){
   }catch(e){ toast('Erro: '+e.message,'erro'); }
 }
 async function osExcluirEquipamento(id){
+  /* 🔒 PRÉ-CHECAGEM DE VÍNCULOS (11/11/2026, bug do print do Fabio): equipamento
+     referenciado por OSs NÃO pode ser excluído — os_equipamentos.equipamento_id e
+     os_clientes.equipamento_id são FK NO ACTION (o histórico das OSs depende
+     dele; preventivas.equipamento_id é CASCADE e some junto, não bloqueia).
+     Antes o app tentava o DELETE e despejava o 409/23503 cru do banco na tela.
+     Agora conta ANTES de qualquer escrita (inclusive do backup em
+     exclusoes_backup): com vínculo, aborta com a explicação e não apaga nada. */
+  const nVinculosOS = await contarRegistros(`os_equipamentos?equipamento_id=eq.${id}&select=id`);
+  const nPrincipalOS = await contarRegistros(`os_clientes?equipamento_id=eq.${id}&select=id`);
+  const nTotal = nVinculosOS + nPrincipalOS;
+  if(nTotal > 0){
+    toast(`⚠️ Este equipamento está vinculado a ${nTotal} ordens de serviço e não pode ser excluído — o histórico das OSs depende dele.`,'erro');
+    return;
+  }
   if(!confirm('Excluir este equipamento?')) return;
   const reg = (EQ_LISTA||[]).find(x=>String(x.id)===String(id));
   try{
