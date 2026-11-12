@@ -12538,6 +12538,9 @@ async function osTelaEquipamentos(){
         <button class="btn-ghost !w-auto !py-2 !px-3 text-sm hidden" id="eqBtnCancelarEd" onclick="osCancelarEdicaoEquipamento()">Cancelar edição</button>
       </div>
     </div>
+    <div class="mb-2">
+      <input id="eqBusca" class="inp text-sm" placeholder="🔎 Buscar por nome, nº de série ou cliente…" autocomplete="off" oninput="eqBuscaAplicar()" onkeydown="if(event.key==='Escape'){this.value='';eqBuscaAplicar();}">
+    </div>
     <div class="flex items-center gap-3 flex-wrap mb-2">
       <span class="text-sm font-bold text-gray-600">🔎 Filtrar por cliente:</span>
       <div class="relative" id="eqFcWrap">
@@ -12921,6 +12924,21 @@ async function eqExcluirSetor(id){
 }
 
 let EQ_LISTA = [];
+let EQ_TODOS = []; // lista completa do recorte atual (pós-filtro de cliente do servidor, ANTES de visão/busca)
+let EQ_BUSCA_T = null;
+/* 🔎 BUSCA DE EQUIPAMENTOS (12/11/2026, pedido do Fabio): localiza por nome, nº de
+   série ou cliente — também casa tipo e setor — sem acento e palavra por palavra,
+   combinando com o filtro de cliente e com a visão Ativos/Arquivados/Todos.
+   Padrão das buscas do sistema (input .inp com 🔎, filtro ao digitar): a digitação
+   filtra da lista já carregada (EQ_TODOS), sem nova chamada ao banco. */
+function eqBuscaTermo(){ const i = document.getElementById('eqBusca'); return i ? i.value : ''; }
+function eqBuscaAplicar(){ clearTimeout(EQ_BUSCA_T); EQ_BUSCA_T = setTimeout(()=>{ if(document.getElementById('eqLista')) eqRenderLista(); }, 180); }
+function eqPassaBusca(e, tokens){
+  if(!tokens.length) return true;
+  const cli = e.clientes ? fmtCliNome(e.clientes.nome, e.clientes.tipo) : (e.cliente_id ? '' : 'na empresa sem cliente');
+  const f = osNormNome([e.nome||'', e.numero_serie||'', e.tipo||'', cli, eqSetorNome(e)||''].join(' '));
+  return tokens.every(t=>f.includes(t));
+}
 /* ---------- 📦 ARQUIVAR EQUIPAMENTO (11/11/2026, pedido do Fabio) ----------
    Equipamento que não está mais fisicamente no cliente NÃO se exclui (ele tem
    histórico de OSs): ARQUIVA. A coluna equipamentos.status já existia no banco
@@ -12961,16 +12979,31 @@ async function osListarEquipamentos(){
   try{
     await eqCarregarMapaSetores();
     const filtro = fc==='__semcliente' ? '&cliente_id=is.null' : (fc ? `&cliente_id=eq.${fc}` : '');
-    const eqs = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${filtro}&order=created_at.desc&limit=1000`);
+    EQ_TODOS = await apiGET(`equipamentos?select=*,clientes(id,nome,tipo)${filtro}&order=created_at.desc&limit=1000`) || [];
+    await eqRenderLista();
+  }catch(e){ document.getElementById('eqLista').innerHTML = '<span class="text-red-600 text-sm">Erro: '+esc(e.message)+'</span>'; }
+}
+/* Render da lista a partir de EQ_TODOS (sem nova chamada ao banco): aplica a
+   📦 visão (ativos/arquivados/todos) e a 🔎 busca, nesta ordem. */
+async function eqRenderLista(){
+  const fc = (document.getElementById('eqFiltroCliente')||{}).value || '';
+  try{
+    const eqs = EQ_TODOS || [];
     /* 📦 visão da lista: padrão só ATIVOS — arquivado fora da lista, dos grupos
        de setor e das contagens exibidas; 'arquivados'/'todos' só por escolha */
     const vis = EQ_VISAO || 'ativos';
-    const exib = (eqs||[]).filter(e => vis==='todos' ? true : (vis==='arquivados' ? eqArquivado(e) : !eqArquivado(e)));
+    const base = eqs.filter(e => vis==='todos' ? true : (vis==='arquivados' ? eqArquivado(e) : !eqArquivado(e)));
+    const termoRaw = eqBuscaTermo().trim();
+    const tokens = osNormNome(termoRaw).split(/\s+/).filter(Boolean);
+    const exib = base.filter(e=>eqPassaBusca(e, tokens));
     EQ_LISTA = exib;
     const ct = document.getElementById('eqContador');
-    if(ct){ const tot = await apiCount(fc==='__semcliente' ? 'equipamentos?cliente_id=is.null' : (fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos')); ct.textContent = 'Exibindo ' + exib.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (exib.length===1?'':'s') + (vis==='arquivados' ? ' arquivados' : (vis==='todos' ? ' (ativos + arquivados)' : '')) + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
+    if(ct){
+      if(tokens.length){ ct.textContent = 'Exibindo ' + exib.length + ' de ' + base.length + ' equipamento' + (base.length===1?'':'s') + ' na busca "' + termoRaw + '"' + (vis==='arquivados' ? ' (arquivados)' : (vis==='todos' ? ' (ativos + arquivados)' : '')) + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
+      else { const tot = await apiCount(fc==='__semcliente' ? 'equipamentos?cliente_id=is.null' : (fc ? `equipamentos?cliente_id=eq.${fc}` : 'equipamentos')); ct.textContent = 'Exibindo ' + exib.length + (tot!=null ? ' de ' + tot : '') + ' equipamento' + (exib.length===1?'':'s') + (vis==='arquivados' ? ' arquivados' : (vis==='todos' ? ' (ativos + arquivados)' : '')) + (fc==='__semcliente' ? ' na empresa (sem cliente)' : (fc ? ' deste cliente' : '')); }
+    }
     const box = document.getElementById('eqLista');
-    if(!exib.length){ box.innerHTML = `<span class="text-gray-400 text-sm">${vis==='arquivados' ? 'Nenhum equipamento arquivado.' : (vis==='todos' ? 'Nenhum equipamento.' : ((eqs||[]).length ? 'Nenhum equipamento ativo neste filtro — os demais estão arquivados (visão 📦 Arquivados).' : 'Nenhum equipamento.'))}</span>`; return; }
+    if(!exib.length){ box.innerHTML = `<span class="text-gray-400 text-sm">${tokens.length ? 'Nenhum equipamento encontrado na busca "' + esc(termoRaw) + '" — tente pelo nome, nº de série ou cliente.' : (vis==='arquivados' ? 'Nenhum equipamento arquivado.' : (vis==='todos' ? 'Nenhum equipamento.' : ((eqs||[]).length ? 'Nenhum equipamento ativo neste filtro — os demais estão arquivados (visão 📦 Arquivados).' : 'Nenhum equipamento.')))}</span>`; return; }
     const umCliente = !!fc && fc!=='__semcliente';
     if(!umCliente){ box.innerHTML = exib.map(eqLinhaHtml).join(''); return; }
     /* 🏢 filtrado por UM cliente: agrupa por setor (espelha os Vínculos do Field),
