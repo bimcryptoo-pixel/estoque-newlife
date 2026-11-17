@@ -11736,6 +11736,19 @@ let TEC_CONC_OBS = null;  // rascunho da descrição entre a prévia e a correç
 function tecConcRascunhoLer(atvId){ try{ return localStorage.getItem('nl_rascunho_obs_' + atvId) || ''; }catch(e){ return ''; } }
 function tecConcRascunhoSalvar(atvId, obs){ TEC_CONC_OBS = { atvId, obs }; try{ if(obs) localStorage.setItem('nl_rascunho_obs_' + atvId, obs); else localStorage.removeItem('nl_rascunho_obs_' + atvId); }catch(e){} }
 function tecConcRascunhoLimpar(atvId){ if(TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId)) TEC_CONC_OBS = null; try{ localStorage.removeItem('nl_rascunho_obs_' + atvId); }catch(e){} }
+/* 💾 BOTÃO SALVAR DESCRIÇÃO (pedido do Fabio, 17/11/2026): salva a descrição
+   na hora e FECHA a caixa de volta pro cartão — o técnico anexa a foto que
+   esqueceu e, ao reabrir o Concluir, o texto está lá. Não depende de
+   apertar Pré-visualizar (o salvamento automático ao digitar continua
+   como rede de segurança, mas o botão é a garantia visível). */
+function tecConcSalvarDescricao(atvId){
+  const t = document.getElementById('tecConcObs');
+  const obs = t ? t.value : '';
+  if(!String(obs).trim()){ toast('⚠️ Digite a descrição antes de salvar.','erro'); return; }
+  tecConcRascunhoSalvar(atvId, obs);
+  closeOsModal();
+  toast('💾 Descrição salva! Pode anexar a foto — ao voltar, o texto continua aqui.','ok');
+}
 function tecConcluirBotao(atvId, osId){
   const a = tecAtvPorId(atvId);
   if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
@@ -11751,6 +11764,8 @@ function tecConcluirBotao(atvId, osId){
     <div class="font-extrabold text-base mb-1">📝 O que foi feito?</div>
     <div class="text-xs text-gray-500 mb-3">Descreva o serviço executado — vai para a OS e para o cliente.</div>
     <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…" oninput="tecConcRascunhoSalvar('${atvId}', this.value)">${esc((TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId) && TEC_CONC_OBS.obs) || tecConcRascunhoLer(atvId) || (a && a.descricao_conclusao) || '')}</textarea>
+    <div class="text-xs text-gray-500 mb-3">💾 Esqueceu uma foto? Toque em <b>Salvar descrição</b>: o texto fica guardado nesta OS e você volta pro cartão pra anexar.</div>
+    <button class="btn-ghost w-full !py-3 text-base mb-2" onclick="tecConcSalvarDescricao('${atvId}')">💾 Salvar descrição</button>
     <button class="btn-brand w-full !py-3.5 text-base" id="tecBtnConcluirBotao" onclick="tecConcluirPrevia()">👁️ Pré-visualizar OS</button>
     <button class="btn-ghost w-full !py-2.5 text-sm mt-2" onclick="closeOsModal()">Cancelar</button>`);
 }
