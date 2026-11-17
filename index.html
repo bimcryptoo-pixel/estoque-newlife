@@ -11727,6 +11727,15 @@ window.addEventListener('click', (e) => {
    conclusão entra na fila DEPOIS da foto e da assinatura. */
 let TEC_CONCLUIR = null;
 let TEC_CONC_OBS = null;  // rascunho da descrição entre a prévia e a correção
+/* 📝 RASCUNHO DA DESCRIÇÃO PRÉ-SALVO (pedido do Fabio, 17/11/2026): o texto
+   digitado na caixa de conclusão é salvo ENQUANTO digita (memória + aparelho)
+   — o técnico pode fechar a caixa, anexar uma foto esquecida no cartão e
+   voltar: a descrição continua lá. Só limpa quando a conclusão finaliza
+   (ou entra na fila offline). A assinatura do cliente já ficava salva; o
+   rascunho equipara a descrição ao mesmo comportamento. */
+function tecConcRascunhoLer(atvId){ try{ return localStorage.getItem('nl_rascunho_obs_' + atvId) || ''; }catch(e){ return ''; } }
+function tecConcRascunhoSalvar(atvId, obs){ TEC_CONC_OBS = { atvId, obs }; try{ if(obs) localStorage.setItem('nl_rascunho_obs_' + atvId, obs); else localStorage.removeItem('nl_rascunho_obs_' + atvId); }catch(e){} }
+function tecConcRascunhoLimpar(atvId){ if(TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId)) TEC_CONC_OBS = null; try{ localStorage.removeItem('nl_rascunho_obs_' + atvId); }catch(e){} }
 function tecConcluirBotao(atvId, osId){
   const a = tecAtvPorId(atvId);
   if(a && tecBloqueado(a)){ tecAvisoTrava(); return; }
@@ -11741,7 +11750,7 @@ function tecConcluirBotao(atvId, osId){
     <div class="font-bold text-brand text-sm mb-1">✅ Concluir atendimento</div>
     <div class="font-extrabold text-base mb-1">📝 O que foi feito?</div>
     <div class="text-xs text-gray-500 mb-3">Descreva o serviço executado — vai para a OS e para o cliente.</div>
-    <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…">${esc((TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId) && TEC_CONC_OBS.obs) || (a && a.descricao_conclusao) || '')}</textarea>
+    <textarea id="tecConcObs" class="inp text-base mb-3" rows="4" style="min-height:110px" placeholder="Descreva o serviço executado…" oninput="tecConcRascunhoSalvar('${atvId}', this.value)">${esc((TEC_CONC_OBS && String(TEC_CONC_OBS.atvId) === String(atvId) && TEC_CONC_OBS.obs) || tecConcRascunhoLer(atvId) || (a && a.descricao_conclusao) || '')}</textarea>
     <button class="btn-brand w-full !py-3.5 text-base" id="tecBtnConcluirBotao" onclick="tecConcluirPrevia()">👁️ Pré-visualizar OS</button>
     <button class="btn-ghost w-full !py-2.5 text-sm mt-2" onclick="closeOsModal()">Cancelar</button>`);
 }
@@ -11787,7 +11796,7 @@ async function tecConcluirPrevia(){
   const C = TEC_CONCLUIR; if(!C) return;
   const obs = (document.getElementById('tecConcObs') || {}).value || '';
   if(!String(obs).trim()){ toast('⚠️ Descreva o serviço executado antes de pré-visualizar.','erro'); return; }
-  TEC_CONC_OBS = { atvId: C.atvId, obs };
+  tecConcRascunhoSalvar(C.atvId, obs);
   const btn = document.getElementById('tecBtnConcluirBotao');
   if(btn){ btn.disabled = true; btn.textContent = 'Montando a prévia…'; }
   try{
@@ -11825,7 +11834,7 @@ async function tecConcluirFinalizar(dePrevia){
   // 📴 OFFLINE: a conclusão fica em standby na fila — a foto e a assinatura
   //    coletadas pelos botões já estão na fila ANTES dela (ordem garantida).
   if(navigator.onLine===false){
-    try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; TEC_CONC_OBS = null; }
+    try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; tecConcRascunhoLimpar(atvId); }
     catch(e){ toast('Erro ao guardar no aparelho: '+e.message,'erro'); }
     return;
   }
@@ -11851,7 +11860,7 @@ async function tecConcluirFinalizar(dePrevia){
     try{ await osLog(osId, 'concluiu o atendimento pelo celular'); }catch(_){}
     osEnviarEmailAuto(osId); // 📧 envio automático da OS ao cliente
     TEC_CONCLUIR = null;
-    TEC_CONC_OBS = null;
+    tecConcRascunhoLimpar(atvId);
     const [aa] = await apiGET(`os_atividades?id=eq.${atvId}&select=inicio,fim`);
     openOsModal(`
       <div class="text-center py-4">
@@ -11870,7 +11879,7 @@ async function tecConcluirFinalizar(dePrevia){
   }catch(e){
     // 📴 a rede caiu no meio: a conclusão NÃO se perde — vira captura offline
     if(!atividadeConcluida && typeof nlEhErroRede==='function' && nlEhErroRede(e)){
-      try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; return; }
+      try{ await nlCapturarConclusao({ osId, atvId, obs, fotos:[], nfotos }, '', null, osRow.assinatura_url || null); TEC_CONCLUIR = null; tecConcRascunhoLimpar(atvId); return; }
       catch(_){}
     }
     toast('Erro: '+e.message,'erro');
