@@ -13634,6 +13634,7 @@ async function osRelatorioResumido(){
     }
     if(!rows || !rows.length){ toast('Nenhuma OS encontrada com os filtros atuais.','erro'); return; }
     await osCarregarExtras(rows); /* _tec (operador) igual ao cartão da lista */
+    await osRelatorioFechamentos(rows); /* _fech (data de fechamento) das concluídas */
     const html = osMontarHtmlRelatorio(rows);
     let f = document.getElementById('printFrameOS');
     if(!f){ f = document.createElement('iframe'); f.id='printFrameOS'; f.style.display='none'; document.body.appendChild(f); }
@@ -13641,6 +13642,21 @@ async function osRelatorioResumido(){
     docw.open(); docw.write(html); docw.close();
     setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} }, 80);
   }catch(e){ toast('Erro ao gerar o relatório: '+e.message,'erro'); }
+}
+async function osRelatorioFechamentos(rows){
+  const alvo = (rows||[]).filter(o=>o && o.id && o.status==='concluida');
+  if(!alvo.length) return;
+  const ids = alvo.map(o=>o.id).join(',');
+  const atvs = await apiGETall(`os_atividades?select=os_id,data,fim&os_id=in.(${ids})&status=eq.concluida`).catch(()=>[]);
+  const m = {};
+  (atvs||[]).forEach(a=>{
+    if(!a || !a.data) return;
+    const dt = String(a.data).slice(0,10);
+    const hr = a.fim ? String(a.fim).slice(0,5) : '';
+    const chave = dt + ' ' + (hr || '00:00');
+    if(!m[a.os_id] || chave > m[a.os_id].chave) m[a.os_id] = { chave, dt, hr };
+  });
+  alvo.forEach(o=>{ const f = m[o.id]; o._fech = f ? (fmtData(f.dt) + (f.hr ? ', ' + f.hr : '')) : ''; });
 }
 function osMontarHtmlRelatorio(rows){
   const agora = new Date();
@@ -13655,6 +13671,7 @@ function osMontarHtmlRelatorio(rows){
     return `<tr>
       <td class="c">${esc(o.numero||'—')}</td>
       <td class="c">${esc(abertura)}</td>
+      <td class="c">${esc(o._fech||'—')}</td>
       <td>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</td>
       <td class="c">${esc(SIT[o.status]||o.status||'—')}</td>
       <td>${esc(o._tec||'—')}</td>
@@ -13665,20 +13682,20 @@ function osMontarHtmlRelatorio(rows){
   <style>
     *{box-sizing:border-box}
     @page{ size:A4; margin:12mm 10mm 14mm 10mm; }
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:11.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:8px;margin:0 0 10px;}
-    .marca .nome{font-size:17px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome{font-size:16px;font-weight:900;letter-spacing:.5px;}
     .marca .nome span{color:#C1272D;}
     .doc{text-align:right;}
-    .doc h1{font-size:16px;margin:0;letter-spacing:.6px;color:#111;}
+    .doc h1{font-size:15px;margin:0;letter-spacing:.6px;color:#111;}
     .doc .tipo{font-size:11px;color:#555;margin-top:2px;}
     .filtros{font-size:10.5px;color:#555;margin:0 0 8px;}
     table{width:100%;border-collapse:collapse;}
-    thead th{background:#C1272D;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;padding:6px 7px;border:1px solid #a51f26;text-align:left;}
-    tbody td{padding:5px 7px;border:1px solid #ddd;font-size:11px;vertical-align:top;}
+    thead th{background:#C1272D;color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;padding:5px 6px;border:1px solid #a51f26;text-align:left;}
+    tbody td{padding:4px 6px;border:1px solid #ddd;font-size:9.5px;vertical-align:top;}
     tbody tr:nth-child(even){background:#f8f9fb;}
     td.c{text-align:center;white-space:nowrap;}
-    .totais{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px 10px;}
+    .totais{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:10px;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px 10px;}
     .rodape{position:fixed;bottom:0;left:0;right:0;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9.5px;color:#999;background:#fff;}
   </style></head><body>
   <div class="topo">
@@ -13687,7 +13704,7 @@ function osMontarHtmlRelatorio(rows){
   </div>
   <div class="filtros"><b>Gerado em ${esc(gerado)}</b> · ${esc(osRelatorioFiltrosTexto())}</div>
   <table>
-    <thead><tr><th style="text-align:center">N° da OS</th><th style="text-align:center">Data de abertura</th><th>Cliente</th><th style="text-align:center">Situação</th><th>Operador</th><th>Tipo de OS</th></tr></thead>
+    <thead><tr><th style="text-align:center">N° da OS</th><th style="text-align:center">Data de abertura</th><th style="text-align:center">Data de fechamento</th><th>Cliente</th><th style="text-align:center">Situação</th><th>Operador</th><th>Tipo de OS</th></tr></thead>
     <tbody>${linhas}</tbody>
   </table>
   <div class="totais"><span><b>Total: ${rows.length} OSs</b></span><span>📂 Abertas: <b>${cont.aberta}</b></span><span>🔧 Em atendimento: <b>${cont.em_atendimento}</b></span><span>✅ Concluídas: <b>${cont.concluida}</b></span><span>❌ Canceladas: <b>${cont.cancelada}</b></span></div>
