@@ -8926,7 +8926,18 @@ async function osAbrirEditar(){
      principal vigente pré-selecionado (só entra se for deste cliente) */
   eosCarregarEquips(o.cliente_id, o.equipamento_id);
 }
+let OS_SALVANDO_EDICAO = false;
 async function osSalvarEdicao(){
+  /* 🔒 TRAVA DE SALVAMENTO (17/11/2026, caso OS-2026-0097): a mesma edição
+     salva 2× (clique duplo ou 2 janelas) rodava o fluxo inteiro de novo e
+     DUPLICAVA a designação (2 atividades idênticas pra Sarah). A trava é
+     síncrona na entrada e libera no finally — o 2º salvamento é ignorado. */
+  if(OS_SALVANDO_EDICAO) return;
+  OS_SALVANDO_EDICAO = true;
+  try{ await osSalvarEdicaoFluxo(); }
+  finally{ OS_SALVANDO_EDICAO = false; }
+}
+async function osSalvarEdicaoFluxo(){
   const d = OS_DETALHE; if(!d) return;
   const o = d.os;
   if(!osEhEditavel(o)){ toast('OS importada do Field Control é histórico e não pode ser editada.','erro'); return; }
@@ -9032,6 +9043,7 @@ async function osSalvarEdicao(){
     }
     // designação SÓ depois da edição salva; falha aqui não se esconde (toast específico)
     let designFalhou = '';
+    let designMudouReal = false; /* a designação mudou NESTE salvamento? (o push só sai se sim) */
     let tecIgnoradoFechada = false;
     if(tecMudou && osFechada){
       /* OS concluída/cancelada NÃO recebe designação pela edição: trocar o
@@ -9042,28 +9054,52 @@ async function osSalvarEdicao(){
     }
     if(tecMudou && !osFechada){
       try{
+        /* 🔎 RECONFERÊNCIA FRESCA (17/11/2026, caso OS-2026-0097): o retrato
+           OS_EDIT_TEC é da ABERTURA do modal — se esta mesma edição já foi
+           salva (ou outra janela designou), ele está velho e mandar criar
+           outra atividade DUPLICA a designação (aconteceu com a Sarah:
+           2 atividades idênticas, 21s apartadas). Antes de decidir, relê a
+           atividade aberta DIRETO do banco e decide por ela: técnico fresco
+           igual ao do formulário = designação já aplicada, não faz nada;
+           diferente = atualiza ESSA atividade; nenhuma = cria a primeira. */
+        let atvFresca = null;
+        try{
+          const rowsF = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id,tecnico,status,created_at&order=created_at.asc`);
+          atvFresca = (rowsF||[])[0] || null;
+        }catch(e){ atvFresca = OS_EDIT_TEC ? { id: OS_EDIT_TEC.atvId, tecnico: OS_EDIT_TEC.tecnico, status: OS_EDIT_TEC.status } : null; }
+        const tecFresco = atvFresca ? (atvFresca.tecnico||'') : '';
         if(tecNovo){
-          if(OS_EDIT_TEC){
-            await apiPATCH('os_atividades', `id=eq.${OS_EDIT_TEC.atvId}`, { tecnico: tecNovo });
-            await osLog(o.id, tecAtual ? `técnico alterado de ${tecAtual} para ${tecNovo}` : `OS designada para ${tecNovo}`);
+          if(atvFresca && tecFresco === tecNovo){
+            /* designação já aplicada por salvamento anterior — nada a fazer
+               (sem atividade nova, sem log repetido, sem push repetido) */
+          } else if(atvFresca){
+            await apiPATCH('os_atividades', `id=eq.${atvFresca.id}`, { tecnico: tecNovo });
+            await osLog(o.id, tecFresco ? `técnico alterado de ${tecFresco} para ${tecNovo}` : `OS designada para ${tecNovo}`);
+            designMudouReal = true;
           } else {
             await apiPOST('os_atividades', { os_id: o.id, tecnico: tecNovo, data: mapaHojeFortaleza(), status:'pendente' });
             if(o.status==='aberta') await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'em_atendimento' });
             await osLog(o.id, `OS designada para ${tecNovo}`);
+            designMudouReal = true;
           }
-        } else if(OS_EDIT_TEC) {
-          // remoção: a trava acima garante atividade 'pendente' (não iniciada)
-          await apiDELETE('os_atividades', `id=eq.${OS_EDIT_TEC.atvId}`);
-          const restantes = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id`);
-          if((!restantes || !restantes.length) && o.status==='em_atendimento'){
-            await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'aberta' });
+        } else if(atvFresca) {
+          // remoção: o estado FRESCO manda — atividade já iniciada não remove
+          if(atvFresca.status !== 'pendente'){
+            designFalhou = `Atividade já iniciada por ${tecFresco} — não é possível remover o técnico; você pode trocá-lo por outro.`;
+          } else {
+            await apiDELETE('os_atividades', `id=eq.${atvFresca.id}`);
+            const restantes = await apiGET(`os_atividades?os_id=eq.${o.id}&status=not.in.(concluida,cancelada)&select=id`);
+            if((!restantes || !restantes.length) && o.status==='em_atendimento'){
+              await apiPATCH('os_clientes', `id=eq.${o.id}`, { status:'aberta' });
+            }
+            await osLog(o.id, 'designação de técnico removida');
           }
-          await osLog(o.id, 'designação de técnico removida');
         }
       }catch(e){ designFalhou = e.message; }
     }
-    // 🔔 push quando a designação é criada/trocada na edição (29/10/2026)
-    if(tecMudou && tecNovo && !designFalhou){ try{ await osNotificarDesignacao(o.id, tecNovo); }catch(e){} }
+    // 🔔 push quando a designação é criada/trocada NESTE salvamento (29/10/2026;
+    // 17/11/2026: só quando mudou de verdade — salvamento repetido não re-notifica)
+    if(designMudouReal && tecNovo && !designFalhou){ try{ await osNotificarDesignacao(o.id, tecNovo); }catch(e){} }
     closeOsModal();
     OS_CACHE = null;
     if(designFalhou) toast(`OS ${o.numero} atualizada, mas a designação do técnico falhou: ${designFalhou}`,'erro');
