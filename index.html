@@ -1159,6 +1159,7 @@
             <div class="font-bold text-lg">🔧 OS Clientes</div>
             <div class="flex gap-2 flex-wrap">
               <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osAbrirClientes()">👥 Clientes</button>
+              <button class="btn-ghost !w-auto !py-2 !px-4 text-sm" onclick="osRelatorioResumido()">📋 Relatório resumido</button>
               <button class="btn-brand !w-auto !py-2 !px-4 text-sm" onclick="novaOS()">＋ Nova OS</button>
             </div>
           </div>
@@ -13585,6 +13586,115 @@ function imprimirOS(){
     f.contentWindow.print();
   });
 }
+/* ---------- 📋 Relatório resumido de OSs (19/11/2026, pedido do Fabio) ----------
+   Modelo: o relatório de Atividades do Field Control (tabela enxuta, uma
+   linha por OS) com o layout de impressão da NEW LIFE. Colunas: N° da OS,
+   data de abertura, cliente, situação, operador e tipo de OS. Sai das OSs
+   que passam nos filtros ATUAIS da tela (situação, status, cliente, tipo,
+   operador, e-mail, período e a busca) — pra imprimir ou salvar em PDF e
+   enviar, sem imprimir OS por OS. */
+function osRelatorioFiltrosTexto(){
+  const partes = [];
+  const fs = (document.getElementById('osFiltroStatus')||{}).value||'';
+  if(fs){ const st = OS_STATUS[fs]; partes.push('Situação: ' + (st ? st.label.replace(/^\S+\s/, '') : fs)); }
+  else if(OS_SITUACAO==='aberto') partes.push('Situação: Em aberto');
+  else if(OS_SITUACAO==='concluida') partes.push('Situação: Concluídas');
+  else if(OS_SITUACAO==='todas') partes.push('Situação: Todas');
+  if((document.getElementById('osFiltroCliente')||{}).value) partes.push('Cliente: ' + ((document.getElementById('osFcLabel')||{}).textContent||'').trim());
+  if((document.getElementById('osFiltroTipo')||{}).value) partes.push('Tipo: ' + ((document.getElementById('osTpLabel')||{}).textContent||'').trim());
+  if((document.getElementById('osFiltroOperador')||{}).value) partes.push('Operador: ' + ((document.getElementById('osOpLabel')||{}).textContent||'').trim());
+  if((document.getElementById('osFiltroEmail')||{}).value) partes.push(((document.getElementById('osEmLabel')||{}).textContent||'').trim());
+  const pr = (document.getElementById('osPeriodoResumo')||{}).textContent||'';
+  if(pr) partes.push(pr.replace(/^📅\s*/, ''));
+  const q = (document.getElementById('osBusca')||{}).value||'';
+  if(q.trim()) partes.push('Busca: "' + q.trim() + '"');
+  return partes.length ? partes.join(' · ') : 'Sem filtros — todas as OSs';
+}
+async function osRelatorioResumido(){
+  try{
+    toast('Gerando o relatório…');
+    const q = (document.getElementById('osBusca').value||'').trim().replace(/%/g,'');
+    const filtros = osFiltrosQuery();
+    let rows;
+    if(!q){
+      rows = await apiGETall(`os_clientes?select=${OS_LIST_SEL}&order=created_at.asc${filtros}`);
+    } else {
+      /* com busca: o mesmo caminho de 2 passos da lista, sem o teto da tela */
+      const qq = encodeURIComponent('*'+q+'*');
+      const sel = `os_clientes?select=${OS_LIST_SEL}&order=created_at.asc${filtros}`;
+      const partes = [ apiGET(`${sel}&or=(numero.ilike.${qq},descricao_servico.ilike.${qq})&limit=500`).catch(()=>[]) ];
+      const clis = await apiGET(`clientes?select=id&nome=ilike.${qq}&limit=100`).catch(()=>[]);
+      if(clis && clis.length) partes.push(apiGET(`${sel}&cliente_id=in.(${clis.map(c=>c.id).join(',')})&limit=500`).catch(()=>[]));
+      const eqs = await apiGET(`equipamentos?select=id&nome=ilike.${qq}&limit=100`).catch(()=>[]);
+      if(eqs && eqs.length) partes.push(apiGET(`${sel}&equipamento_id=in.(${eqs.map(e=>e.id).join(',')})&limit=500`).catch(()=>[]));
+      const listas = await Promise.all(partes);
+      const map = new Map();
+      listas.flat().forEach(o=>{ if(o && o.id!=null && !map.has(o.id)) map.set(o.id,o); });
+      rows = [...map.values()].sort((x,y)=>String(x.created_at||'').localeCompare(String(y.created_at||'')));
+    }
+    if(!rows || !rows.length){ toast('Nenhuma OS encontrada com os filtros atuais.','erro'); return; }
+    await osCarregarExtras(rows); /* _tec (operador) igual ao cartão da lista */
+    const html = osMontarHtmlRelatorio(rows);
+    let f = document.getElementById('printFrameOS');
+    if(!f){ f = document.createElement('iframe'); f.id='printFrameOS'; f.style.display='none'; document.body.appendChild(f); }
+    const docw = f.contentWindow.document;
+    docw.open(); docw.write(html); docw.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} }, 80);
+  }catch(e){ toast('Erro ao gerar o relatório: '+e.message,'erro'); }
+}
+function osMontarHtmlRelatorio(rows){
+  const agora = new Date();
+  const gerado = agora.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const SIT = { aberta:'Aberta', em_atendimento:'Em atendimento', concluida:'Concluída', cancelada:'Cancelada' };
+  const cont = { aberta:0, em_atendimento:0, concluida:0, cancelada:0 };
+  rows.forEach(o=>{ if(cont[o.status]!=null) cont[o.status]++; });
+  const linhas = rows.map(o=>{
+    const cli = o.clientes||{};
+    const abertura = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+    const tipo = (o.etiquetas && o.etiquetas.length) ? o.etiquetas.join(' · ') : (o.tipos_os ? o.tipos_os.descricao : '');
+    return `<tr>
+      <td class="c">${esc(o.numero||'—')}</td>
+      <td class="c">${esc(abertura)}</td>
+      <td>${esc(fmtCliNome(cli.nome||'—', cli.tipo))}</td>
+      <td class="c">${esc(SIT[o.status]||o.status||'—')}</td>
+      <td>${esc(o._tec||'—')}</td>
+      <td>${esc(tipo||'—')}</td>
+    </tr>`;
+  }).join('');
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de OSs — NEW LIFE</title>
+  <style>
+    *{box-sizing:border-box}
+    @page{ size:A4; margin:12mm 10mm 14mm 10mm; }
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:11.5px;margin:0;padding:0;line-height:1.42;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .topo{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #C1272D;padding-bottom:8px;margin:0 0 10px;}
+    .marca .nome{font-size:17px;font-weight:900;letter-spacing:.5px;}
+    .marca .nome span{color:#C1272D;}
+    .doc{text-align:right;}
+    .doc h1{font-size:16px;margin:0;letter-spacing:.6px;color:#111;}
+    .doc .tipo{font-size:11px;color:#555;margin-top:2px;}
+    .filtros{font-size:10.5px;color:#555;margin:0 0 8px;}
+    table{width:100%;border-collapse:collapse;}
+    thead th{background:#C1272D;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;padding:6px 7px;border:1px solid #a51f26;text-align:left;}
+    tbody td{padding:5px 7px;border:1px solid #ddd;font-size:11px;vertical-align:top;}
+    tbody tr:nth-child(even){background:#f8f9fb;}
+    td.c{text-align:center;white-space:nowrap;}
+    .totais{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;background:#f8f9fb;border:1px solid #e8eaee;border-radius:8px;padding:7px 10px;}
+    .rodape{position:fixed;bottom:0;left:0;right:0;padding-top:6px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9.5px;color:#999;background:#fff;}
+  </style></head><body>
+  <div class="topo">
+    <div class="marca"><div class="nome">NEWLIFE <span>DIAGNÓSTICO</span></div><div style="font-size:10px;color:#888;letter-spacing:2px;margin-top:2px">GESTÃO EMPRESARIAL</div></div>
+    <div class="doc"><h1>RELATÓRIO DE OSs</h1><div class="tipo">Resumo das ordens de serviço</div></div>
+  </div>
+  <div class="filtros"><b>Gerado em ${esc(gerado)}</b> · ${esc(osRelatorioFiltrosTexto())}</div>
+  <table>
+    <thead><tr><th style="text-align:center">N° da OS</th><th style="text-align:center">Data de abertura</th><th>Cliente</th><th style="text-align:center">Situação</th><th>Operador</th><th>Tipo de OS</th></tr></thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  <div class="totais"><span><b>Total: ${rows.length} OSs</b></span><span>📂 Abertas: <b>${cont.aberta}</b></span><span>🔧 Em atendimento: <b>${cont.em_atendimento}</b></span><span>✅ Concluídas: <b>${cont.concluida}</b></span><span>❌ Canceladas: <b>${cont.cancelada}</b></span></div>
+  <div class="rodape"><span>NEW LIFE • Diagnóstico — relatório resumido de ordens de serviço</span><span>Gerado em ${esc(gerado)}</span></div>
+  </body></html>`;
+}
+
 /* ================= 📴 MODO OFFLINE — PAINEL DO TÉCNICO (20/10/2026) =================
    O técnico em campo (hospital, subsolo, interior) NÃO pode perder atendimento
    por falta de sinal — era assim no Field Control (app guardava tudo no aparelho
