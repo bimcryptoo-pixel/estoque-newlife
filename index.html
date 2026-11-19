@@ -2061,10 +2061,11 @@ function entrarApp(){
   try{ eqCarregarTipos(); }catch(e){} /* 🏷️ tipos de equipamento (tabela equip_tipos): aquece o cache p/ Nova OS/Editar */
   // Cadastros (produtos, fornecedores, transportadoras): visível para todos os perfis
   document.getElementById('fData').value = hojeISO();
-  carregarProdutosCache().then(()=>{
-    preencherDatalistProdutos();
-    carregarClientesCache(); /* preenche selects e datalist da base de clientes */
-  });
+  carregarProdutosCache().then(()=>{ preencherDatalistProdutos(); }).catch(()=>{});
+  /* clientes NÃO dependem dos produtos (19/11/2026, caso Suzana): encadeados,
+     uma falha na busca de produtos impedia a de clientes de rodar — e o filtro
+     de clientes do OS Clientes ficava vazio a sessão toda. */
+  carregarClientesCache(); /* preenche selects e datalist da base de clientes */
   const mp = modulosPermitidos();
   mostrarAba(mp.includes('inicio') ? 'inicio' : (mp[0] || 'inicio'));
   // 🔔 toque numa notificação de chamado novo cai direto no Minhas OS
@@ -6519,6 +6520,7 @@ function fcItens(qual){ return qual==='tec' ? TEC_FC_ITENS : qual==='tipo' ? OS_
 function fcAbrir(qual, ev){
   if(ev) ev.stopPropagation();
   if(qual==='oper' && !OS_OP_ITENS.length) osCarregarOperadores();
+  if((qual==='os'||qual==='eqcli'||qual==='eqform'||qual==='eqsetorcli') && !OS_FC_ITENS.length) osCarregarClientesFiltro();
   const cfg = FC_CFG[qual], l = document.getElementById(cfg.lista);
   if(!l) return;
   const estavaFechada = l.classList.contains('hidden');
@@ -6728,6 +6730,35 @@ function osTotal(d){
   return { vs, vp, vserv, vdesp, total: vs+vp+vserv };
 }
 
+/* ---------- 🔎 itens do filtro de clientes (19/11/2026, caso Suzana) ----------
+   OS_FC_ITENS nasce do cache CLIENTES. A montagem tem UM lugar só, e a carga
+   se repete sob demanda: lista vazia NUNCA é definitiva — abrir o combobox ou
+   entrar no módulo com o cache vazio busca os clientes e remonta a lista
+   (mesmo padrão do filtro de operadores, 23/10/2026). */
+function osFcMontarItens(){
+  OS_FC_ITENS = (CLIENTES||[]).filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
+  return OS_FC_ITENS;
+}
+let OS_CLI_CARREGANDO = false;
+async function osCarregarClientesFiltro(){
+  if(OS_FC_ITENS.length || OS_CLI_CARREGANDO) return;
+  if((CLIENTES||[]).length){ osFcMontarItens(); fcSincronizar('os'); return; }
+  OS_CLI_CARREGANDO = true;
+  try{
+    await carregarClientesCache();
+    if((CLIENTES||[]).length){
+      osFcMontarItens();
+      fcSincronizar('os');
+      /* painel de algum combobox de cliente aberto durante a carga: re-renderiza */
+      [['os','osFcLista'],['eqcli','eqFcLista'],['eqform','eqFormLista'],['eqsetorcli','eqSetorCliLista']].forEach(([q, idLista])=>{
+        const lp = document.getElementById(idLista);
+        if(lp && !lp.classList.contains('hidden')) fcRender(q);
+      });
+    }
+  }catch(e){ /* erro de rede também não trava: tenta na próxima abertura */ }
+  finally{ OS_CLI_CARREGANDO = false; }
+}
+
 async function carregarOSClientes(){
   carregarTecnicos();
   carregarTiposOS();
@@ -6743,10 +6774,8 @@ async function carregarOSClientes(){
     });
   }catch(e){}
   try{
-    if(Array.isArray(CLIENTES)){
-      OS_FC_ITENS = CLIENTES.filter(c=>c.ativo!==false && c.origem!=='planilha').map(c=>({ valor: c.id, rotulo: fmtCliNome(c.nome, c.tipo) })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
-      fcSincronizar('os');
-    }
+    if((CLIENTES||[]).length){ osFcMontarItens(); fcSincronizar('os'); }
+    else osCarregarClientesFiltro(); /* cache ainda vazio (ex.: operador que já abre direto neste módulo): busca e monta quando chegar */
     OS_TP_ITENS = osUniItens().map(e=>({ valor: e, rotulo: e })).sort((a,b)=>a.rotulo.localeCompare(b.rotulo));
     fcSincronizar('tipo');
     osCarregarOperadores();
